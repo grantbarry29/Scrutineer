@@ -56,9 +56,10 @@ const requeueAfter = 15 * time.Second
 //  1. Fetch the AgentSession (return cleanly on NotFound).
 //  2. Initialize status.phase=Pending on first observation.
 //  3. Validate the spec. On failure -> Denied, emit ValidationFailed, return.
-//  4. Ensure the underlying Job exists. If missing, create it -> Starting + JobCreated.
-//  5. Inspect the Job + owned Pod and map to Running/Succeeded/Failed/TimedOut.
-//  6. Persist status via the status subresource.
+//  4. If spec.cancelRequested, delete the owned Job (if any) and return without creating a new Job.
+//  5. Ensure the underlying Job exists. If missing, create it -> Starting + JobCreated.
+//  6. Inspect the Job + owned Pod and map to Running/Succeeded/Failed/TimedOut.
+//  7. Persist status via the status subresource.
 //
 // Reconcile is idempotent: re-running it against an unchanged cluster makes no API mutations.
 func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -114,6 +115,14 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			"approvals", session.Spec.Policy.RequireHumanApproval)
 	}
 
+	if session.Spec.CancelRequested {
+		logger.Info("cancellation requested; stopping owned Job if present")
+		if err := r.stopRuntimeJob(ctx, &session); err != nil {
+			return ctrl.Result{}, fmt.Errorf("stop runtime Job: %w", err)
+		}
+		return ctrl.Result{}, r.patchStatus(ctx, original, &session)
+	}
+
 	job, err := r.ensureJob(ctx, &session, resolvedTask)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -136,6 +145,30 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// stopRuntimeJob deletes the Job owned by the AgentSession, if it exists.
+// A missing Job is treated as already stopped. Phase/status updates for cancellation
+// are handled in a separate reconciliation step.
+func (r *AgentSessionReconciler) stopRuntimeJob(ctx context.Context, session *relayv1alpha1.AgentSession) error {
+	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
+
+	var job batchv1.Job
+	if err := r.Get(ctx, jobKey, &job); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("get Job %s: %w", jobKey, err)
+	}
+
+	policy := metav1.DeletePropagationBackground
+	if err := r.Delete(ctx, &job, client.PropagationPolicy(policy)); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("delete Job %s: %w", jobKey, err)
+	}
+	return nil
 }
 
 // ensureJob fetches the Job owned by the AgentSession, creating it if it does not yet exist.

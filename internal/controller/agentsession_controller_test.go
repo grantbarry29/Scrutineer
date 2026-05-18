@@ -278,6 +278,65 @@ var _ = Describe("AgentSession reconciler", func() {
 		})
 	})
 
+	Context("cancellation", func() {
+		It("deletes the owned Job when cancelRequested is set", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "cancel-deletes-job")
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			jobKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
+
+			Eventually(func(g Gomega) {
+				var job batchv1.Job
+				g.Expect(k8sClient.Get(testCtx, jobKey, &job)).To(Succeed())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			reconciler := &AgentSessionReconciler{
+				Client:   k8sClient,
+				Scheme:   mgr.GetScheme(),
+				Recorder: mgr.GetEventRecorderFor("relay-test"),
+			}
+
+			Eventually(func(g Gomega) {
+				var got relayv1alpha1.AgentSession
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				got.Spec.CancelRequested = true
+				g.Expect(k8sClient.Update(testCtx, &got)).To(Succeed())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				_, err := reconciler.Reconcile(testCtx, reconcile.Request{NamespacedName: key})
+				g.Expect(err).NotTo(HaveOccurred())
+				var job batchv1.Job
+				err = k8sClient.Get(testCtx, jobKey, &job)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+		})
+
+		It("is idempotent when cancelRequested is set and the Job is already gone", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "cancel-no-job")
+			session.Spec.CancelRequested = true
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			jobKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
+
+			reconciler := &AgentSessionReconciler{
+				Client:   k8sClient,
+				Scheme:   mgr.GetScheme(),
+				Recorder: mgr.GetEventRecorderFor("relay-test"),
+			}
+			for i := 0; i < 2; i++ {
+				_, err := reconciler.Reconcile(testCtx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			var job batchv1.Job
+			err := k8sClient.Get(testCtx, jobKey, &job)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+	})
+
 	Context("promptConfigMapRef", func() {
 		It("injects the prompt from the referenced ConfigMap into the Job env", func() {
 			ns := newTestNamespace()

@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > Living tracker for operational state and roadmap progress.
-> **Last updated:** 2026-05-18 (status.podName)
+> **Last updated:** 2026-05-17 (cancel Job delete)
 >
 > Update this file when completing roadmap items, changing priorities, or shipping meaningful milestones.
 
@@ -42,67 +42,6 @@ Before implementing a selected task, Cursor must first restate:
 - verification command
 
 If the task appears to require more than **4 non-generated files**, Cursor must wait for confirmation before editing.
-
-### Task: Session cancellation API shape
-
-**Goal:**  
-Expose the smallest user-facing mechanism for requesting cancellation.
-
-**Scope:**
-- Choose one cancellation request shape: a spec field or annotation convention.
-- If using a spec field, add kubebuilder validation/defaulting markers as needed.
-- Regenerate CRD YAML if API markers change.
-- Document the field/comment in the API type.
-
-**Non-goals:**
-- Do not delete Jobs.
-- Do not set `PhaseCancelled`.
-- Do not emit cancellation events.
-- Do not add finalizers.
-- Do not add approval workflows or new CRDs.
-
-**Acceptance criteria:**
-- The CRD exposes a documented cancellation request mechanism.
-- Generated CRD YAML includes the new field/marker if the API type changed.
-- Existing tests still pass.
-
-**Expected files:**
-- `api/v1alpha1/agentsession_types.go`
-- `config/crd/bases/relay.secureai.dev_agentsessions.yaml` (generated, only if API type changes)
-- `config/samples/*.yaml` only if sample documentation is necessary
-
-**Verification command:**  
-`make manifests && make test`
-
-### Task: Session cancellation controller behavior
-
-**Goal:**  
-When cancellation is requested, the controller stops the owned Kubernetes Job.
-
-**Scope:**
-- Detect the existing cancellation request mechanism.
-- Find the owned Job.
-- Delete the owned Job if it exists.
-- Treat missing Job as already stopped.
-
-**Non-goals:**
-- Do not design the cancellation API shape.
-- Do not add finalizers.
-- Do not add new CRDs.
-- Do not implement approvals or policy changes.
-- Do not add e2e coverage in this task.
-
-**Acceptance criteria:**
-- A cancelled AgentSession causes its owned Job to be deleted.
-- Reconcile is idempotent when the Job is already gone.
-- Envtest covers Job deletion and missing-Job behavior.
-
-**Expected files:**
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/agentsession_controller_test.go`
-
-**Verification command:**  
-`make test`
 
 ### Task: Session cancellation status/events
 
@@ -552,13 +491,16 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | `status.violations` | Yes | No — no enforcement backend yet |
 | `status.artifacts` | Yes | No — `outputs.collectArtifacts` not implemented |
 | `policy.requireHumanApproval` | Yes | Surfaced only; does not block execution |
-| `PhaseCancelled` | Yes | Terminal phase exists; no cancel flow |
+| `spec.cancelRequested` | Yes | Deletes owned Job; `PhaseCancelled`/events pending |
+| `PhaseCancelled` | Yes | Terminal phase exists; set only after controller cancel flow |
 | Orchestrators beyond `kubernetes-job` | Enum reserved | Rejected at validation |
 | PVC-backed workspace | Commented future | emptyDir only |
 | Webhook validation | Generated scaffold | Not wired |
 
 ### Recent fixes
 
+- **Session cancellation (controller)** — `spec.cancelRequested` deletes owned Job via `stopRuntimeJob`; does not recreate Job; envtest for delete + idempotent missing Job
+- **`spec.cancelRequested`** — declarative cancellation request on `AgentSessionSpec`; CRD default `false`
 - **`status.podName`** — select newest Pod owned by the Job; list errors fail reconcile; envtest + e2e coverage on success/failure paths
 - **Envtest controller tests** — validation, denial, Job create, succeeded transition, promptConfigMapRef
 - **PromptConfigMapRef** — `resolveTask` loads prompt; missing CM/key → `PhaseDenied`
@@ -598,7 +540,7 @@ Complete the vertical slice so the API and controller behavior match, and the pr
 - [x] **PromptConfigMapRef** — Load prompt from ConfigMap in reconciler; validate ref exists
 - [x] **Status patch strategy** — Live read + condition union + `Status().Update` (CRDs do not support strategic merge patch on status)
 - [x] **Populate `status.podName` reliably** — Newest Job-owned Pod by creation timestamp; envtest + e2e coverage
-- [ ] **Session cancellation** — `PhaseCancelled` via spec change, annotation, or delete policy; delete/stop underlying Job
+- [~] **Session cancellation** — API + Job delete (done); `PhaseCancelled`, events, e2e, docs pending
 - [ ] **Finalizers** — Graceful cleanup of Jobs on AgentSession delete
 - [ ] **CI pipeline** — GitHub Actions: `make test`, `make test-e2e` (kind), lint, build image
 - [ ] **Admission webhook** (optional) — Move duplicate validation to validating webhook for earlier rejection

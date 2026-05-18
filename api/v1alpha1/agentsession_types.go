@@ -234,6 +234,15 @@ type AgentSessionSpec struct {
 	// Outputs controls log/artifact collection for the session.
 	// +optional
 	Outputs OutputSpec `json:"outputs,omitempty"`
+
+	// CancelRequested asks Relay to stop this session. When true, the controller
+	// (in a later reconciliation step) deletes the owned runtime Job and moves
+	// the session to Phase=Cancelled. Setting this field is the MVP cancellation
+	// request mechanism; it does not by itself stop the Job until the controller
+	// handles it.
+	// +optional
+	// +kubebuilder:default=false
+	CancelRequested bool `json:"cancelRequested,omitempty"`
 }
 
 // SessionResult captures the terminal outcome of an AgentSession.
