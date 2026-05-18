@@ -95,6 +95,17 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	setCondition(&session, ConditionValidated, metav1.ConditionTrue, "SpecValid", "AgentSession spec accepted")
 
+	resolvedTask, err := r.resolveTask(ctx, &session)
+	if err != nil {
+		logger.Info("AgentSession task resolution failed", "reason", err.Error())
+		session.Status.Phase = relayv1alpha1.PhaseDenied
+		setCompletionTime(&session)
+		setCondition(&session, ConditionValidated, metav1.ConditionFalse, "InvalidTask", err.Error())
+		r.recordWarning(&session, EventReasonValidationFailed, err.Error())
+		r.recordWarning(&session, EventReasonSessionDenied, "session denied due to invalid task")
+		return ctrl.Result{}, r.patchStatus(ctx, original, &session)
+	}
+
 	// Approval gate: if any approval reasons are listed, surface them. The MVP does not
 	// block execution; future ApprovalPolicy/ApprovalRequest CRDs will introduce a
 	// real gate (e.g. block-and-wait until a signed Approval object exists).
@@ -103,7 +114,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			"approvals", session.Spec.Policy.RequireHumanApproval)
 	}
 
-	job, err := r.ensureJob(ctx, &session)
+	job, err := r.ensureJob(ctx, &session, resolvedTask)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -131,7 +142,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // a Create — a follow-up reconcile that reads a stale cached AgentSession would
 // otherwise issue a JSON-merge-patch that overwrites the conditions array and drops
 // RuntimeCreated. Re-asserting on each reconcile keeps the condition convergent.
-func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession) (*batchv1.Job, error) {
+func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask) (*batchv1.Job, error) {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
 
 	var existing batchv1.Job
@@ -144,7 +155,7 @@ func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1
 		return nil, fmt.Errorf("get Job %s: %w", jobKey, err)
 	}
 
-	desired := buildJob(session)
+	desired := buildJob(session, task)
 	if err := controllerutil.SetControllerReference(session, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("set owner reference on Job: %w", err)
 	}
@@ -273,18 +284,6 @@ func (r *AgentSessionReconciler) findPodName(ctx context.Context, session *relay
 		return pods.Items[0].Name, nil
 	}
 	return "", nil
-}
-
-// patchStatus writes the status subresource if it has changed.
-func (r *AgentSessionReconciler) patchStatus(ctx context.Context, original, updated *relayv1alpha1.AgentSession) error {
-	if equalStatus(&original.Status, &updated.Status) {
-		return nil
-	}
-	patch := client.MergeFrom(original)
-	if err := r.Status().Patch(ctx, updated, patch); err != nil {
-		return fmt.Errorf("patch AgentSession status: %w", err)
-	}
-	return nil
 }
 
 func (r *AgentSessionReconciler) recordNormal(session *relayv1alpha1.AgentSession, reason, msg string) {

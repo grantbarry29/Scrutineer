@@ -31,6 +31,9 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 		spec.Task.PromptConfigMapRef == nil {
 		return fmt.Errorf("spec.task.description or spec.task.prompt (or promptConfigMapRef) must be set")
 	}
+	if err := validatePromptConfigMapRef(spec.Task.PromptConfigMapRef); err != nil {
+		return err
+	}
 
 	if strings.TrimSpace(spec.Runtime.Image) == "" {
 		return fmt.Errorf("spec.runtime.image is required")

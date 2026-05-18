@@ -46,7 +46,7 @@ func commonLabelsFor(session *relayv1alpha1.AgentSession) map[string]string {
 // Future enforcement hooks (Envoy sidecar, DNS proxy, eBPF agents, Cilium policies, etc.)
 // should be added by composing additional containers/volumes/policies onto the spec
 // returned here, rather than by special-casing the controller.
-func buildJob(session *relayv1alpha1.AgentSession) *batchv1.Job {
+func buildJob(session *relayv1alpha1.AgentSession, task *ResolvedTask) *batchv1.Job {
 	labels := commonLabelsFor(session)
 	rt := session.Spec.Runtime
 
@@ -60,7 +60,7 @@ func buildJob(session *relayv1alpha1.AgentSession) *batchv1.Job {
 		Command:         rt.Command,
 		Args:            rt.Args,
 		Resources:       rt.Resources,
-		Env:             buildEnv(session),
+		Env:             buildEnv(session, task),
 		SecurityContext: defaultContainerSecurityContext(),
 	}
 
@@ -157,14 +157,17 @@ func buildWorkspaceVolumes(ws *relayv1alpha1.WorkspaceSpec) ([]corev1.Volume, []
 // Future enforcement (Envoy sidecar / DNS proxy / tool gateway) will read these env vars
 // or a sibling ConfigMap to apply policy at runtime. Until then they exist primarily so
 // the agent process inside the container can self-report what policy it believes is active.
-func buildEnv(session *relayv1alpha1.AgentSession) []corev1.EnvVar {
+func buildEnv(session *relayv1alpha1.AgentSession, task *ResolvedTask) []corev1.EnvVar {
 	pol := session.Spec.Policy
+	if task == nil {
+		task = &ResolvedTask{}
+	}
 
 	env := []corev1.EnvVar{
 		{Name: EnvRelaySessionName, Value: session.Name},
 		{Name: EnvRelaySessionNamespace, Value: session.Namespace},
-		{Name: EnvTaskDescription, Value: session.Spec.Task.Description},
-		{Name: EnvTaskPrompt, Value: session.Spec.Task.Prompt},
+		{Name: EnvTaskDescription, Value: task.Description},
+		{Name: EnvTaskPrompt, Value: task.Prompt},
 		{Name: EnvModelProvider, Value: session.Spec.Model.Provider},
 		{Name: EnvModelName, Value: session.Spec.Model.Name},
 		{Name: EnvPolicyAllowedDomains, Value: csv(pol.AllowedDomains)},

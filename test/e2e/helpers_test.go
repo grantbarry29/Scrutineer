@@ -78,6 +78,16 @@ func withoutTask() agentSessionOption {
 	}
 }
 
+func withPromptConfigMapRef(name, key string) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		s.Spec.Task.Prompt = ""
+		s.Spec.Task.PromptConfigMapRef = &relayv1alpha1.PromptConfigMapRef{
+			Name: name,
+			Key:  key,
+		}
+	}
+}
+
 // newAgentSession builds a baseline AgentSession (valid by default) and applies
 // any modifications via opts. The default runtime exits 0 quickly so the
 // happy-path test is fast.

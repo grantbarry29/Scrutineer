@@ -1,0 +1,12 @@
+---
+description: Relay project status and roadmap — read and update as work progresses
+alwaysApply: true
+---
+
+# Relay Project Status Tracker
+
+The living project state and roadmap live in [`.cursor/relay-project-status.md`](../relay-project-status.md).
+
+- **Before** starting significant work, read that file to understand current operational state and priorities.
+- **After** completing roadmap items, shipping milestones, or changing priorities, update task checkboxes and the "Last updated" date in that file.
+- Do not duplicate the full roadmap here; keep detailed status only in `relay-project-status.md`.

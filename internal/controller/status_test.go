@@ -1,0 +1,132 @@
+/*
+Copyright 2026 The Relay Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+*/
+
+package controller
+
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+)
+
+var _ = Describe("status patch strategy", func() {
+	It("mergeStatusConditionsInPlace preserves condition types missing from the desired set", func() {
+		desired := []metav1.Condition{
+			{Type: ConditionValidated, Status: metav1.ConditionTrue, Reason: "SpecValid", Message: "ok"},
+			{Type: ConditionCompleted, Status: metav1.ConditionTrue, Reason: "JobSucceeded", Message: "done"},
+		}
+		preserve := []metav1.Condition{
+			{Type: ConditionValidated, Status: metav1.ConditionTrue, Reason: "SpecValid", Message: "ok"},
+			{Type: ConditionRuntimeCreated, Status: metav1.ConditionTrue, Reason: "JobCreated", Message: "exists"},
+		}
+
+		mergeStatusConditionsInPlace(&desired, preserve)
+
+		Expect(conditionTypes(desired)).To(ConsistOf(
+			ConditionValidated,
+			ConditionRuntimeCreated,
+			ConditionCompleted,
+		))
+		completed := findConditionByType(desired, ConditionCompleted)
+		Expect(completed.Message).To(Equal("done"))
+	})
+
+	It("patchStatus retains conditions present on the apiserver but missing from a stale reconcile snapshot", func() {
+		ns := newTestNamespace()
+		session := minimalAgentSession(ns, "status-merge")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+
+		var live relayv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
+		live.Status.Phase = relayv1alpha1.PhaseRunning
+		setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
+		setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
+		Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
+		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
+
+		stale := live.DeepCopy()
+		stale.Status.Conditions = []metav1.Condition{
+			*findConditionByType(live.Status.Conditions, ConditionValidated),
+		}
+
+		updated := live.DeepCopy()
+		updated.Status.Phase = relayv1alpha1.PhaseSucceeded
+		updated.Status.Conditions = []metav1.Condition{
+			*findConditionByType(live.Status.Conditions, ConditionValidated),
+		}
+		setCondition(updated, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "done")
+
+		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
+		Expect(reconciler.patchStatus(testCtx, stale, updated)).To(Succeed())
+
+		var after relayv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+		Expect(conditionTypes(after.Status.Conditions)).To(ConsistOf(
+			ConditionValidated,
+			ConditionRuntimeCreated,
+			ConditionCompleted,
+		))
+		Expect(after.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
+	})
+
+	It("documents that JSON merge patch replaces the entire conditions array on CRDs", func() {
+		ns := newTestNamespace()
+		session := minimalAgentSession(ns, "status-json-merge")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+
+		var live relayv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
+		setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
+		setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
+		Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
+		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
+
+		stale := live.DeepCopy()
+		stale.Status.Conditions = []metav1.Condition{
+			*findConditionByType(live.Status.Conditions, ConditionValidated),
+		}
+
+		updated := live.DeepCopy()
+		updated.Status.Conditions = []metav1.Condition{
+			*findConditionByType(live.Status.Conditions, ConditionValidated),
+		}
+		setCondition(updated, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "done")
+
+		patch := client.MergeFrom(stale.DeepCopy())
+		Expect(k8sClient.Status().Patch(testCtx, updated, patch)).To(Succeed())
+
+		var after relayv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+		Expect(findConditionByType(after.Status.Conditions, ConditionRuntimeCreated)).To(BeNil(),
+			"JSON merge patch replaces the whole conditions array and drops RuntimeCreated")
+	})
+})
+
+func conditionTypes(conds []metav1.Condition) []string {
+	out := make([]string, 0, len(conds))
+	for _, c := range conds {
+		out = append(out, c.Type)
+	}
+	return out
+}
+
+func findConditionByType(conds []metav1.Condition, condType string) *metav1.Condition {
+	for i := range conds {
+		if conds[i].Type == condType {
+			return &conds[i]
+		}
+	}
+	return nil
+}

@@ -1,0 +1,37 @@
+# ConfigMap holding the agent prompt (same namespace as the AgentSession).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: github-agent-prompt
+  namespace: default
+data:
+  instructions: |
+    Clone the repository, inspect the README, and propose an updated version
+    with clear installation instructions.
+---
+apiVersion: relay.secureai.dev/v1alpha1
+kind: AgentSession
+metadata:
+  name: github-readme-from-cm
+  namespace: default
+spec:
+  task:
+    description: "Update the README with installation instructions"
+    promptConfigMapRef:
+      name: github-agent-prompt
+      key: instructions
+  model:
+    provider: openai
+    name: gpt-4.1
+    temperature: "0.2"
+  runtime:
+    orchestrator: kubernetes-job
+    image: busybox:latest
+    command:
+      - sh
+      - -c
+      - 'echo "Prompt:"; echo "$AGENT_TASK_PROMPT"; sleep 2; exit 0'
+    timeoutSeconds: 900
+  policy:
+    allowedDomains: [github.com, api.github.com]
+    allowedTools: [shell, github]

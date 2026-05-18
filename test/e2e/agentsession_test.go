@@ -16,6 +16,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -133,6 +134,60 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			By("verifying no Job was created")
 			expectNoJob(ctx, ns, "relay-session-denied")
 		})
+
+		It("denies when promptConfigMapRef points to a missing ConfigMap", func(ctx SpecContext) {
+			ns := newTestNamespace("relay-e2e-deny-cm")
+			session := newAgentSession(ns, "denied-missing-cm",
+				withPromptConfigMapRef("does-not-exist", "instructions"),
+			)
+			key := client.ObjectKeyFromObject(session)
+
+			Expect(k8sClient.Create(ctx, session)).To(Succeed())
+
+			waitForPhase(ctx, key, []relayv1alpha1.AgentSessionPhase{
+				relayv1alpha1.PhaseDenied,
+			}, deniedPhaseTimeout, deniedPhasePoll)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(ctx, key, &got)).To(Succeed())
+			validated := getCondition(&got, controller.ConditionValidated)
+			Expect(validated).NotTo(BeNil())
+			Expect(validated.Status).To(Equal(metav1.ConditionFalse))
+			Expect(validated.Reason).To(Equal("InvalidTask"))
+			Expect(validated.Message).To(ContainSubstring("ConfigMap"))
+
+			expectNoJob(ctx, ns, "relay-session-denied-missing-cm")
+		})
+
+		It("denies when promptConfigMapRef key is missing from the ConfigMap", func(ctx SpecContext) {
+			ns := newTestNamespace("relay-e2e-deny-cm-key")
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "agent-prompt", Namespace: ns},
+				Data:       map[string]string{"other": "value"},
+			}
+			Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+
+			session := newAgentSession(ns, "denied-missing-key",
+				withPromptConfigMapRef("agent-prompt", "instructions"),
+			)
+			key := client.ObjectKeyFromObject(session)
+
+			Expect(k8sClient.Create(ctx, session)).To(Succeed())
+
+			waitForPhase(ctx, key, []relayv1alpha1.AgentSessionPhase{
+				relayv1alpha1.PhaseDenied,
+			}, deniedPhaseTimeout, deniedPhasePoll)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(ctx, key, &got)).To(Succeed())
+			validated := getCondition(&got, controller.ConditionValidated)
+			Expect(validated).NotTo(BeNil())
+			Expect(validated.Status).To(Equal(metav1.ConditionFalse))
+			Expect(validated.Reason).To(Equal("InvalidTask"))
+			Expect(validated.Message).To(ContainSubstring("instructions"))
+
+			expectNoJob(ctx, ns, "relay-session-denied-missing-key")
+		})
 	})
 
 	Context("admission-time validation (CRD pattern)", func() {
@@ -144,6 +199,38 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			err := k8sClient.Create(ctx, session)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("spec.model.temperature"))
+		})
+
+		It("loads the task prompt from a ConfigMap when promptConfigMapRef is set", func(ctx SpecContext) {
+			ns := newTestNamespace("relay-e2e-prompt-cm")
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "agent-prompt", Namespace: ns},
+				Data:       map[string]string{"instructions": "prompt from configmap"},
+			}
+			Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+
+			session := newAgentSession(ns, "prompt-cm",
+				withPromptConfigMapRef("agent-prompt", "instructions"),
+				withCommand("sh", "-c", "exit 0"),
+			)
+			key := client.ObjectKeyFromObject(session)
+			Expect(k8sClient.Create(ctx, session)).To(Succeed())
+
+			waitForPhase(ctx, key, []relayv1alpha1.AgentSessionPhase{
+				relayv1alpha1.PhaseSucceeded,
+			}, terminalPhaseTimeout, terminalPhasePoll)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(ctx, key, &got)).To(Succeed())
+			job := expectJobExists(ctx, ns, got.Status.JobName)
+			var prompt string
+			for _, e := range job.Spec.Template.Spec.Containers[0].Env {
+				if e.Name == controller.EnvTaskPrompt {
+					prompt = e.Value
+					break
+				}
+			}
+			Expect(prompt).To(Equal("prompt from configmap"))
 		})
 
 		It("accepts a valid string-encoded temperature", func(ctx SpecContext) {

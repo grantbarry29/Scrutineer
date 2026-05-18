@@ -11,18 +11,21 @@ You may obtain a copy of the License at
 package controller
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/client-go/kubernetes/scheme"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 )
@@ -34,6 +37,9 @@ var (
 	cfg       *rest.Config
 	k8sClient client.Client
 	testEnv   *envtest.Environment
+	mgr       ctrl.Manager
+	testCtx   context.Context
+	cancel    context.CancelFunc
 )
 
 func TestControllers(t *testing.T) {
@@ -55,19 +61,43 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	Expect(relayv1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(clientgoscheme.AddToScheme(clientgoscheme.Scheme)).To(Succeed())
+	Expect(relayv1alpha1.AddToScheme(clientgoscheme.Scheme)).To(Succeed())
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	k8sClient, err = client.New(cfg, client.Options{Scheme: clientgoscheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-	// Hook for future controller-side tests:
-	//   mgr, _ := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
-	//   (&AgentSessionReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager(mgr)
-	_ = ctrl.SetupSignalHandler
+	testCtx, cancel = context.WithCancel(context.Background())
+
+	mgr, err = ctrl.NewManager(cfg, ctrl.Options{
+		Scheme:                 clientgoscheme.Scheme,
+		Metrics:                metricsserver.Options{BindAddress: "0"},
+		HealthProbeBindAddress: "0",
+		LeaderElection:         false,
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	Expect((&AgentSessionReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("relay-test"),
+	}).SetupWithManager(mgr)).To(Succeed())
+
+	go func() {
+		defer GinkgoRecover()
+		Expect(mgr.Start(testCtx)).To(Succeed())
+	}()
+
+	Eventually(func() bool {
+		return mgr.GetCache().WaitForCacheSync(testCtx)
+	}, 30*time.Second, 200*time.Millisecond).Should(BeTrue())
 })
 
 var _ = AfterSuite(func() {
+	if cancel != nil {
+		cancel()
+	}
 	By("tearing down test environment")
 	if testEnv != nil {
 		Expect(testEnv.Stop()).To(Succeed())
