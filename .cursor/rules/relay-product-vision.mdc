@@ -1,0 +1,32 @@
+---
+description: Relay product vision and architecture principles
+alwaysApply: true
+---
+
+# Relay Product Vision
+
+Relay is a Kubernetes-native governance and runtime control plane for autonomous AI agents. Its purpose is secure governance and runtime control, not orchestration, task running, workflow execution, or a generic agent framework.
+
+## Core Direction
+
+- Prioritize governance, security, policy, runtime control, observability, auditability, approval workflows, identity isolation, and runtime isolation.
+- Treat Kubernetes Jobs, Tekton, Argo Workflows, Temporal, and external orchestrators as execution backends Relay can govern, not systems Relay should replace.
+- Keep Relay orchestrator-agnostic. Avoid coupling APIs or controllers permanently to Kubernetes Jobs.
+- Use Kubernetes-native patterns: CRDs, controllers, reconciliation, status subresources, declarative APIs, events, owner references, and idempotent behavior.
+- Prefer clean, extensible APIs over feature count. Preserve room for future CRDs such as AgentPolicy, ToolPolicy, ApprovalPolicy, RuntimeProfile, ToolGateway, CredentialProfile, and SessionTemplate.
+
+## MVP Scope
+
+The current MVP vertical slice is AgentSession reconciliation into Kubernetes Jobs with inline policy, runtime status tracking, Kubernetes events, workspace mounting, basic resource/time constraints, and policy propagation via environment variables.
+
+The MVP should establish the API shape, lifecycle model, policy model, extensible reconciliation architecture, and future enforcement hooks. It does not need real network enforcement, real sandboxing, dashboards, distributed execution, multi-cluster support, or sophisticated isolation yet.
+
+## Design Guidance
+
+- Do not rebuild schedulers, workflow engines, container runtimes, or generic agent frameworks.
+- Leverage existing infrastructure such as Kubernetes, Envoy, Cilium/eBPF, gVisor/Kata/Firecracker, NetworkPolicy, DNS proxies, tool gateways, and AI provider APIs.
+- Future enforcement may include Envoy sidecars, DNS/FQDN egress control, Cilium/eBPF, process/syscall monitoring, secure sandboxes, tool gateways, MCP governance, and policy violation reporting.
+- Future observability should support timelines, network traces, tool call logs, policy violations, replayable sessions, audit trails, token/tool metrics, and runtime analytics.
+- Relay should feel closer to Kubernetes, Envoy, Cilium, Istio, Vault, Boundary, and Tailscale than chatbot frameworks, prompt wrappers, or consumer AI tooling.
+
+The central product question is: How can enterprises safely allow autonomous AI systems to operate inside real environments?
