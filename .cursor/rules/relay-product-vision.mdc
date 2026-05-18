@@ -53,6 +53,21 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 - Relay should feel closer to Kubernetes, Envoy, Cilium, Istio, Vault, Boundary, and Tailscale than chatbot frameworks, prompt wrappers, or consumer AI tooling.
 - Relay is evolving toward a runtime governance platform, observability platform for AI agents, secure execution control plane, and Datadog/Splunk-like product for autonomous AI systems.
 
+## Cursor / AI Development Guidance
+
+This file describes **product direction**, not permission to implement the full roadmap in one pass.
+
+- Work on **one narrow task or vertical slice** at a time. Read `.cursor/relay-project-status.md` for current state and appropriately scoped next tasks.
+- Follow the **Cursor Implementation Contract** in `.cursor/rules/relay-project-status.mdc` before coding: identify one selected task, state acceptance criteria, expected files, verification command, and non-goals.
+- **Do not** implement multiple roadmap phases in a single change. Do not bundle unrelated capabilities.
+- **Do not** add new CRDs, sidecars, webhooks, dashboards, policy engines, Envoy, Cilium, eBPF, gVisor/Kata, or tool gateways unless the user explicitly requests them.
+- Preserve **control-plane / data-plane separation**: controllers declare and propagate governance; enforcement belongs in future data-plane components.
+- Prefer **small, reviewable, incremental** diffs. A good change usually touches a few files and has a clear acceptance criterion.
+- **Do not** turn Relay into a generic workflow engine, task runner, or agent framework.
+- **Do not** overfit APIs or reconciler logic to Kubernetes Jobs; keep orchestrator adapters and extension points in mind.
+- When uncertain about long-term design, add **TODOs or extension points** instead of speculative architecture.
+- Maintain Kubernetes-native controller discipline: idempotent reconciliation, owner references, status subresources, conditions, events, and least-privilege RBAC.
+
 The central product question is: How can enterprises safely allow autonomous AI systems to operate inside real environments?
 
 A successful Relay deployment should let a platform or security team answer, for every autonomous agent run: who authorized it, what it could access, what it actually did, what was blocked, what changed, and how to reproduce or audit the decision.

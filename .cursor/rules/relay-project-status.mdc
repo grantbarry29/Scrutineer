@@ -7,6 +7,24 @@ alwaysApply: true
 
 The living project state and roadmap live in [`.cursor/relay-project-status.md`](../relay-project-status.md).
 
-- **Before** starting significant work, read that file to understand current operational state and priorities.
-- **After** completing roadmap items, shipping milestones, or changing priorities, update task checkboxes and the "Last updated" date in that file.
+- **Before** starting significant work, read that file for operational state, **Current Recommended Next Tasks**, and **Task Sizing Rules**.
+- Roadmap phases are **product capabilities**, not single coding sessions. Decompose them into small tasks (see **How To Work On Roadmap Items With Cursor**).
+- **After** completing work, update checkboxes, **Recent fixes**, and the **Last updated** date. Do not implement the entire roadmap unless explicitly asked.
 - Do not duplicate the full roadmap here; keep detailed status only in `relay-project-status.md`.
+
+## Cursor Implementation Contract
+
+When asked to implement a Relay task, Cursor must:
+
+1. Read the relevant memory files: `relay-product-vision.mdc`, `relay-project-status.mdc`, and `relay-project-status.md`.
+2. Identify the exact selected task. If the prompt does not clearly select one task, ask for clarification or propose a short task list. Do not pick multiple roadmap items automatically.
+3. Before editing code, provide a short implementation plan with selected task, acceptance criterion, expected files, verification command, and explicit non-goals.
+4. Implement only the selected task. Do not add adjacent roadmap items or future architecture unless explicitly requested.
+5. Keep changes reviewable. Prefer 1-4 non-generated files; if more are needed, stop and explain why before proceeding.
+6. Explain as you go: why the change is needed, what Kubernetes/controller-runtime concept is involved, what invariant must hold, and how tests prove it.
+7. After implementation, summarize changes, files changed, acceptance criteria satisfied, tests run, and update `.cursor/relay-project-status.md`.
+8. If follow-up work is discovered, add it as a scoped task with acceptance criteria; do not implement it unless asked.
+9. If architecture is ambiguous, stop, offer 2-3 design options, recommend one, and wait for confirmation.
+10. Preserve existing behavior unless the task explicitly changes it. Prefer idempotent reconciliation, owner references, status subresources, conditions, events, least-privilege RBAC, and clear controller ownership boundaries.
+
+Unless explicitly selected by the user, do not add new CRDs, webhooks, sidecars, policy engines, UI, Envoy, Cilium/eBPF, gVisor/Kata, tool gateways, real policy enforcement, approval workflows, multi-cluster support, a new orchestrator adapter, or a replacement for Kubernetes Job reconciliation.
