@@ -11,6 +11,8 @@ You may obtain a copy of the License at
 package controller
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,20 +57,26 @@ var _ = Describe("status patch strategy", func() {
 		Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
 		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
 
-		stale := live.DeepCopy()
-		stale.Status.Conditions = []metav1.Condition{
-			*findConditionByType(live.Status.Conditions, ConditionValidated),
-		}
-
-		updated := live.DeepCopy()
-		updated.Status.Phase = relayv1alpha1.PhaseSucceeded
-		updated.Status.Conditions = []metav1.Condition{
-			*findConditionByType(live.Status.Conditions, ConditionValidated),
-		}
-		setCondition(updated, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "done")
-
 		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
-		Expect(reconciler.patchStatus(testCtx, stale, updated)).To(Succeed())
+		// The suite manager may reconcile the same AgentSession concurrently; retry on conflict.
+		Eventually(func(g Gomega) {
+			var current relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &current)).To(Succeed())
+
+			staleSnap := current.DeepCopy()
+			staleSnap.Status.Conditions = []metav1.Condition{
+				*findConditionByType(current.Status.Conditions, ConditionValidated),
+			}
+
+			desired := current.DeepCopy()
+			desired.Status.Phase = relayv1alpha1.PhaseSucceeded
+			desired.Status.Conditions = []metav1.Condition{
+				*findConditionByType(current.Status.Conditions, ConditionValidated),
+			}
+			setCondition(desired, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "done")
+
+			g.Expect(reconciler.patchStatus(testCtx, staleSnap, desired)).To(Succeed())
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 
 		var after relayv1alpha1.AgentSession
 		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())

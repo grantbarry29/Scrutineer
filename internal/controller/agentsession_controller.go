@@ -120,7 +120,11 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	r.syncStatusFromJob(ctx, &session, job)
-	if podName, err := r.findPodName(ctx, &session, job); err == nil && podName != "" {
+	podName, err := r.findPodName(ctx, &session, job)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("find pod for job %q: %w", job.Name, err)
+	}
+	if podName != "" {
 		session.Status.PodName = podName
 	}
 
@@ -259,31 +263,6 @@ func jobTimedOut(job *batchv1.Job) bool {
 		}
 	}
 	return false
-}
-
-// findPodName returns the name of a pod owned by the Job, if any. Empty string when none.
-func (r *AgentSessionReconciler) findPodName(ctx context.Context, session *relayv1alpha1.AgentSession, job *batchv1.Job) (string, error) {
-	if job == nil {
-		return "", nil
-	}
-	var pods corev1.PodList
-	if err := r.List(ctx, &pods,
-		client.InNamespace(session.Namespace),
-		client.MatchingLabels{LabelSessionRef: session.Name},
-	); err != nil {
-		return "", err
-	}
-	for i := range pods.Items {
-		for _, owner := range pods.Items[i].OwnerReferences {
-			if owner.UID == job.UID {
-				return pods.Items[i].Name, nil
-			}
-		}
-	}
-	if len(pods.Items) > 0 {
-		return pods.Items[0].Name, nil
-	}
-	return "", nil
 }
 
 func (r *AgentSessionReconciler) recordNormal(session *relayv1alpha1.AgentSession, reason, msg string) {

@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 )
@@ -211,6 +212,69 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(completed).NotTo(BeNil())
 			Expect(completed.Status).To(Equal(metav1.ConditionTrue))
 			Expect(completed.Reason).To(Equal("JobSucceeded"))
+		})
+
+		It("sets status.podName to the newest Pod owned by the Job", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "pod-name")
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			var job batchv1.Job
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(testCtx, types.NamespacedName{
+					Namespace: ns,
+					Name:      jobNameFor(session),
+				}, &job)).To(Succeed())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			ownerRef := metav1.OwnerReference{
+				APIVersion: batchv1.SchemeGroupVersion.String(),
+				Kind:       "Job",
+				Name:       job.Name,
+				UID:        job.UID,
+			}
+			podLabels := map[string]string{LabelSessionRef: session.Name}
+
+			podOlder := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "relay-session-pod-name-older",
+					Namespace:       ns,
+					Labels:          podLabels,
+					OwnerReferences: []metav1.OwnerReference{ownerRef},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: AgentContainerName, Image: "busybox:latest"}},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, podOlder)).To(Succeed())
+
+			time.Sleep(20 * time.Millisecond)
+
+			podNewer := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "relay-session-pod-name-newer",
+					Namespace:       ns,
+					Labels:          podLabels,
+					OwnerReferences: []metav1.OwnerReference{ownerRef},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: AgentContainerName, Image: "busybox:latest"}},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, podNewer)).To(Succeed())
+
+			reconciler := &AgentSessionReconciler{
+				Client:   k8sClient,
+				Scheme:   mgr.GetScheme(),
+				Recorder: mgr.GetEventRecorderFor("relay-test"),
+			}
+			_, err := reconciler.Reconcile(testCtx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			Expect(got.Status.PodName).To(Equal(podNewer.Name))
 		})
 	})
 

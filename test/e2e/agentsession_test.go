@@ -48,6 +48,13 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			Expect(k8sClient.Get(ctx, key, &got)).To(Succeed())
 
 			Expect(got.Status.JobName).NotTo(BeEmpty())
+			Expect(got.Status.PodName).NotTo(BeEmpty())
+
+			By("verifying status.podName references an existing Pod for the Job")
+			var pod corev1.Pod
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: ns, Name: got.Status.PodName}, &pod)).To(Succeed())
+			Expect(pod.Labels[controller.LabelSessionRef]).To(Equal(session.Name))
+
 			Expect(got.Status.StartTime).NotTo(BeNil())
 			Expect(got.Status.CompletionTime).NotTo(BeNil())
 			Expect(got.Status.Result).NotTo(BeNil())
@@ -97,6 +104,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 			Expect(got.Status.Result).NotTo(BeNil())
 			Expect(got.Status.Result.Outcome).To(Equal("failed"))
+			Expect(got.Status.PodName).NotTo(BeEmpty())
 
 			completed := getCondition(&got, controller.ConditionCompleted)
 			Expect(completed).NotTo(BeNil())
