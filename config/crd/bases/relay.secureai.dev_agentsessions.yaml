@@ -1,0 +1,676 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: agentsessions.relay.secureai.dev
+spec:
+  group: relay.secureai.dev
+  names:
+    kind: AgentSession
+    listKind: AgentSessionList
+    plural: agentsessions
+    shortNames:
+    - as
+    - agentsess
+    singular: agentsession
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.jobName
+      name: Job
+      type: string
+    - jsonPath: .status.podName
+      name: Pod
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          AgentSession is the Schema for the agentsessions API.
+
+          An AgentSession represents one governed autonomous AI agent execution.
+          It is intentionally not a generic workflow task; the spec captures task intent,
+          model selection, runtime placement, and governance policy.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentSessionSpec defines the desired state of an AgentSession.
+            properties:
+              model:
+                description: Model describes which LLM provider/model the agent should
+                  use.
+                properties:
+                  maxTokens:
+                    description: MaxTokens limits output tokens for the model call.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  name:
+                    description: Name is the model identifier, e.g. "gpt-4.1".
+                    type: string
+                  provider:
+                    description: Provider is the model provider, e.g. "openai", "anthropic",
+                      "bedrock".
+                    type: string
+                  temperature:
+                    description: Temperature controls sampling temperature.
+                    maximum: 2
+                    minimum: 0
+                    type: number
+                required:
+                - name
+                - provider
+                type: object
+              outputs:
+                description: Outputs controls log/artifact collection for the session.
+                properties:
+                  artifactPath:
+                    description: ArtifactPath is the directory inside the workspace
+                      from which artifacts are collected.
+                    type: string
+                  collectArtifacts:
+                    description: CollectArtifacts, when true, indicates that files
+                      under ArtifactPath should be retained.
+                    type: boolean
+                  collectLogs:
+                    description: CollectLogs, when true, indicates that pod logs should
+                      be retained.
+                    type: boolean
+                type: object
+              policy:
+                description: Policy describes inline governance rules for this session.
+                properties:
+                  allowedCIDRs:
+                    description: AllowedCIDRs is an IP/CIDR allowlist for outbound
+                      network access.
+                    items:
+                      type: string
+                    type: array
+                  allowedDomains:
+                    description: AllowedDomains is an FQDN allowlist for outbound
+                      network access.
+                    items:
+                      type: string
+                    type: array
+                  allowedTools:
+                    description: AllowedTools lists tool identifiers the agent is
+                      permitted to invoke.
+                    items:
+                      type: string
+                    type: array
+                  deniedCIDRs:
+                    description: DeniedCIDRs is an IP/CIDR denylist for outbound network
+                      access.
+                    items:
+                      type: string
+                    type: array
+                  deniedDomains:
+                    description: DeniedDomains is an FQDN denylist for outbound network
+                      access.
+                    items:
+                      type: string
+                    type: array
+                  deniedTools:
+                    description: DeniedTools lists tool identifiers the agent must
+                      not invoke.
+                    items:
+                      type: string
+                    type: array
+                  maxNetworkRequests:
+                    description: MaxNetworkRequests caps the total number of network
+                      requests the agent may issue.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  maxToolCalls:
+                    description: MaxToolCalls caps the total number of tool calls
+                      the agent may issue.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  requireHumanApproval:
+                    description: RequireHumanApproval lists action types that require
+                      human approval before execution.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              runtime:
+                description: Runtime describes how the agent should be executed.
+                properties:
+                  args:
+                    description: Args overrides the container CMD.
+                    items:
+                      type: string
+                    type: array
+                  command:
+                    description: Command overrides the container ENTRYPOINT.
+                    items:
+                      type: string
+                    type: array
+                  env:
+                    description: |-
+                      Env are extra environment variables to inject into the agent container,
+                      in addition to the Relay-managed RELAY_*/AGENT_* variables.
+                    items:
+                      description: EnvVar represents an environment variable present
+                        in a Container.
+                      properties:
+                        name:
+                          description: Name of the environment variable. Must be a
+                            C_IDENTIFIER.
+                          type: string
+                        value:
+                          description: |-
+                            Variable references $(VAR_NAME) are expanded
+                            using the previously defined environment variables in the container and
+                            any service environment variables. If a variable cannot be resolved,
+                            the reference in the input string will be unchanged. Double $$ are reduced
+                            to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                            "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                            Escaped references will never be expanded, regardless of whether the variable
+                            exists or not.
+                            Defaults to "".
+                          type: string
+                        valueFrom:
+                          description: Source for the environment variable's value.
+                            Cannot be used if value is not empty.
+                          properties:
+                            configMapKeyRef:
+                              description: Selects a key of a ConfigMap.
+                              properties:
+                                key:
+                                  description: The key to select.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the ConfigMap or its
+                                    key must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fieldRef:
+                              description: |-
+                                Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                                spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                              properties:
+                                apiVersion:
+                                  description: Version of the schema the FieldPath
+                                    is written in terms of, defaults to "v1".
+                                  type: string
+                                fieldPath:
+                                  description: Path of the field to select in the
+                                    specified API version.
+                                  type: string
+                              required:
+                              - fieldPath
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            resourceFieldRef:
+                              description: |-
+                                Selects a resource of the container: only resources limits and requests
+                                (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                              properties:
+                                containerName:
+                                  description: 'Container name: required for volumes,
+                                    optional for env vars'
+                                  type: string
+                                divisor:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  description: Specifies the output format of the
+                                    exposed resources, defaults to "1"
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                resource:
+                                  description: 'Required: resource to select'
+                                  type: string
+                              required:
+                              - resource
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            secretKeyRef:
+                              description: Selects a key of a secret in the pod's
+                                namespace
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  image:
+                    description: Image is the container image to run the agent.
+                    type: string
+                  imagePullPolicy:
+                    description: ImagePullPolicy is the container image pull policy.
+                    type: string
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    description: NodeSelector constrains the pod to nodes with matching
+                      labels.
+                    type: object
+                  orchestrator:
+                    default: kubernetes-job
+                    description: |-
+                      Orchestrator selects which runtime backend should execute the session.
+                      MVP only supports "kubernetes-job".
+                      Future values: "tekton", "argo", "temporal", "external".
+                    enum:
+                    - kubernetes-job
+                    type: string
+                  resources:
+                    description: Resources sets the container resource requests and
+                      limits.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This is an alpha field and requires enabling the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  serviceAccountName:
+                    description: ServiceAccountName is the ServiceAccount the agent
+                      pod runs as.
+                    type: string
+                  timeoutSeconds:
+                    description: TimeoutSeconds bounds the maximum wall-clock duration
+                      of the session.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  tolerations:
+                    description: Tolerations allow the pod to schedule onto nodes
+                      with matching taints.
+                    items:
+                      description: |-
+                        The pod this Toleration is attached to tolerates any taint that matches
+                        the triple <key,value,effect> using the matching operator <operator>.
+                      properties:
+                        effect:
+                          description: |-
+                            Effect indicates the taint effect to match. Empty means match all taint effects.
+                            When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                          type: string
+                        key:
+                          description: |-
+                            Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                            If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                          type: string
+                        operator:
+                          description: |-
+                            Operator represents a key's relationship to the value.
+                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Exists is equivalent to wildcard for value, so that a pod can
+                            tolerate all taints of a particular category.
+                          type: string
+                        tolerationSeconds:
+                          description: |-
+                            TolerationSeconds represents the period of time the toleration (which must be
+                            of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                            it is not set, which means tolerate the taint forever (do not evict). Zero and
+                            negative values will be treated as 0 (evict immediately) by the system.
+                          format: int64
+                          type: integer
+                        value:
+                          description: |-
+                            Value is the taint value the toleration matches to.
+                            If the operator is Exists, the value should be empty, otherwise just a regular string.
+                          type: string
+                      type: object
+                    type: array
+                required:
+                - image
+                type: object
+              task:
+                description: Task describes what the agent should do.
+                properties:
+                  description:
+                    description: Description is a short human-readable description
+                      of the task.
+                    type: string
+                  prompt:
+                    description: |-
+                      Prompt is the natural-language instruction sent to the agent.
+                      Either Description or Prompt must be non-empty (PromptConfigMapRef can substitute Prompt).
+                    type: string
+                  promptConfigMapRef:
+                    description: PromptConfigMapRef optionally sources the prompt
+                      from a ConfigMap key.
+                    properties:
+                      key:
+                        description: Key inside the ConfigMap that contains the prompt
+                          text.
+                        type: string
+                      name:
+                        description: Name of the ConfigMap in the same namespace as
+                          the AgentSession.
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                type: object
+              workspace:
+                description: Workspace describes the workspace volume mounted into
+                  the agent container.
+                properties:
+                  ephemeral:
+                    description: Ephemeral, when true, provisions an emptyDir workspace
+                      that is discarded after the session.
+                    type: boolean
+                  mountPath:
+                    description: MountPath is the in-container mount point. Defaults
+                      to /workspace.
+                    type: string
+                  size:
+                    description: Size is the requested workspace size (e.g. "5Gi").
+                      Used by future PVC-backed workspaces.
+                    type: string
+                type: object
+            required:
+            - model
+            - runtime
+            - task
+            type: object
+          status:
+            description: AgentSessionStatus defines the observed state of an AgentSession.
+            properties:
+              artifacts:
+                description: Artifacts references artifacts collected from this session.
+                items:
+                  description: ArtifactRef references an artifact produced by an AgentSession.
+                  properties:
+                    mediaType:
+                      description: MediaType is the artifact's MIME type.
+                      type: string
+                    name:
+                      description: Name is a human-readable name of the artifact.
+                      type: string
+                    uri:
+                      description: URI locates the artifact (e.g. "s3://...", "file:///workspace/out.txt").
+                      type: string
+                  required:
+                  - name
+                  - uri
+                  type: object
+                type: array
+              completionTime:
+                description: CompletionTime is when the session reached a terminal
+                  phase.
+                format: date-time
+                type: string
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the session's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              jobName:
+                description: JobName is the name of the underlying batch/v1 Job, when
+                  one has been created.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last generation reconciled
+                  by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current high-level phase of the session.
+                enum:
+                - Pending
+                - Validating
+                - Starting
+                - Running
+                - Succeeded
+                - Failed
+                - Denied
+                - TimedOut
+                - Cancelled
+                type: string
+              podName:
+                description: PodName is the name of the pod running the agent container,
+                  when known.
+                type: string
+              result:
+                description: Result captures the terminal outcome of the session.
+                properties:
+                  exitCode:
+                    description: ExitCode is the exit code of the primary agent container,
+                      when available.
+                    format: int32
+                    type: integer
+                  message:
+                    description: Message is a free-form message about the result.
+                    type: string
+                  outcome:
+                    description: Outcome is a short symbolic outcome, e.g. "completed",
+                      "failed", "denied".
+                    type: string
+                  summary:
+                    description: Summary is a human-readable summary of the result.
+                    type: string
+                type: object
+              startTime:
+                description: StartTime is when the session moved out of Pending.
+                format: date-time
+                type: string
+              usage:
+                description: Usage captures resource/usage metrics for the session.
+                properties:
+                  inputTokens:
+                    description: InputTokens is the total number of input tokens consumed.
+                    format: int64
+                    type: integer
+                  networkRequests:
+                    description: NetworkRequests is the total number of network requests
+                      made.
+                    format: int64
+                    type: integer
+                  outputTokens:
+                    description: OutputTokens is the total number of output tokens
+                      produced.
+                    format: int64
+                    type: integer
+                  toolCalls:
+                    description: ToolCalls is the total number of tool invocations
+                      made.
+                    format: int64
+                    type: integer
+                type: object
+              violations:
+                description: Violations records policy violations observed during
+                  this session.
+                items:
+                  description: PolicyViolation records a single policy violation observed
+                    during a session.
+                  properties:
+                    message:
+                      description: Message is a human-readable description of the
+                        violation.
+                      type: string
+                    target:
+                      description: Target is the entity the policy was applied against
+                        (domain, tool name, etc.).
+                      type: string
+                    time:
+                      description: Time when the violation was observed.
+                      format: date-time
+                      type: string
+                    type:
+                      description: Type categorizes the violation, e.g. "network",
+                        "tool", "approval".
+                      type: string
+                  required:
+                  - message
+                  - time
+                  - type
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

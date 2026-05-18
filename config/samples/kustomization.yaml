@@ -1,0 +1,3 @@
+resources:
+- relay_v1alpha1_agentsession.yaml
+- relay_v1alpha1_agentsession_failing.yaml

@@ -1,0 +1,14 @@
+namespace: relay-system
+
+namePrefix: ""
+
+commonLabels:
+  app.kubernetes.io/name: relay
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization

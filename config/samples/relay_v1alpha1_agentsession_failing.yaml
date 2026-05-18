@@ -1,0 +1,40 @@
+apiVersion: relay.secureai.dev/v1alpha1
+kind: AgentSession
+metadata:
+  name: failing-session-sample
+  namespace: default
+spec:
+  task:
+    description: "Intentional failure sample"
+    prompt: "Exit non-zero so the controller marks the session Failed."
+  model:
+    provider: openai
+    name: gpt-4.1
+  runtime:
+    orchestrator: kubernetes-job
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - |
+      echo "Running governed agent session: $RELAY_SESSION_NAME"
+      echo "Simulating failure..."
+      exit 1
+    timeoutSeconds: 120
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+  policy:
+    allowedDomains: []
+    deniedDomains: []
+    allowedTools: []
+    deniedTools: []
+  workspace:
+    ephemeral: true
+    mountPath: /workspace
+  outputs:
+    collectLogs: true

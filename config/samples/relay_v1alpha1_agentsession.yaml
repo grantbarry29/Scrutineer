@@ -1,0 +1,67 @@
+apiVersion: relay.secureai.dev/v1alpha1
+kind: AgentSession
+metadata:
+  name: github-readme-update
+  namespace: default
+spec:
+  task:
+    description: "Update the README with installation instructions"
+    prompt: "Clone the repo, inspect the README, and propose an updated version."
+  model:
+    provider: openai
+    name: gpt-4.1
+    temperature: 0.2
+    maxTokens: 4096
+  runtime:
+    orchestrator: kubernetes-job
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - |
+      echo "Running governed agent session: $RELAY_SESSION_NAME"
+      echo "Task: $AGENT_TASK_DESCRIPTION"
+      echo "Prompt: $AGENT_TASK_PROMPT"
+      echo "Model: $AGENT_MODEL_PROVIDER/$AGENT_MODEL_NAME"
+      echo "Allowed domains: $AGENT_POLICY_ALLOWED_DOMAINS"
+      echo "Denied domains: $AGENT_POLICY_DENIED_DOMAINS"
+      echo "Allowed tools:   $AGENT_POLICY_ALLOWED_TOOLS"
+      echo "Denied tools:    $AGENT_POLICY_DENIED_TOOLS"
+      sleep 5
+      echo "Done"
+    timeoutSeconds: 900
+    serviceAccountName: default
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "2"
+        memory: "2Gi"
+  policy:
+    allowedDomains:
+    - github.com
+    - api.github.com
+    deniedDomains:
+    - dropbox.com
+    - gmail.com
+    allowedCIDRs: []
+    deniedCIDRs: []
+    allowedTools:
+    - shell
+    - github
+    deniedTools:
+    - kubectl-prod
+    requireHumanApproval:
+    - production_deploy
+    - external_write
+    maxNetworkRequests: 100
+    maxToolCalls: 25
+  workspace:
+    ephemeral: true
+    size: 5Gi
+    mountPath: /workspace
+  outputs:
+    collectLogs: true
+    collectArtifacts: false
+    artifactPath: /workspace/artifacts
