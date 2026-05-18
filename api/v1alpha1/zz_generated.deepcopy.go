@@ -238,7 +238,7 @@ func (in *ModelSpec) DeepCopyInto(out *ModelSpec) {
 	*out = *in
 	if in.Temperature != nil {
 		in, out := &in.Temperature, &out.Temperature
-		*out = new(float64)
+		*out = new(string)
 		**out = **in
 	}
 	if in.MaxTokens != nil {

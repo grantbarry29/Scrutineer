@@ -21,10 +21,7 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	# allowDangerousTypes=true so that float64 fields (e.g. Model.Temperature)
-	# get a proper "type: number" entry in the OpenAPI schema. Without it
-	# controller-gen drops the type, producing a CRD the apiserver rejects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role "crd:allowDangerousTypes=true" webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

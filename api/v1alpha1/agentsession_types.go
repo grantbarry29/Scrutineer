@@ -70,11 +70,17 @@ type ModelSpec struct {
 	Provider string `json:"provider"`
 	// Name is the model identifier, e.g. "gpt-4.1".
 	Name string `json:"name"`
-	// Temperature controls sampling temperature.
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=2
+	// Temperature controls sampling temperature for the model. It is the
+	// numeric value [0.0, 2.0] encoded as a string (e.g. "0.2", "1.5").
+	//
+	// We use a string rather than a Go float64 to avoid cross-language
+	// round-tripping issues with JSON/YAML floats — the same approach used
+	// by k8s.io/apimachinery's resource.Quantity. The Pattern marker below
+	// enforces [0, 2] at admission time; the controller additionally parses
+	// and range-checks the value as defense-in-depth.
+	// +kubebuilder:validation:Pattern=`^(0(\.[0-9]+)?|1(\.[0-9]+)?|2(\.0+)?)$`
 	// +optional
-	Temperature *float64 `json:"temperature,omitempty"`
+	Temperature *string `json:"temperature,omitempty"`
 	// MaxTokens limits output tokens for the model call.
 	// +kubebuilder:validation:Minimum=1
 	// +optional

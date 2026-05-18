@@ -13,6 +13,7 @@ package controller
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
@@ -45,7 +46,11 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 	}
 
 	if spec.Model.Temperature != nil {
-		t := *spec.Model.Temperature
+		raw := *spec.Model.Temperature
+		t, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return fmt.Errorf("spec.model.temperature %q is not a valid number: %w", raw, err)
+		}
 		if t < 0 || t > 2 {
 			return fmt.Errorf("spec.model.temperature must be between 0 and 2, got %v", t)
 		}

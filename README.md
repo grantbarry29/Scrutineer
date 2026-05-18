@@ -133,7 +133,7 @@ spec:
   model:
     provider: openai
     name: gpt-4.1
-    temperature: 0.2
+    temperature: "0.2"
     maxTokens: 4096
   runtime:
     orchestrator: kubernetes-job
