@@ -124,11 +124,21 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 // ensureJob fetches the Job owned by the AgentSession, creating it if it does not yet exist.
+//
+// On every successful return (whether the Job was newly created or already existed),
+// the RuntimeCreated condition is re-asserted on the AgentSession. This is required
+// because the controller's local cache may lag behind the apiserver immediately after
+// a Create — a follow-up reconcile that reads a stale cached AgentSession would
+// otherwise issue a JSON-merge-patch that overwrites the conditions array and drops
+// RuntimeCreated. Re-asserting on each reconcile keeps the condition convergent.
 func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession) (*batchv1.Job, error) {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
 
 	var existing batchv1.Job
 	if err := r.Get(ctx, jobKey, &existing); err == nil {
+		session.Status.JobName = existing.Name
+		setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
+			fmt.Sprintf("Job %q exists", existing.Name))
 		return &existing, nil
 	} else if !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("get Job %s: %w", jobKey, err)

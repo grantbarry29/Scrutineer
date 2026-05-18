@@ -39,6 +39,12 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
 
+.PHONY: test-e2e
+test-e2e: manifests install ## Run e2e tests against the live kind cluster (assumes `make dev-up` has been run).
+	@echo ">> running e2e suite against $$(kubectl config current-context)"
+	@echo ">> ensure no other relay controller is running (no concurrent 'make run')"
+	go test -tags=e2e -v ./test/e2e/... -timeout 15m -ginkgo.v
+
 ##@ Build
 
 .PHONY: build
@@ -157,4 +163,4 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 .PHONY: envtest
 envtest: $(ENVTEST)
 $(ENVTEST): $(LOCALBIN)
-	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19
