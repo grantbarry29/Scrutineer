@@ -1,136 +1,17 @@
 # Relay Project Status
 
-> Living tracker for operational state and roadmap progress.
-> **Last updated:** 2026-05-17 (cancellation e2e)
+> **What Relay has shipped, what is in progress, and where it is headed.**
+> **Last updated:** 2026-06-04 (split status vs Cursor workflow docs)
 >
-> Update this file when completing roadmap items, changing priorities, or shipping meaningful milestones.
+> For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-The **roadmap below is long-term product intent**. It is not a single implementation backlog. Use the sections that follow to scope Cursor-assisted work into small, testable tasks.
-
----
-
-## How To Work On Roadmap Items With Cursor
-
-Roadmap checkboxes describe **capabilities**, not one PR or one prompt. Before coding, decompose a roadmap item into narrow tasks, each with an acceptance criterion and a single verification command.
-
-**Avoid prompts like:**
-
-> Implement session cancellation, finalizers, CI, AgentPolicy, and NetworkPolicy baseline.
-
-**Prefer a sequence like:**
-
-1. Add `spec.cancelRequested` (or equivalent) and kubebuilder validation markers only → `make manifests && make test`
-2. Update reconciler to detect cancel and delete the owned Job → `make test`
-3. Set `status.phase=Cancelled` and conditions on cancel → `make test`
-4. Add e2e spec for cancellation → `make test-e2e`
-5. Add finalizer on `AgentSession` that deletes owned Job before remove → `make test`
-6. Add GitHub Actions workflow running `make test` only
-7. Add a separate GitHub Actions job for kind + `make test-e2e`
-
-Same pattern for other phases: API shape first, then reconciler behavior, then tests, then CI—never multiple phases at once unless the user explicitly requests a design pass first.
-
----
-
-## Out-of-Scope Future Work Handling
-
-When implementing any task, Cursor must distinguish between:
-
-1. **Current task requirements** — work required to satisfy the selected task’s acceptance criteria.
-2. **Necessary supporting changes** — small changes required for the selected task to compile, test, or remain consistent.
-3. **Future requirements** — important eventual work that is related but not required for the selected task.
-
-Cursor must **not** implement future requirements unless the user explicitly asks.
-
-Instead, Cursor must:
-
-1. Notice the future requirement.
-2. Check this file (**Ready for Cursor Queue**, **Discovered Follow-Up Tasks**, roadmap phases).
-3. If already tracked, mention it briefly in the task summary.
-4. If not tracked, add a scoped task card (use the **Task Execution Template** below) or a roadmap bullet in the appropriate phase.
-5. Continue implementing only the original selected task.
-
-Each new task card should include: task name, why it matters, scope, non-goals, acceptance criteria, expected files, and a single verification command.
-
-### End-of-task summary requirement
-
-After every implementation task, Cursor must include:
-
-### Out-of-scope future work noticed
-
-- `None.` — if nothing relevant was noticed.
-
-Or bullets such as:
-
-- **Finalizer-based cleanup** is needed for deletion reliability.
-  - **Already tracked:** yes — Ready for Cursor Queue / Finalizers tasks.
-  - **Not implemented** because the selected task only covered cancellation Job delete.
-
-### Examples
-
-| While implementing… | Do not… | Instead… |
-|---------------------|---------|----------|
-| `status.podName` | Redesign Job retry/backoff | Add task if retry semantics are not tracked |
-| Cancellation | Add finalizers | Reference or add finalizer tasks |
-| Policy env vars | Add Envoy/Cilium/NetworkPolicy | Reference Phase 3 enforcement tasks |
-| Events | Build audit backend / UI | Reference Phase 4 structured events |
-| `promptConfigMapRef` | Add cross-namespace refs | Add reference-scoping task |
-| ServiceAccount fields | Redesign identity | Reference Phase 8 CredentialProfile / per-session identity |
-
----
-
-## Repository State Scan Rule
-
-Cursor should scan the current repository state when:
-
-- the user asks to tighten project rules or what to work on next
-- a task is completed
-- a new subsystem is introduced
-- the status file may be stale
-
-The scan should compare:
-
-- actual CRD/API fields (`api/v1alpha1/`, `config/crd/bases/`)
-- controller behavior (`internal/controller/`)
-- tests (`internal/controller/*_test.go`, `test/e2e/`)
-- sample manifests (`config/samples/`)
-- README and docs
-- Makefile targets
-- CI files (`.github/workflows/`)
-- RBAC (`config/rbac/`, kubebuilder RBAC markers)
-- generated manifests vs Go API markers
-- TODO / future comments in code
-- claims in this status file
-
-Look for mismatches such as:
-
-- status says done but code does not implement it
-- code implements behavior not documented in status
-- API fields without controller behavior (or without “future-only” documentation)
-- controller behavior without tests
-- tests without status mentions
-- README commands that do not match Makefile targets
-- RBAC missing for resources the controller uses
-- stale samples relative to the CRD
-- status fields never populated
-- roadmap items too broad to implement in one session
-
-**During a scan, do not implement fixes unless explicitly asked.** Update this file (and rules) only.
-
-Promote items from **Discovered Follow-Up Tasks** into **Ready for Cursor Queue** when they are the next logical slice of work.
+The **roadmap** below is long-term product intent, not a single backlog. **Ready for Cursor Queue** lists the next small implementation slices.
 
 ---
 
 ## Ready for Cursor Queue
 
-Pick **one task card** per implementation session unless the user explicitly asks for a design plan. These tasks are implementation-sized; broader capabilities remain in the roadmap below.
-
-Before implementing a selected task, Cursor must first restate:
-- selected task
-- expected files
-- non-goals
-- verification command
-
-If the task appears to require more than **4 non-generated files**, Cursor must wait for confirmation before editing.
+Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
 ### Task: Session cancellation docs/status update
 
@@ -618,128 +499,6 @@ README mixes vision and MVP reality; `cancelRequested`, declared-vs-enforced pol
 **Verification command:**  
 `make test` (docs-only)
 
----
-
-## Task Sizing Rules
-
-- A good Cursor task usually touches **1–4 files** (plus generated CRD YAML when API markers change).
-- Every task should have a **clear acceptance criterion** (one sentence, testable).
-- Every task should be verifiable with **one primary command** (e.g. `make test`, `make test-e2e`, or `kubectl apply` + assert).
-- **Avoid** tasks that span multiple roadmap phases (e.g. Phase 1 hardening + Phase 3 NetworkPolicy in one pass).
-- **Avoid** inventing new architecture (new CRDs, sidecars, enforcement backends) unless the prompt explicitly asks for design first.
-- If a task needs more than one subsystem (API + controller + CI + docs), **propose a short plan** and wait for confirmation instead of coding immediately.
-
----
-
-## Task Execution Template
-
-Every implementation task should be written in this format before code changes begin:
-
-### Task: `<short name>`
-
-**Goal:**  
-One sentence describing the user-visible capability.
-
-**Scope:**  
-What should be implemented.
-
-**Non-goals:**  
-What must not be implemented as part of this task.
-
-**Acceptance criteria:**  
-- Specific observable result
-- Specific status/behavior/result
-- Specific test expectation
-
-**Expected files:**  
-- likely files to change
-
-**Verification command:**  
-`make test`, `make test-e2e`, or another single primary command.
-
-### Example: Populate `status.podName` reliably
-
-**Goal:**  
-AgentSession status should show the Pod created by the owned Job.
-
-**Scope:**  
-Find Pods owned by the AgentSession Job and set `status.podName` once a Pod exists.
-
-**Non-goals:**  
-Do not implement cancellation, finalizers, new CRDs, policy enforcement, or UI.
-
-**Acceptance criteria:**  
-- When a Job creates a Pod, `status.podName` is populated.
-- Reconcile succeeds if no Pod exists yet.
-- If multiple Pods exist, controller chooses the newest Pod by creation timestamp.
-- Envtest or e2e coverage verifies this.
-
-**Expected files:**  
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/agentsession_controller_test.go` or `test/e2e/agentsession_test.go`
-
-**Verification command:**  
-`make test`
-
----
-
-## Scope Boundaries
-
-Unless the user explicitly asks for design work or selects a task that requires it, do not:
-
-- add new CRDs
-- add a UI
-- add Envoy
-- add Cilium/eBPF
-- add NetworkPolicy generation
-- add gVisor/Kata/Firecracker
-- add a tool gateway
-- add real policy enforcement
-- add approval workflows
-- add multi-cluster support
-- refactor the project structure
-- replace Kubernetes Job reconciliation
-- introduce a new orchestrator adapter
-
-When a future feature seems relevant:
-
-1. Check whether it is already tracked in this file.
-2. If not, add a scoped task card (or roadmap bullet) — see **Out-of-Scope Future Work Handling**.
-3. Do not implement it in the current task.
-
----
-
-## Explain As You Go
-
-For each implementation task, Cursor should concisely explain:
-
-- why the change is needed
-- what Kubernetes/controller-runtime concept is involved
-- what invariant the code must preserve
-- how the test proves the behavior
-
-Keep explanations short and educational. Prefer concrete invariants over vague guidance.
-
----
-
-## Status File Self-Update Rules
-
-After completing a task, Cursor must update this file.
-
-- If a **Ready for Cursor Queue** task is completed, remove it or move a summary to **Recently completed**; update the roadmap checkbox if applicable.
-- Add a **Recent fixes** bullet for behavior changes, bug fixes, or user-visible improvements.
-- Update **What works today** when a new capability is available.
-- Update **Current Operational State** if a whole area changes.
-- Update **Known gaps** if a gap is closed or newly discovered.
-- Update the **Last updated** date.
-- If new work is discovered during implementation, follow **Out-of-Scope Future Work Handling** (add to **Discovered Follow-Up Tasks** or queue; do not implement unless asked).
-- Include **### Out-of-scope future work noticed** in the implementation summary to the user.
-- Do not remove long-term roadmap items just because they are not being worked on now.
-- Do not mark tasks complete unless tests pass or the user explicitly accepts incomplete work.
-- After completing a task, consider a lightweight **Repository State Scan** (see above) if the change touched API, reconcile logic, RBAC, or tests.
-
----
-
 ## Current Operational State
 
 Relay is in **early MVP / vertical-slice** stage. The core control-plane loop works end-to-end on a local kind cluster, but most governance is **declared and propagated**, not **enforced**.
@@ -810,7 +569,7 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 
 Status key: `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` deferred
 
-Phases are ordered by product maturity. **Implement incrementally** using the decomposition guidance above—not as a single effort.
+Phases are ordered by product maturity. **Implement incrementally** — decompose per [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md), not as a single effort.
 
 ---
 
@@ -954,17 +713,3 @@ One-time scan performed while tightening Cursor rules. **No product code changed
 | RBAC | Matches current controller; audit not documented | Discovered Follow-Up Tasks |
 | Samples / README | Samples valid; README lacks cancel + future-only status clarity | Discovered Follow-Up Tasks |
 | Enforcement / UI / extra CRDs | Not implemented (expected) | Roadmap Phases 2–7 |
-
----
-
-## How to update this file
-
-Use **Status File Self-Update Rules** above as the authoritative update workflow.
-
-At minimum:
-
-1. Move the task from `[ ]` or `[~]` to `[x]` only after tests pass or the user accepts incomplete work.
-2. Add a **Recent fixes** line for behavior changes, bug fixes, or user-visible improvements.
-3. Update **What works today**, **Known gaps**, and **Current Operational State** when those sections change.
-4. Update the **Last updated** date at the top.
-5. Add newly discovered work as a scoped task card with scope, non-goals, acceptance criterion, and verification command.

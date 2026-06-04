@@ -57,9 +57,9 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 
 This file describes **product direction**, not permission to implement the full roadmap in one pass.
 
-- Work on **one narrow task or vertical slice** at a time. Read `.cursor/relay-project-status.md` for current state and appropriately scoped next tasks.
-- Follow the **Cursor Implementation Contract** in `.cursor/rules/relay-project-status.mdc` before coding: identify one selected task, state acceptance criteria, expected files, verification command, and non-goals.
-- Follow **Out-of-Scope Future Work Handling** in `.cursor/relay-project-status.md` and `.cursor/rules/relay-project-status.mdc`: do not silently implement adjacent future work; add or reference scoped tasks instead.
+- Work on **one narrow task or vertical slice** at a time. Read `.cursor/relay-project-status.md` for current state and `.cursor/relay-cursor-workflow.md` for implementation rules.
+- Follow the **Cursor Implementation Contract** in `.cursor/rules/relay-project-status.mdc` and `.cursor/relay-cursor-workflow.md` before coding.
+- Follow **Out-of-Scope Future Work Handling** in `.cursor/relay-cursor-workflow.md`: do not silently implement adjacent future work; add scoped tasks to `.cursor/relay-project-status.md` instead.
 - End implementation summaries with **### Out-of-scope future work noticed** (see project-status rules).
 - **Do not** implement multiple roadmap phases in a single change. Do not bundle unrelated capabilities.
 - **Do not** add new CRDs, sidecars, webhooks, dashboards, policy engines, Envoy, Cilium, eBPF, gVisor/Kata, or tool gateways unless the user explicitly requests them.

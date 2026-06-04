@@ -5,94 +5,28 @@ alwaysApply: true
 
 # Relay Project Status Tracker
 
-The living project state and roadmap live in [`.cursor/relay-project-status.md`](../relay-project-status.md).
+| File | Purpose |
+|------|---------|
+| [`.cursor/relay-project-status.md`](../relay-project-status.md) | **Status** — what's done, queue, roadmap, gaps (humans + agents) |
+| [`.cursor/relay-cursor-workflow.md`](../relay-cursor-workflow.md) | **Workflow** — how to implement tasks, scope rules, templates, updates |
 
-- **Before** starting significant work, read that file for operational state, **Ready for Cursor Queue**, **Discovered Follow-Up Tasks**, and **Task Sizing Rules**.
-- Roadmap phases are **product capabilities**, not single coding sessions. Decompose them into small tasks (see **How To Work On Roadmap Items With Cursor** in the status file).
-- **After** completing work, update checkboxes, **Recent fixes**, and the **Last updated** date. Do not implement the entire roadmap unless explicitly asked.
-- Do not duplicate the full roadmap here; keep detailed status only in `relay-project-status.md`.
+- **Before** significant implementation work, read **status** (queue, gaps, roadmap) and **workflow** (implementation contract).
+- **After** completing work, update **`relay-project-status.md`** only (not the workflow file unless process rules change).
+- Roadmap phases are capabilities, not one session — decompose per **workflow** doc.
+- Do not duplicate the full roadmap in rules; keep detail in the status file.
 
-## Cursor Implementation Contract
+## Cursor Implementation Contract (summary)
 
-When asked to implement a Relay task, Cursor must:
+Full detail: [`.cursor/relay-cursor-workflow.md`](../relay-cursor-workflow.md).
 
-1. Read the relevant memory files: `relay-product-vision.mdc`, `relay-project-status.mdc`, and `relay-project-status.md`.
-2. Identify the exact selected task. If the prompt does not clearly select one task, ask for clarification or propose a short task list. Do not pick multiple roadmap items automatically.
-3. Before editing code, provide a short implementation plan with selected task, acceptance criterion, expected files, verification command, and explicit non-goals.
-4. Implement only the selected task. Do not add adjacent roadmap items or future architecture unless explicitly requested.
-5. Keep changes reviewable. Prefer 1-4 non-generated files; if more are needed, stop and explain why before proceeding.
-6. **Explain as you go** (concise, educational): why the change is needed, what Kubernetes/controller-runtime concept is involved, what invariant must hold, and how tests prove it.
-7. After implementation, summarize changes, files changed, acceptance criteria satisfied, tests run, and update `.cursor/relay-project-status.md`.
-8. End every implementation summary with **### Out-of-scope future work noticed** (see below).
-9. If follow-up work is discovered during implementation, follow **Out-of-Scope Future Work Handling** in the status file; do not implement it unless asked.
-10. If architecture is ambiguous, stop, offer 2-3 design options, recommend one, and wait for confirmation.
-11. Preserve existing behavior unless the task explicitly changes it. Prefer idempotent reconciliation, owner references, status subresources, conditions, events, least-privilege RBAC, and clear controller ownership boundaries.
+1. Read `relay-product-vision.mdc`, this file, `relay-project-status.md`, and `relay-cursor-workflow.md` when implementing.
+2. Pick **one** task from **Ready for Cursor Queue** (or ask the user).
+3. Plan first: task, acceptance, files, verification, non-goals.
+4. Implement only that task; prefer 1–4 non-generated files.
+5. Explain as you go; update status when done.
+6. End with **### Out-of-scope future work noticed**.
+7. Track discovered work in status; do not implement unless asked.
 
-## Out-of-Scope Future Work Handling
-
-When implementing any task, distinguish:
-
-1. **Current task requirements** — required for acceptance criteria.
-2. **Necessary supporting changes** — small changes needed to compile, test, or stay consistent.
-3. **Future requirements** — related but not required for the selected task.
-
-**Do not implement future requirements** unless the user explicitly asks.
-
-Instead:
-
-1. Notice the future requirement.
-2. Check `.cursor/relay-project-status.md` (queue, **Discovered Follow-Up Tasks**, roadmap phases).
-3. If already tracked, mention it briefly in the implementation summary.
-4. If not tracked, add a scoped task card (or roadmap bullet) with: task name, why it matters, scope, non-goals, acceptance criteria, expected files, verification command.
-5. Continue implementing only the original selected task.
-
-Examples: finalizers during cancellation work; Envoy during policy propagation; UI during events; cross-namespace ConfigMap refs during `promptConfigMapRef`; per-session identity during ServiceAccount fields.
-
-## End-of-Task Summary: Out-of-Scope Future Work
-
-After each implementation task, include:
-
-### Out-of-scope future work noticed
-
-- `None.` — if nothing relevant was noticed.
-
-Or bullets with:
-
-- **Description** of the future work
-- **Already tracked:** yes/no (and where: queue phase / task name / roadmap)
-- **If no:** where it was added in `.cursor/relay-project-status.md`
-
-## Repository State Scan Rule
-
-Scan the repository against the status file when:
-
-- the user asks to tighten project rules or what to work on next
-- a task is completed
-- a new subsystem is introduced
-- the status file may be stale
-
-Compare: CRD/API fields, controller behavior, tests, samples, README, Makefile, CI, RBAC, generated manifests, TODO comments, and status claims.
-
-Identify mismatches (e.g. status says done but code does not; API without controller behavior; missing tests; stale samples; missing RBAC; untracked TODOs). **Do not implement fixes during the scan** unless asked — only update tracking files (rules + `relay-project-status.md`).
-
-## Scope Boundaries
-
-Unless the user explicitly asks for design work or a selected task requires it, do not:
-
-- add new CRDs
-- add a UI
-- add Envoy
-- add Cilium/eBPF
-- add NetworkPolicy generation
-- add gVisor/Kata/Firecracker
-- add a tool gateway
-- add real policy enforcement
-- add approval workflows
-- add multi-cluster support
-- refactor the project structure
-- replace Kubernetes Job reconciliation
-- introduce a new orchestrator adapter
-
-When a future feature seems relevant: check if tracked → add a task if missing → do not implement it.
+Scope boundaries and out-of-scope handling: see **workflow** file.
 
 Unless explicitly selected by the user, do not add new CRDs, webhooks, sidecars, policy engines, UI, Envoy, Cilium/eBPF, gVisor/Kata, tool gateways, real policy enforcement, approval workflows, multi-cluster support, a new orchestrator adapter, or a replacement for Kubernetes Job reconciliation.
