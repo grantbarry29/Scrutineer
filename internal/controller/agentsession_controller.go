@@ -460,9 +460,14 @@ func backoffExhausted(job *batchv1.Job) bool {
 }
 
 // jobTimedOut returns true if the Job hit its activeDeadlineSeconds.
+// Kubernetes 1.31+ may set FailureTarget/DeadlineExceeded before JobFailed; older versions use JobFailed.
 func jobTimedOut(job *batchv1.Job) bool {
 	for _, c := range job.Status.Conditions {
-		if c.Type == batchv1.JobFailed && c.Status == corev1.ConditionTrue && strings.EqualFold(c.Reason, "DeadlineExceeded") {
+		if c.Status != corev1.ConditionTrue || !strings.EqualFold(c.Reason, "DeadlineExceeded") {
+			continue
+		}
+		switch c.Type {
+		case batchv1.JobFailed, batchv1.JobFailureTarget:
 			return true
 		}
 	}

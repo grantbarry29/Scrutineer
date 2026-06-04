@@ -351,7 +351,8 @@ make dev-down
 | `make kind-load`| `docker-build` the controller image + `kind load docker-image`.    |
 | `make dev-up`   | `kind-up` + install CRDs. Use with `make run` for the dev loop.    |
 | `make dev-deploy`| Build + load + deploy the controller into the kind cluster.       |
-| `make dev-sample`| Apply both sample AgentSessions.                                  |
+| `make dev-sample`| Apply success + failing sample AgentSessions.                     |
+| `make verify-samples` | Server-side dry-run all `config/samples/relay_*.yaml` (needs CRDs). |
 | `make dev-down` | Alias for `kind-down`.                                             |
 
 You can also run these targets **outside** the dev container as long as Docker,
@@ -433,7 +434,17 @@ kubectl get agentsessions
 It should transition to `Failed` with a `JobFailed` event and
 `Completed=False` condition.
 
-### 7. Try the cancellation sample
+### 7. Try the prompt ConfigMap sample
+
+```
+kubectl apply -f config/samples/relay_v1alpha1_agentsession_prompt_cm.yaml
+kubectl get agentsession github-readme-from-cm -w
+```
+
+Applies a ConfigMap plus an AgentSession that loads `spec.task.promptConfigMapRef`
+(same namespace). Expect `Succeeded` when the controller is running.
+
+### 8. Try the cancellation sample
 
 ```
 kubectl apply -f config/samples/relay_v1alpha1_agentsession_cancel.yaml
@@ -443,6 +454,16 @@ kubectl get agentsession cancel-at-create-sample -w
 Expect `Phase=Cancelled` and no `relay-session-cancel-at-create-sample` Job.
 
 To cancel a long-running session, apply the success sample, wait for `Running`, then patch `cancelRequested` as described in [Cancelling a running session](#cancelling-a-running-session).
+
+### Validate samples against the installed CRD
+
+After `make install` (or `make dev-up`), check that hand-maintained samples still match the API:
+
+```
+make verify-samples
+```
+
+This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap).
 
 ---
 

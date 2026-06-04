@@ -57,6 +57,23 @@ var _ = Describe("AgentSession e2e against kind", func() {
 		})
 	})
 
+	Context("timeout path", func() {
+		It("marks Phase=TimedOut when the Job exceeds activeDeadlineSeconds", func(ctx SpecContext) {
+			ns := newTestNamespace("relay-e2e-timeout")
+			session := newAgentSession(ns, "timed-out",
+				withTimeoutSeconds(5),
+				withSleepExceedingTimeout(),
+			)
+			key := createAgentSession(ctx, session)
+
+			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseTimedOut)
+
+			got := getSession(ctx, key)
+			expectTimedOutStatus(&got)
+			expectJobForSession(ctx, ns, session)
+		})
+	})
+
 	Context("failure path", func() {
 		It("marks a non-zero exit as Phase=Failed", func(ctx SpecContext) {
 			ns := newTestNamespace("relay-e2e-fail")

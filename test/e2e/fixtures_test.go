@@ -72,6 +72,19 @@ func withExitCommand(exitCode int) agentSessionOption {
 	}
 }
 
+func withTimeoutSeconds(sec int64) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		s.Spec.Runtime.TimeoutSeconds = &sec
+	}
+}
+
+// withSleepExceedingTimeout runs longer than typical timeoutSeconds used in TimedOut e2e.
+func withSleepExceedingTimeout() agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		s.Spec.Runtime.Command = []string{"sh", "-c", "sleep 120"}
+	}
+}
+
 // newTestNamespace creates a uniquely-named namespace for one It block.
 func newTestNamespace(prefix string) string {
 	name := fmt.Sprintf("%s-%s", prefix, rand.String(5))

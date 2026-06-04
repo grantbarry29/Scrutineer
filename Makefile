@@ -39,6 +39,14 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
 
+.PHONY: verify-samples
+verify-samples: manifests install ## Server-side dry-run of config/samples manifests (requires kubectl + CRDs).
+	@set -e; \
+	for f in config/samples/relay_*.yaml; do \
+	  echo ">> verifying $$f"; \
+	  kubectl apply --dry-run=server -f "$$f"; \
+	done
+
 .PHONY: test-e2e
 test-e2e: manifests install ## Run e2e tests against the live kind cluster (assumes `make dev-up` has been run).
 	@echo ">> running e2e suite against $$(kubectl config current-context)"

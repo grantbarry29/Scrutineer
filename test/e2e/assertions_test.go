@@ -114,6 +114,15 @@ func requestCancellation(ctx context.Context, key client.ObjectKey) {
 	Expect(k8sClient.Update(ctx, &got)).To(Succeed())
 }
 
+func expectTimedOutStatus(got *relayv1alpha1.AgentSession) {
+	Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseTimedOut))
+	Expect(got.Status.CompletionTime).NotTo(BeNil())
+	expectCondition(got, controller.ConditionCompleted, metav1.ConditionFalse, "JobTimedOut")
+	if got.Status.Result != nil {
+		Expect(got.Status.Result.Outcome).To(Equal("failed"))
+	}
+}
+
 func expectCancelledStatus(got *relayv1alpha1.AgentSession) {
 	Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseCancelled))
 	Expect(got.Status.CompletionTime).NotTo(BeNil())

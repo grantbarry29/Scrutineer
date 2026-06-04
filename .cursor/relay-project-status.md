@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-04 (status.podName selection semantics)
+> **Last updated:** 2026-06-04 (verify-samples + e2e TimedOut)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -15,7 +15,7 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 
 _(Queue empty — promote a task from **Discovered Follow-Up Tasks** or Phase 1 roadmap when ready.)_
 
-**Recently completed** (do not re-implement unless regressions): **status.podName selection semantics** (documented + tie-break; unit tests for retries/stale Job UID), **AgentSession finalizers** (`relay.secureai.dev/finalizer`, owned Job delete on session delete, `blockOwnerDeletion=false` on Jobs), **envtest delete-path coverage**, **GitHub Actions** (`test.yaml`, `e2e.yaml`, `lint.yaml`), **session cancellation** (full stack + README + cancel sample), **terminal phase stability**, envtest controller suite, `promptConfigMapRef`, status patch strategy, **`status.podName`**, cancellation e2e.
+**Recently completed** (do not re-implement unless regressions): **validate sample manifests** (`make verify-samples`), **e2e TimedOut path**, **status.podName selection semantics** (documented + tie-break; unit tests for retries/stale Job UID), **AgentSession finalizers** (`relay.secureai.dev/finalizer`, owned Job delete on session delete, `blockOwnerDeletion=false` on Jobs), **envtest delete-path coverage**, **GitHub Actions** (`test.yaml`, `e2e.yaml`, `lint.yaml`), **session cancellation** (full stack + README + cancel sample), **terminal phase stability**, envtest controller suite, `promptConfigMapRef`, status patch strategy, **`status.podName`**, cancellation e2e.
 
 ---
 
@@ -73,32 +73,6 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 **Verification command:**  
 `make manifests && make test`
 
-### Task: Validate sample manifests against current CRD
-
-**Why it matters:**  
-Samples are hand-maintained; drift from generated CRD fields breaks copy-paste onboarding.
-
-**Scope:**
-- Verify `config/samples/*.yaml` apply cleanly after `make install` on kind.
-- Fix invalid fields, document `cancelRequested` sample once cancellation is complete.
-- Optionally add a Makefile target or script that dry-runs `kubectl apply --dry-run=server` on samples.
-
-**Non-goals:**
-- Do not change CRD schema unless samples expose a real bug.
-- Do not add Helm.
-
-**Acceptance criteria:**
-- All samples pass server-side dry-run (or apply) against the installed CRD.
-- README sample instructions match the validated manifests.
-
-**Expected files:**
-- `config/samples/*.yaml`
-- `Makefile` or `hack/` script (only if a verify target is added)
-- `README.md`
-
-**Verification command:**  
-`make install` (on kind) and sample apply/dry-run
-
 ### Task: Document future-only status fields
 
 **Why it matters:**  
@@ -122,29 +96,6 @@ Samples are hand-maintained; drift from generated CRD fields breaks copy-paste o
 
 **Verification command:**  
 `make manifests && make test`
-
-### Task: Add e2e for TimedOut session
-
-**Why it matters:**  
-Controller maps `activeDeadlineSeconds` to `PhaseTimedOut`, but e2e only covers Succeeded, Failed, and Denied paths.
-
-**Scope:**
-- Add kind e2e with a short `timeoutSeconds` and a sleep command that exceeds it.
-- Assert `status.phase=TimedOut` and terminal condition.
-
-**Non-goals:**
-- Do not change timeout logic unless the e2e exposes a bug.
-- Do not add cancellation or finalizer coverage in this task.
-
-**Acceptance criteria:**
-- `make test-e2e` includes a TimedOut spec that passes reliably on kind.
-
-**Expected files:**
-- `test/e2e/agentsession_test.go`
-- `test/e2e/helpers_test.go` (only if needed)
-
-**Verification command:**  
-`make test-e2e`
 
 ### Task: Document Kubernetes Events emitted by the controller
 
@@ -301,6 +252,8 @@ Documented in `internal/controller/pod.go` and API comments on `status.podName`:
 
 ### Recent fixes
 
+- **validate sample manifests** — `make verify-samples` (server dry-run on `config/samples/relay_*.yaml`); prompt CM sample in kustomization; README sample list
+- **e2e TimedOut** — short `timeoutSeconds` + long sleep; `PhaseTimedOut` and `JobTimedOut` condition; `jobTimedOut` recognizes `FailureTarget`/`DeadlineExceeded` on Kubernetes 1.31+
 - **status.podName selection semantics** — documented retry/recreate behavior; deterministic name tie-break; unit tests for stale Job UID and equal timestamps
 - **AgentSession finalizers** — `AgentSessionFinalizer` attached on reconcile; `handleDeletion` deletes owned Job (clears `blockOwnerDeletion` when needed), removes finalizer; uncached `APIReader` for delete detection; envtest delete-path specs
 - **GitHub Actions CI** — `.github/workflows/test.yaml` (`make test`), `e2e.yaml` (kind + `make test-e2e`), `lint.yaml` (`make fmt` + `make vet`)
@@ -356,7 +309,7 @@ Complete the vertical slice so the API and controller behavior match, and the pr
 - [ ] **Helm chart or improved kustomize overlays** — Easier install than raw kustomize for early adopters
 - [x] **Terminal phase stability** — Terminal phases skip Job creation; `syncStatusFromJob` does not regress phase; envtest
 - [ ] **Reference scoping documentation** — Same-namespace rules for ConfigMap/policy/credential refs
-- [ ] **E2e TimedOut path** — Prove `activeDeadlineSeconds` → `PhaseTimedOut` on kind
+- [x] **E2e TimedOut path** — `timeoutSeconds` + sleep; assert `PhaseTimedOut` / `JobTimedOut`
 
 ---
 
@@ -460,11 +413,11 @@ One-time scan performed while tightening Cursor rules. **No product code changed
 | Area | Finding | Tracking |
 |------|---------|----------|
 | Cancellation | Complete (API, controller, e2e, README, sample) | Done |
-| Finalizers | Not implemented; delete path no-ops today | Ready for Cursor Queue |
-| CI | No `.github/workflows/` | Ready for Cursor Queue |
+| Finalizers | Implemented — Job cleanup on delete | Done |
+| CI | `test.yaml`, `e2e.yaml`, `lint.yaml` | Done (image publish not in CI) |
 | Terminal + missing Job | Fixed — terminal guard in reconciler | Done |
-| E2e | 10 specs incl. cancellation; TimedOut pending | Discovered Follow-Up Tasks |
+| E2e | 11 specs incl. cancellation + TimedOut | Done |
 | Envtest cancel | Job delete, idempotent missing Job, `PhaseCancelled`/condition/event | Done in controller tests |
 | RBAC | Matches current controller; audit not documented | Discovered Follow-Up Tasks |
-| Samples / README | Cancel documented; future-only status fields still pending | Discovered Follow-Up Tasks |
+| Samples / README | `make verify-samples`; all `relay_*.yaml` dry-run clean | Done |
 | Enforcement / UI / extra CRDs | Not implemented (expected) | Roadmap Phases 2–7 |
