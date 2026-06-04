@@ -331,7 +331,10 @@ type AgentSessionStatus struct {
 	// +optional
 	JobName string `json:"jobName,omitempty"`
 
-	// PodName is the name of the pod running the agent container, when known.
+	// PodName is the name of the agent Pod for the current Job, when known.
+	// The controller lists Pods labeled for this session, keeps only those owned by the
+	// current Job (ownerReference UID), and records the newest by CreationTimestamp
+	// (name breaks ties). Pods from a replaced Job or without the session label are ignored.
 	// +optional
 	PodName string `json:"podName,omitempty"`
 

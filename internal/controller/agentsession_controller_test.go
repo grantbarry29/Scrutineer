@@ -148,35 +148,39 @@ var _ = Describe("AgentSession reconciler", func() {
 			}
 			podLabels := map[string]string{LabelSessionRef: session.Name}
 
-			podOlder := &corev1.Pod{
+			podFirst := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "relay-session-pod-name-older", Namespace: ns,
+					Name: "relay-session-pod-name-aaa", Namespace: ns,
 					Labels: podLabels, OwnerReferences: []metav1.OwnerReference{ownerRef},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: AgentContainerName, Image: "busybox:latest"}},
 				},
 			}
-			Expect(k8sClient.Create(testCtx, podOlder)).To(Succeed())
+			Expect(k8sClient.Create(testCtx, podFirst)).To(Succeed())
 			time.Sleep(20 * time.Millisecond)
 
-			podNewer := &corev1.Pod{
+			podChosen := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "relay-session-pod-name-newer", Namespace: ns,
+					// Name sorts after podFirst when apiserver CreationTimestamps tie.
+					Name: "relay-session-pod-name-zzz", Namespace: ns,
 					Labels: podLabels, OwnerReferences: []metav1.OwnerReference{ownerRef},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: AgentContainerName, Image: "busybox:latest"}},
 				},
 			}
-			Expect(k8sClient.Create(testCtx, podNewer)).To(Succeed())
+			Expect(k8sClient.Create(testCtx, podChosen)).To(Succeed())
 
-			_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
+				g.Expect(err).NotTo(HaveOccurred())
 
-			var got relayv1alpha1.AgentSession
-			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
-			Expect(got.Status.PodName).To(Equal(podNewer.Name))
+				var got relayv1alpha1.AgentSession
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				// Prefer podChosen: later CreationTimestamp when distinct, else lexicographic max.
+				g.Expect(got.Status.PodName).To(Equal(podChosen.Name))
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 		})
 	})
 

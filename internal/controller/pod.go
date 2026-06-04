@@ -12,6 +12,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -21,8 +22,19 @@ import (
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 )
 
-// findPodName returns the name of the newest Pod owned by the Job, if any.
-// Returns ("", nil) when no Pod exists yet so reconcile can continue.
+// Pod selection for status.podName (MVP and retry scenarios):
+//
+//   - List Pods in the session namespace with label relay.secureai.dev/session=<session.Name>
+//     (the same label applied to the Job pod template).
+//   - Consider only Pods whose ownerReference points at the current Job UID with Kind "Job".
+//     Pods from a prior Job (different UID after recreate) or unrelated Jobs are ignored even
+//     if they still carry the session label.
+//   - Pick the Pod with the latest CreationTimestamp among matches.
+//   - If timestamps tie, pick the lexicographically greatest Pod name (deterministic).
+//   - Return "" when no matching Pod exists yet (reconcile continues without error).
+//
+// MVP sets Job backoffLimit=0, so a single Pod per Job is typical. The same rules apply when
+// backoffLimit>0 (multiple Pods per Job UID) or when manual tests inject extra labeled Pods.
 func (r *AgentSessionReconciler) findPodName(ctx context.Context, session *relayv1alpha1.AgentSession, job *batchv1.Job) (string, error) {
 	if job == nil {
 		return "", nil
@@ -55,8 +67,8 @@ func podOwnedByJob(pod *corev1.Pod, jobUID types.UID) bool {
 	return false
 }
 
-// newestPodOwnedByJob returns the Pod with the latest CreationTimestamp among
-// those owned by the Job. Nil when none match (e.g. Pod not created yet).
+// newestPodOwnedByJob returns the Pod with the latest CreationTimestamp among those owned by
+// the Job. CreationTimestamp ties break on Pod name (lexicographic max). Nil when none match.
 func newestPodOwnedByJob(pods []corev1.Pod, jobUID types.UID) *corev1.Pod {
 	var newest *corev1.Pod
 	for i := range pods {
@@ -64,7 +76,16 @@ func newestPodOwnedByJob(pods []corev1.Pod, jobUID types.UID) *corev1.Pod {
 		if !podOwnedByJob(p, jobUID) {
 			continue
 		}
-		if newest == nil || p.CreationTimestamp.After(newest.CreationTimestamp.Time) {
+		if newest == nil {
+			newest = p
+			continue
+		}
+		if p.CreationTimestamp.After(newest.CreationTimestamp.Time) {
+			newest = p
+			continue
+		}
+		if p.CreationTimestamp.Equal(&newest.CreationTimestamp) &&
+			strings.Compare(p.Name, newest.Name) > 0 {
 			newest = p
 		}
 	}

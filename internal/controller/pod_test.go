@@ -89,4 +89,58 @@ var _ = Describe("pod selection for status.podName", func() {
 		}}
 		Expect(newestPodOwnedByJob(pods, jobUID)).To(BeNil())
 	})
+
+	It("ignores labeled Pods owned by a different Job UID even when newer", func() {
+		ts := metav1.NewTime(time.Now())
+		pods := []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pod-current-job",
+					OwnerReferences: []metav1.OwnerReference{{
+						Kind: "Job",
+						UID:  jobUID,
+					}},
+					CreationTimestamp: metav1.NewTime(ts.Add(-time.Minute)),
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "pod-stale-job",
+					Labels: map[string]string{LabelSessionRef: "session-a"},
+					OwnerReferences: []metav1.OwnerReference{{
+						Kind: "Job",
+						UID:  "stale-job-uid",
+					}},
+					CreationTimestamp: ts,
+				},
+			},
+		}
+		chosen := newestPodOwnedByJob(pods, jobUID)
+		Expect(chosen).NotTo(BeNil())
+		Expect(chosen.Name).To(Equal("pod-current-job"))
+	})
+
+	It("breaks CreationTimestamp ties by lexicographic Pod name", func() {
+		ts := metav1.NewTime(time.Now())
+		jobRef := metav1.OwnerReference{Kind: "Job", UID: jobUID}
+		pods := []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "pod-a",
+					OwnerReferences:   []metav1.OwnerReference{jobRef},
+					CreationTimestamp: ts,
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "pod-z",
+					OwnerReferences:   []metav1.OwnerReference{jobRef},
+					CreationTimestamp: ts,
+				},
+			},
+		}
+		chosen := newestPodOwnedByJob(pods, jobUID)
+		Expect(chosen).NotTo(BeNil())
+		Expect(chosen.Name).To(Equal("pod-z"))
+	})
 })

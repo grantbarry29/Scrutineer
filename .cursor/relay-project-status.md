@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-04 (AgentSession finalizers + GitHub Actions CI)
+> **Last updated:** 2026-06-04 (status.podName selection semantics)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -15,39 +15,13 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 
 _(Queue empty — promote a task from **Discovered Follow-Up Tasks** or Phase 1 roadmap when ready.)_
 
-**Recently completed** (do not re-implement unless regressions): **AgentSession finalizers** (`relay.secureai.dev/finalizer`, owned Job delete on session delete, `blockOwnerDeletion=false` on Jobs), **envtest delete-path coverage**, **GitHub Actions** (`test.yaml`, `e2e.yaml`, `lint.yaml`), **session cancellation** (full stack + README + cancel sample), **terminal phase stability**, envtest controller suite, `promptConfigMapRef`, status patch strategy, **`status.podName`**, cancellation e2e.
+**Recently completed** (do not re-implement unless regressions): **status.podName selection semantics** (documented + tie-break; unit tests for retries/stale Job UID), **AgentSession finalizers** (`relay.secureai.dev/finalizer`, owned Job delete on session delete, `blockOwnerDeletion=false` on Jobs), **envtest delete-path coverage**, **GitHub Actions** (`test.yaml`, `e2e.yaml`, `lint.yaml`), **session cancellation** (full stack + README + cancel sample), **terminal phase stability**, envtest controller suite, `promptConfigMapRef`, status patch strategy, **`status.podName`**, cancellation e2e.
 
 ---
 
 ## Discovered Follow-Up Tasks
 
 Scoped tasks found by repository audit or implementation work. **Not in the active queue** until promoted. Pick one at a time into **Ready for Cursor Queue** when appropriate.
-
-### Task: Define pod selection semantics for retried Jobs
-
-**Why it matters:**  
-MVP uses `backoffLimit: 0`, but `status.podName` selects the newest Job-owned Pod; if backoff/retries change, selection rules should be explicit and tested.
-
-**Scope:**
-- Document expected behavior when multiple Pods exist (retries, Job recreates).
-- Align `findPodName` / `newestPodOwnedByJob` with documented semantics.
-- Add unit tests for multi-Pod edge cases beyond the current newest-timestamp rule.
-
-**Non-goals:**
-- Do not change Job backoff defaults unless explicitly requested.
-- Do not implement Pod watch in this task.
-
-**Acceptance criteria:**
-- Comments or status-file note define pod selection for retry scenarios.
-- Tests cover at least two Pods with different creation timestamps and non-owned Pods ignored.
-
-**Expected files:**
-- `internal/controller/pod.go`
-- `internal/controller/pod_test.go`
-- `.cursor/relay-project-status.md` (behavior note, if needed)
-
-**Verification command:**  
-`make test`
 
 ### Task: Watch owned Pods for reconcile triggers
 
@@ -304,7 +278,7 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 |------------|---------------|---------------------------|
 | `task.promptConfigMapRef` | Yes | Done — loads key from same-namespace ConfigMap |
 | `status.usage` | Yes | No — reserved for future sidecar/audit |
-| `status.podName` | Yes | Done — newest Job-owned Pod by creation timestamp |
+| `status.podName` | Yes | Done — labeled session Pods, current Job UID, newest `CreationTimestamp` (name tie-break); see `internal/controller/pod.go` |
 | `status.violations` | Yes | No — no enforcement backend yet |
 | `status.artifacts` | Yes | No — `outputs.collectArtifacts` not implemented |
 | `policy.requireHumanApproval` | Yes | Surfaced only; does not block execution |
@@ -316,8 +290,18 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | PVC-backed workspace | Commented future | emptyDir only |
 | Webhook validation | Generated scaffold | Not wired |
 
+### status.podName selection semantics
+
+Documented in `internal/controller/pod.go` and API comments on `status.podName`:
+
+- List Pods in the session namespace with `relay.secureai.dev/session=<session.name>`.
+- Keep only Pods whose `ownerReference` matches the **current** Job UID (`Kind=Job`).
+- Select the newest by `CreationTimestamp`; ties break on lexicographic Pod name.
+- Empty when no match yet. Stale Pods from a replaced Job (new UID) are ignored.
+
 ### Recent fixes
 
+- **status.podName selection semantics** — documented retry/recreate behavior; deterministic name tie-break; unit tests for stale Job UID and equal timestamps
 - **AgentSession finalizers** — `AgentSessionFinalizer` attached on reconcile; `handleDeletion` deletes owned Job (clears `blockOwnerDeletion` when needed), removes finalizer; uncached `APIReader` for delete detection; envtest delete-path specs
 - **GitHub Actions CI** — `.github/workflows/test.yaml` (`make test`), `e2e.yaml` (kind + `make test-e2e`), `lint.yaml` (`make fmt` + `make vet`)
 - **Terminal phase stability** — terminal sessions do not get a replacement Job; `syncStatusFromJob` preserves terminal phase; envtest coverage
