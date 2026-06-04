@@ -29,9 +29,10 @@ import (
 
 func testReconciler() *AgentSessionReconciler {
 	return &AgentSessionReconciler{
-		Client:   k8sClient,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("relay-test"),
+		Client:    k8sClient,
+		APIReader: mgr.GetAPIReader(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("relay-test"),
 	}
 }
 
@@ -179,6 +180,58 @@ var _ = Describe("AgentSession reconciler", func() {
 		})
 	})
 
+	Context("terminal phase stability", func() {
+		It("does not recreate a Job when phase is terminal and the Job is missing", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "terminal-no-job")
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			jobKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
+
+			waitForJob(ns, session)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			got.Status.Phase = relayv1alpha1.PhaseSucceeded
+			now := metav1.Now()
+			got.Status.CompletionTime = &now
+			got.Status.Result = &relayv1alpha1.SessionResult{Outcome: "completed", Summary: "test terminal"}
+			Expect(k8sClient.Status().Update(testCtx, &got)).To(Succeed())
+
+			var job batchv1.Job
+			Expect(k8sClient.Get(testCtx, jobKey, &job)).To(Succeed())
+			Expect(k8sClient.Delete(testCtx, &job, client.PropagationPolicy(metav1.DeletePropagationBackground))).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
+				g.Expect(err).NotTo(HaveOccurred())
+				var check batchv1.Job
+				err = k8sClient.Get(testCtx, jobKey, &check)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				g.Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+		})
+
+		It("syncStatusFromJob does not overwrite a terminal phase", func() {
+			session := minimalAgentSession("default", "sync-terminal")
+			session.Status.Phase = relayv1alpha1.PhaseSucceeded
+			now := metav1.Now()
+			session.Status.CompletionTime = &now
+
+			job := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{Name: jobNameFor(session), Namespace: session.Namespace},
+				Status: batchv1.JobStatus{
+					Active: 1,
+				},
+			}
+
+			testReconciler().syncStatusFromJob(testCtx, session, job)
+			Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
+		})
+	})
+
 	Context("cancellation", func() {
 		It("deletes the owned Job when cancelRequested is set", func() {
 			ns := newTestNamespace()
@@ -231,16 +284,85 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
 
-			for i := 0; i < 2; i++ {
-				_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
-				Expect(err).NotTo(HaveOccurred())
-			}
+			Eventually(func(g Gomega) {
+				var got relayv1alpha1.AgentSession
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				expectCancelledG(g, &got)
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
 			expectJobAbsent(ns, session)
+		})
+	})
+
+	Context("finalizer and deletion", func() {
+		It("adds the Relay finalizer on reconcile", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "finalizer-attached")
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			waitForFinalizer(key)
 
 			var got relayv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
-			expectCancelled(&got)
+			Expect(got.Finalizers).To(ContainElement(AgentSessionFinalizer))
+		})
+
+		It("deletes the owned Job and removes the AgentSession when deleted", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "delete-with-job")
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			waitForJob(ns, session)
+			waitForFinalizer(key)
+
+			Expect(k8sClient.Delete(testCtx, session)).To(Succeed())
+
+			var terminating relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &terminating)).To(Succeed())
+			Expect(terminating.DeletionTimestamp).NotTo(BeZero())
+			Expect(terminating.Finalizers).To(ContainElement(AgentSessionFinalizer))
+
+			// Drive finalizer cleanup explicitly so the spec is not sensitive to manager queue timing.
+			Eventually(func(g Gomega) {
+				_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(jobAbsent(ns, session)).To(BeTrue())
+				var got relayv1alpha1.AgentSession
+				err = k8sClient.Get(testCtx, key, &got)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+		})
+
+		It("removes a denied session without a Job when deleted", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "delete-denied")
+			session.Spec.Task = relayv1alpha1.SessionTaskSpec{}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForFinalizer(key)
+			expectJobAbsent(ns, session)
+
+			Expect(k8sClient.Delete(testCtx, session)).To(Succeed())
+			waitForAgentSessionDeleted(key)
+		})
+
+		It("removes the finalizer when the Job is already absent", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "delete-no-job")
+			session.Spec.Task = relayv1alpha1.SessionTaskSpec{}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForFinalizer(key)
+			expectJobAbsent(ns, session)
+
+			Expect(k8sClient.Delete(testCtx, session)).To(Succeed())
+			waitForAgentSessionDeleted(key)
 		})
 	})
 

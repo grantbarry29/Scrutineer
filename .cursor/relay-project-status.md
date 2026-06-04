@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-04 (split status vs Cursor workflow docs)
+> **Last updated:** 2026-06-04 (AgentSession finalizers + GitHub Actions CI)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,248 +13,15 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-### Task: Session cancellation docs/status update
+_(Queue empty — promote a task from **Discovered Follow-Up Tasks** or Phase 1 roadmap when ready.)_
 
-**Goal:**  
-Document the cancellation behavior once implementation and tests exist.
-
-**Scope:**
-- Update user-facing docs or samples only if cancellation is implemented.
-- Update this status file to mark cancellation subtasks complete.
-
-**Non-goals:**
-- Do not implement cancellation behavior.
-- Do not add new API fields.
-- Do not add finalizers.
-
-**Acceptance criteria:**
-- Documentation accurately describes how to request cancellation.
-- `.cursor/relay-project-status.md` reflects completed cancellation subtasks.
-
-**Expected files:**
-- `README.md`
-- `.cursor/relay-project-status.md`
-- `config/samples/*.yaml` only if a cancellation sample is useful
-
-**Verification command:**  
-`make test`
-
-### Task: Add finalizer constant and attach finalizer
-
-**Goal:**  
-New AgentSessions receive a Relay finalizer so cleanup can run before deletion.
-
-**Scope:**
-- Add a finalizer constant.
-- Add the finalizer to non-deleting AgentSessions.
-- Update RBAC markers if needed for finalizers.
-- Add envtest coverage that a created AgentSession receives the finalizer.
-
-**Non-goals:**
-- Do not delete Jobs on finalization.
-- Do not remove the finalizer.
-- Do not implement cancellation.
-- Do not add new CRDs.
-
-**Acceptance criteria:**
-- Reconciled AgentSessions have the Relay finalizer.
-- Reconcile remains idempotent if the finalizer already exists.
-
-**Expected files:**
-- `internal/controller/constants.go`
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/agentsession_controller_test.go`
-- `config/rbac/role.yaml` (generated, only if RBAC markers change)
-
-**Verification command:**  
-`make manifests && make test`
-
-### Task: Cleanup owned Job on deletion
-
-**Goal:**  
-When an AgentSession is deleting, the controller deletes the owned Job before finalizer removal.
-
-**Scope:**
-- Detect `DeletionTimestamp`.
-- Find the deterministic owned Job.
-- Delete the Job if present.
-- Treat missing Job as cleanup complete.
-
-**Non-goals:**
-- Do not add the finalizer constant/attach behavior if not already present.
-- Do not remove the finalizer in this task unless cleanup is already complete by existing code.
-- Do not implement cancellation.
-- Do not change policy behavior.
-
-**Acceptance criteria:**
-- Deleting an AgentSession causes the owned Job to be deleted.
-- Missing Job does not block cleanup.
-- Envtest covers delete path behavior.
-
-**Expected files:**
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/agentsession_controller_test.go`
-
-**Verification command:**  
-`make test`
-
-### Task: Remove finalizer after cleanup
-
-**Goal:**  
-AgentSession deletion completes after owned Job cleanup succeeds.
-
-**Scope:**
-- Remove the Relay finalizer after cleanup is complete.
-- Preserve finalizer if cleanup returns an error.
-- Keep reconcile idempotent across repeated deletion reconciles.
-
-**Non-goals:**
-- Do not implement cancellation.
-- Do not add new cleanup targets beyond the owned Job.
-- Do not add new CRDs or policy behavior.
-
-**Acceptance criteria:**
-- AgentSession is removed after cleanup completes.
-- Cleanup failures do not remove the finalizer.
-- Envtest covers finalizer removal.
-
-**Expected files:**
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/agentsession_controller_test.go`
-
-**Verification command:**  
-`make test`
-
-### Task: Envtest delete-path coverage
-
-**Goal:**  
-Prove finalizer cleanup behavior in envtest.
-
-**Scope:**
-- Add focused tests for delete flow after finalizer implementation.
-- Cover Job exists, Job missing, and finalizer removal.
-
-**Non-goals:**
-- Do not implement finalizer behavior unless tests expose a bug.
-- Do not add e2e coverage.
-- Do not implement cancellation.
-
-**Acceptance criteria:**
-- `make test` proves AgentSession deletion cleans up owned Jobs before CR removal.
-
-**Expected files:**
-- `internal/controller/agentsession_controller_test.go`
-
-**Verification command:**  
-`make test`
-
-### Task: GitHub Actions unit/envtest workflow
-
-**Goal:**  
-Pull requests run the normal unit/envtest suite.
-
-**Scope:**
-- Add a GitHub Actions workflow for `make test`.
-- Configure Go version matching the repo.
-- Cache Go modules if simple.
-
-**Non-goals:**
-- Do not add kind e2e in this task.
-- Do not add lint-only workflow unless required by `make test`.
-- Do not add release, image publish, or deployment automation.
-
-**Acceptance criteria:**
-- PR workflow runs `make test`.
-- Local `make test` passes.
-
-**Expected files:**
-- `.github/workflows/test.yaml`
-
-**Verification command:**  
-`make test`
-
-### Task: GitHub Actions e2e kind workflow
-
-**Goal:**  
-CI can run the kind-backed e2e suite separately from unit tests.
-
-**Scope:**
-- Add a separate workflow or job that creates kind and runs `make test-e2e`.
-- Install required tools or use existing Makefile targets.
-- Keep it independent from release/publish automation.
-
-**Non-goals:**
-- Do not combine with image publishing.
-- Do not add deployment/release workflows.
-- Do not change e2e test behavior unless required for CI reliability.
-
-**Acceptance criteria:**
-- Workflow includes kind setup and runs `make test-e2e`.
-- Local `make test-e2e` still passes.
-
-**Expected files:**
-- `.github/workflows/e2e.yaml` or `.github/workflows/test.yaml`
-
-**Verification command:**  
-`make test-e2e`
-
-### Task: Optional GitHub Actions lint workflow
-
-**Goal:**  
-Add a separate lightweight CI check for formatting/vet/lint if needed.
-
-**Scope:**
-- Add or extend CI to run `make fmt`/`make vet` equivalent only if not already covered.
-- Keep lint checks separate from e2e.
-
-**Non-goals:**
-- Do not add kind e2e.
-- Do not add image publishing.
-- Do not introduce a new linter unless explicitly selected.
-
-**Acceptance criteria:**
-- CI has a clear lint/format check, or the status file records that `make test` already covers it.
-
-**Expected files:**
-- `.github/workflows/lint.yaml` or existing workflow file
-
-**Verification command:**  
-`make test`
-
-**Recently completed** (do not re-implement unless regressions): envtest controller suite, `promptConfigMapRef`, status patch strategy, **`status.podName`**, **`spec.cancelRequested`** + cancellation Job delete + **`PhaseCancelled`** status/events, **cancellation e2e** (2 specs).
+**Recently completed** (do not re-implement unless regressions): **AgentSession finalizers** (`relay.secureai.dev/finalizer`, owned Job delete on session delete, `blockOwnerDeletion=false` on Jobs), **envtest delete-path coverage**, **GitHub Actions** (`test.yaml`, `e2e.yaml`, `lint.yaml`), **session cancellation** (full stack + README + cancel sample), **terminal phase stability**, envtest controller suite, `promptConfigMapRef`, status patch strategy, **`status.podName`**, cancellation e2e.
 
 ---
 
 ## Discovered Follow-Up Tasks
 
 Scoped tasks found by repository audit or implementation work. **Not in the active queue** until promoted. Pick one at a time into **Ready for Cursor Queue** when appropriate.
-
-### Task: Terminal phase stability and Job immutability
-
-**Why it matters:**  
-`ensureJob` runs before terminal checks; a terminal session whose Job was removed (TTL, manual delete, or cancel without phase update) can get a new Job on a later reconcile.
-
-**Scope:**
-- Short-circuit `ensureJob` (and runtime creation) when `status.phase` is already terminal (`Succeeded`, `Failed`, `Denied`, `TimedOut`, `Cancelled`).
-- Ensure `syncStatusFromJob` does not regress terminal phases (e.g. `Succeeded` → `Starting`).
-- Add envtest for terminal session + missing Job → no new Job created.
-
-**Non-goals:**
-- Do not implement finalizers or AgentSession deletion cleanup.
-- Do not change cancellation API shape.
-- Do not add new CRDs.
-
-**Acceptance criteria:**
-- Terminal AgentSession with no owned Job does not create a replacement Job on reconcile.
-- Terminal phase is not overwritten by a non-terminal phase without an explicit spec/status design change.
-- Envtest proves both behaviors.
-
-**Expected files:**
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/agentsession_controller_test.go`
-
-**Verification command:**  
-`make test`
 
 ### Task: Define pod selection semantics for retried Jobs
 
@@ -543,14 +310,18 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | `policy.requireHumanApproval` | Yes | Surfaced only; does not block execution |
 | `spec.cancelRequested` | Yes | Done — deletes Job; sets `PhaseCancelled`, condition, event |
 | `PhaseCancelled` | Yes | Done — terminal via cancel reconcile path |
-| Terminal session + missing Job | — | **Gap:** reconcile may recreate Job via `ensureJob` (see Discovered Follow-Up Tasks) |
-| AgentSession delete | — | **Gap:** `DeletionTimestamp` returns early; no Job cleanup until finalizers |
+| Terminal session + missing Job | — | Done — terminal phases skip `ensureJob`; `syncStatusFromJob` does not regress phase |
+| AgentSession delete | — | Done — finalizer blocks delete; owned Job removed; finalizer cleared |
 | Orchestrators beyond `kubernetes-job` | Enum reserved | Rejected at validation |
 | PVC-backed workspace | Commented future | emptyDir only |
 | Webhook validation | Generated scaffold | Not wired |
 
 ### Recent fixes
 
+- **AgentSession finalizers** — `AgentSessionFinalizer` attached on reconcile; `handleDeletion` deletes owned Job (clears `blockOwnerDeletion` when needed), removes finalizer; uncached `APIReader` for delete detection; envtest delete-path specs
+- **GitHub Actions CI** — `.github/workflows/test.yaml` (`make test`), `e2e.yaml` (kind + `make test-e2e`), `lint.yaml` (`make fmt` + `make vet`)
+- **Terminal phase stability** — terminal sessions do not get a replacement Job; `syncStatusFromJob` preserves terminal phase; envtest coverage
+- **Cancellation docs** — README cancel section, MVP table, `relay_v1alpha1_agentsession_cancel.yaml` sample
 - **Cancellation e2e** — cancel running session → Job deleted + `PhaseCancelled`; cancel at create → no Job
 - **Session cancellation (status/events)** — `applyCancellationStatus`: `PhaseCancelled`, `Completed`/`SessionCancelled`, result outcome `cancelled`, `SessionCancelled` event; envtest coverage
 - **Session cancellation (controller)** — `spec.cancelRequested` deletes owned Job via `stopRuntimeJob`; envtest for delete + idempotent missing Job
@@ -594,12 +365,12 @@ Complete the vertical slice so the API and controller behavior match, and the pr
 - [x] **PromptConfigMapRef** — Load prompt from ConfigMap in reconciler; validate ref exists
 - [x] **Status patch strategy** — Live read + condition union + `Status().Update` (CRDs do not support strategic merge patch on status)
 - [x] **Populate `status.podName` reliably** — Newest Job-owned Pod by creation timestamp; envtest + e2e coverage
-- [~] **Session cancellation** — API + Job delete + status/events + e2e (done); docs pending
-- [ ] **Finalizers** — Graceful cleanup of Jobs on AgentSession delete
-- [ ] **CI pipeline** — GitHub Actions: `make test`, `make test-e2e` (kind), lint, build image
+- [x] **Session cancellation** — API, Job delete, `PhaseCancelled`, events, e2e, README + sample
+- [x] **Finalizers** — `relay.secureai.dev/finalizer`; owned Job cleanup on delete; envtest coverage
+- [~] **CI pipeline** — GitHub Actions: `make test`, `make test-e2e` (kind), lint (`test`/`e2e`/`lint` workflows); image build/publish not yet in CI
 - [ ] **Admission webhook** (optional) — Move duplicate validation to validating webhook for earlier rejection
 - [ ] **Helm chart or improved kustomize overlays** — Easier install than raw kustomize for early adopters
-- [ ] **Terminal phase stability** — Do not recreate Jobs or regress phase for terminal sessions (see Discovered Follow-Up Tasks)
+- [x] **Terminal phase stability** — Terminal phases skip Job creation; `syncStatusFromJob` does not regress phase; envtest
 - [ ] **Reference scoping documentation** — Same-namespace rules for ConfigMap/policy/credential refs
 - [ ] **E2e TimedOut path** — Prove `activeDeadlineSeconds` → `PhaseTimedOut` on kind
 
@@ -704,12 +475,12 @@ One-time scan performed while tightening Cursor rules. **No product code changed
 
 | Area | Finding | Tracking |
 |------|---------|----------|
-| Cancellation | API + Job delete + status/events + e2e done; docs pending | Ready for Cursor Queue |
+| Cancellation | Complete (API, controller, e2e, README, sample) | Done |
 | Finalizers | Not implemented; delete path no-ops today | Ready for Cursor Queue |
 | CI | No `.github/workflows/` | Ready for Cursor Queue |
-| Terminal + missing Job | `ensureJob` may recreate Job for terminal sessions | Discovered Follow-Up Tasks |
+| Terminal + missing Job | Fixed — terminal guard in reconciler | Done |
 | E2e | 10 specs incl. cancellation; TimedOut pending | Discovered Follow-Up Tasks |
 | Envtest cancel | Job delete, idempotent missing Job, `PhaseCancelled`/condition/event | Done in controller tests |
 | RBAC | Matches current controller; audit not documented | Discovered Follow-Up Tasks |
-| Samples / README | Samples valid; README lacks cancel + future-only status clarity | Discovered Follow-Up Tasks |
+| Samples / README | Cancel documented; future-only status fields still pending | Discovered Follow-Up Tasks |
 | Enforcement / UI / extra CRDs | Not implemented (expected) | Roadmap Phases 2–7 |

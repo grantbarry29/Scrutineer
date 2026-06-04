@@ -50,11 +50,13 @@ var _ = Describe("status patch strategy", func() {
 		key := client.ObjectKeyFromObject(session)
 
 		var live relayv1alpha1.AgentSession
-		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
-		live.Status.Phase = relayv1alpha1.PhaseRunning
-		setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
-		setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
-		Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
+			live.Status.Phase = relayv1alpha1.PhaseRunning
+			setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
+			setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
+			g.Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
 
 		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
@@ -95,10 +97,12 @@ var _ = Describe("status patch strategy", func() {
 		key := client.ObjectKeyFromObject(session)
 
 		var live relayv1alpha1.AgentSession
-		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
-		setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
-		setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
-		Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
+			setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
+			setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
+			g.Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
 
 		stale := live.DeepCopy()

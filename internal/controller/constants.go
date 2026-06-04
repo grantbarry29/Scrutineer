@@ -23,6 +23,9 @@ const (
 	JobNamePrefix = "relay-session-"
 
 	DefaultWorkspaceMountPath = "/workspace"
+
+	// AgentSessionFinalizer blocks AgentSession deletion until the owned Job is removed.
+	AgentSessionFinalizer = "relay.secureai.dev/finalizer"
 )
 
 // Condition types used on AgentSession.status.conditions.

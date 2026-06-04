@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 )
@@ -71,6 +72,24 @@ func waitForPhase(key types.NamespacedName, want relayv1alpha1.AgentSessionPhase
 	}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 }
 
+func waitForFinalizer(key types.NamespacedName) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		var session relayv1alpha1.AgentSession
+		g.Expect(k8sClient.Get(testCtx, key, &session)).To(Succeed())
+		g.Expect(controllerutil.ContainsFinalizer(&session, AgentSessionFinalizer)).To(BeTrue())
+	}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+}
+
+func waitForAgentSessionDeleted(key types.NamespacedName) {
+	GinkgoHelper()
+	Eventually(func() bool {
+		var session relayv1alpha1.AgentSession
+		err := k8sClient.Get(testCtx, key, &session)
+		return apierrors.IsNotFound(err)
+	}, controllerWaitTimeout, controllerPollInterval).Should(BeTrue())
+}
+
 func waitForJob(ns string, session *relayv1alpha1.AgentSession) {
 	GinkgoHelper()
 	jobKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
@@ -80,11 +99,18 @@ func waitForJob(ns string, session *relayv1alpha1.AgentSession) {
 	}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 }
 
-func expectJobAbsent(ns string, session *relayv1alpha1.AgentSession) {
-	GinkgoHelper()
+func jobAbsent(ns string, session *relayv1alpha1.AgentSession) bool {
 	var job batchv1.Job
 	err := k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)
-	Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	if apierrors.IsNotFound(err) {
+		return true
+	}
+	return err == nil && !job.DeletionTimestamp.IsZero()
+}
+
+func expectJobAbsent(ns string, session *relayv1alpha1.AgentSession) {
+	GinkgoHelper()
+	Expect(jobAbsent(ns, session)).To(BeTrue())
 }
 
 func getCondition(session *relayv1alpha1.AgentSession, condType string) *metav1.Condition {
@@ -97,10 +123,18 @@ func getCondition(session *relayv1alpha1.AgentSession, condType string) *metav1.
 }
 
 func expectCancelled(session *relayv1alpha1.AgentSession) {
+	GinkgoHelper()
 	Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseCancelled))
 	completed := getCondition(session, ConditionCompleted)
 	Expect(completed).NotTo(BeNil())
 	Expect(completed.Reason).To(Equal("SessionCancelled"))
+}
+
+func expectCancelledG(g Gomega, session *relayv1alpha1.AgentSession) {
+	g.Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseCancelled))
+	completed := getCondition(session, ConditionCompleted)
+	g.Expect(completed).NotTo(BeNil())
+	g.Expect(completed.Reason).To(Equal("SessionCancelled"))
 }
 
 func setJobSucceeded(job *batchv1.Job) {

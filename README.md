@@ -57,11 +57,11 @@ The MVP in this repo is the first vertical slice of that vision: the
    - resource requests/limits from `spec.runtime.resources`
    - optional emptyDir workspace mount
 6. Tracks lifecycle in `status`:
-   `Pending` → `Starting` → `Running` → `Succeeded` / `Failed` / `TimedOut` / `Denied`
-7. Emits Kubernetes Events for every interesting transition.
-8. Ships a sample successful AgentSession (busybox exits 0) and a sample failing
-   AgentSession (busybox exits 1).
-9. Is structured for extensibility — the controller will be the integration
+   `Pending` → `Starting` → `Running` → `Succeeded` / `Failed` / `TimedOut` / `Denied` / `Cancelled`
+7. Supports **session cancellation** via `spec.cancelRequested` (stops the owned Job, sets `Phase=Cancelled`).
+8. Emits Kubernetes Events for every interesting transition.
+9. Ships sample AgentSessions (success, failure, cancellation).
+10. Is structured for extensibility — the controller will be the integration
    point for `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`,
    `ToolGateway`, external orchestrators, and runtime enforcement backends.
 
@@ -117,6 +117,32 @@ a generic workflow task. The spec captures four things:
 | `policy`   | Inline governance rules (domains, tools, approvals, quotas)           |
 | `workspace`| Per-session workspace volume (ephemeral for MVP)                      |
 | `outputs`  | Whether to retain logs/artifacts                                      |
+| `cancelRequested` | When `true`, stop the owned Job and reach terminal `Cancelled` |
+
+### Cancelling a running session
+
+Set `spec.cancelRequested: true` on an existing `AgentSession` (or create one with it already set). The controller:
+
+1. Deletes the owned Job `relay-session-<session-name>` (and child Pods via `Background` propagation).
+2. Sets `status.phase` to `Cancelled`, `status.result.outcome` to `cancelled`, and a `Completed` condition with reason `SessionCancelled`.
+3. Emits a `SessionCancelled` Kubernetes Event.
+4. Does **not** create a new Job while cancellation remains requested.
+
+**Cancel a session that is already running:**
+
+```bash
+kubectl patch agentsession my-session --type=merge -p '{"spec":{"cancelRequested":true}}'
+kubectl get agentsession my-session -w
+kubectl describe agentsession my-session   # Event: SessionCancelled
+```
+
+**Create an already-cancelled session** (no Job is started):
+
+```bash
+kubectl apply -f config/samples/relay_v1alpha1_agentsession_cancel.yaml
+```
+
+Cancellation stops the **Kubernetes runtime** (Job/Pod). It does not send a graceful shutdown signal to agent logic inside the container; stronger teardown belongs in future runtime profiles.
 
 ### Inline sample
 
@@ -406,6 +432,32 @@ kubectl get agentsessions
 
 It should transition to `Failed` with a `JobFailed` event and
 `Completed=False` condition.
+
+### 7. Try the cancellation sample
+
+```
+kubectl apply -f config/samples/relay_v1alpha1_agentsession_cancel.yaml
+kubectl get agentsession cancel-at-create-sample -w
+```
+
+Expect `Phase=Cancelled` and no `relay-session-cancel-at-create-sample` Job.
+
+To cancel a long-running session, apply the success sample, wait for `Running`, then patch `cancelRequested` as described in [Cancelling a running session](#cancelling-a-running-session).
+
+---
+
+## Current MVP behavior (quick reference)
+
+| Capability | Shipped? | Notes |
+|------------|----------|-------|
+| Reconcile to Kubernetes Job | Yes | `runtime.orchestrator: kubernetes-job` only |
+| Task prompt / ConfigMap prompt | Yes | `spec.task` or `promptConfigMapRef` (same namespace) |
+| Inline policy → env vars | Yes | Not enforced at network/tool layer yet |
+| Session cancellation | Yes | `spec.cancelRequested` → Job delete + `Phase=Cancelled` |
+| Human approval gate | No | Declared only; does not block runs |
+| `status.usage` / `violations` / `artifacts` | No | Reserved for future observability backends |
+
+Project tracking: [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).
 
 ### Deploying the controller into the cluster
 

@@ -1,0 +1,37 @@
+# Cancel-at-create: the controller never starts a Job and the session reaches
+# Phase=Cancelled immediately. Use kubectl patch cancelRequested on a running
+# session to stop an active agent (see README "Cancelling a running session").
+apiVersion: relay.secureai.dev/v1alpha1
+kind: AgentSession
+metadata:
+  name: cancel-at-create-sample
+  namespace: default
+spec:
+  cancelRequested: true
+  task:
+    description: "Sample session created already cancelled"
+    prompt: "This Job should not run."
+  model:
+    provider: openai
+    name: gpt-4.1
+  runtime:
+    orchestrator: kubernetes-job
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - "sleep 300"
+    timeoutSeconds: 600
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+  policy:
+    allowedDomains: []
+    deniedDomains: []
+  workspace:
+    ephemeral: true
+    mountPath: /workspace
