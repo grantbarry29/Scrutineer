@@ -56,7 +56,7 @@ const requeueAfter = 15 * time.Second
 //  1. Fetch the AgentSession (return cleanly on NotFound).
 //  2. Initialize status.phase=Pending on first observation.
 //  3. Validate the spec. On failure -> Denied, emit ValidationFailed, return.
-//  4. If spec.cancelRequested, delete the owned Job (if any) and return without creating a new Job.
+//  4. If spec.cancelRequested, delete the owned Job (if any), set Phase=Cancelled, and return.
 //  5. Ensure the underlying Job exists. If missing, create it -> Starting + JobCreated.
 //  6. Inspect the Job + owned Pod and map to Running/Succeeded/Failed/TimedOut.
 //  7. Persist status via the status subresource.
@@ -120,6 +120,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err := r.stopRuntimeJob(ctx, &session); err != nil {
 			return ctrl.Result{}, fmt.Errorf("stop runtime Job: %w", err)
 		}
+		r.applyCancellationStatus(&session)
 		return ctrl.Result{}, r.patchStatus(ctx, original, &session)
 	}
 
@@ -148,8 +149,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 // stopRuntimeJob deletes the Job owned by the AgentSession, if it exists.
-// A missing Job is treated as already stopped. Phase/status updates for cancellation
-// are handled in a separate reconciliation step.
+// A missing Job is treated as already stopped.
 func (r *AgentSessionReconciler) stopRuntimeJob(ctx context.Context, session *relayv1alpha1.AgentSession) error {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
 
@@ -169,6 +169,23 @@ func (r *AgentSessionReconciler) stopRuntimeJob(ctx context.Context, session *re
 		return fmt.Errorf("delete Job %s: %w", jobKey, err)
 	}
 	return nil
+}
+
+// applyCancellationStatus marks the session terminal after cancellation is processed.
+func (r *AgentSessionReconciler) applyCancellationStatus(session *relayv1alpha1.AgentSession) {
+	const msg = "Session cancelled by user request"
+	if session.Status.Phase != relayv1alpha1.PhaseCancelled {
+		r.recordNormal(session, EventReasonSessionCancelled, msg)
+	}
+	session.Status.Phase = relayv1alpha1.PhaseCancelled
+	setCompletionTime(session)
+	setCondition(session, ConditionCompleted, metav1.ConditionTrue, "SessionCancelled", msg)
+	if session.Status.Result == nil {
+		session.Status.Result = &relayv1alpha1.SessionResult{
+			Outcome: "cancelled",
+			Summary: msg,
+		}
+	}
 }
 
 // ensureJob fetches the Job owned by the AgentSession, creating it if it does not yet exist.

@@ -40,6 +40,7 @@ const (
 	EventReasonJobSucceeded     = "JobSucceeded"
 	EventReasonJobFailed        = "JobFailed"
 	EventReasonSessionDenied    = "SessionDenied"
+	EventReasonSessionCancelled = "SessionCancelled"
 )
 
 // Orchestrator values supported by Relay.

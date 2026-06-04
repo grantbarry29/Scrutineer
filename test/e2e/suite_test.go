@@ -14,6 +14,12 @@ You may obtain a copy of the License at
 // ~/.kube/config currently points at) and exercises end-to-end behavior of the
 // AgentSession CRD, its admission validation, and the controller's reconciliation.
 //
+// Test layout (same package, build tag `e2e`):
+//   - suite_test.go     — cluster preflight, in-process manager
+//   - fixtures_test.go  — namespaces, session builders, options
+//   - assertions_test.go — phase/job/condition wait helpers
+//   - agentsession_test.go — Ginkgo specs only
+//
 // Run with:   make test-e2e
 // Skipped by: `go test ./...` (build tag `e2e`).
 //

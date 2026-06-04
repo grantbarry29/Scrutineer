@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > Living tracker for operational state and roadmap progress.
-> **Last updated:** 2026-05-17 (Cursor workflow + repository audit)
+> **Last updated:** 2026-05-17 (cancellation e2e)
 >
 > Update this file when completing roadmap items, changing priorities, or shipping meaningful milestones.
 
@@ -131,84 +131,6 @@ Before implementing a selected task, Cursor must first restate:
 - verification command
 
 If the task appears to require more than **4 non-generated files**, Cursor must wait for confirmation before editing.
-
-### Task: Session cancellation status/events
-
-**Goal:**  
-Cancellation is visible through `status.phase`, conditions, and Kubernetes Events.
-
-**Scope:**
-- Set `status.phase=Cancelled` after cancellation is observed/processed.
-- Add or update a `Completed` condition for cancellation.
-- Emit a cancellation event.
-- Ensure `Cancelled` is terminal.
-
-**Non-goals:**
-- Do not choose a new cancellation API shape.
-- Do not add finalizers.
-- Do not add e2e coverage in this task.
-- Do not add approval workflows or new CRDs.
-
-**Acceptance criteria:**
-- Cancelled AgentSession reaches terminal `Cancelled` phase.
-- Status condition and event clearly explain cancellation.
-- Envtest verifies phase, condition, and event-related behavior where practical.
-
-**Expected files:**
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/constants.go`
-- `internal/controller/agentsession_controller_test.go`
-
-**Verification command:**  
-`make test`
-
-### Task: Session cancellation envtest coverage
-
-**Goal:**  
-Extend envtest coverage for cancellation after `PhaseCancelled` status/events land.
-
-**Scope:**
-- Add or extend envtest specs for terminal `Cancelled` phase and conditions once implemented.
-- Job deletion and idempotent missing-Job behavior are already covered; do not duplicate unless gaps are found.
-
-**Non-goals:**
-- Do not change API shape unless tests expose a bug.
-- Do not re-implement Job deletion tests already present.
-- Do not add e2e coverage.
-
-**Acceptance criteria:**
-- `make test` covers terminal `Cancelled` status and cancellation conditions/events where practical.
-
-**Expected files:**
-- `internal/controller/agentsession_controller_test.go`
-
-**Verification command:**  
-`make test`
-
-### Task: Session cancellation e2e coverage
-
-**Goal:**  
-Prove cancellation works against a real kind cluster.
-
-**Scope:**
-- Add a kind e2e test that creates an AgentSession, requests cancellation, and observes terminal cancellation.
-- Verify the owned Job is deleted or no longer present.
-
-**Non-goals:**
-- Do not change API shape unless the e2e exposes a bug.
-- Do not change reconciler behavior unless the e2e exposes a bug.
-- Do not add finalizers or approval workflows.
-
-**Acceptance criteria:**
-- `make test-e2e` proves cancellation end-to-end.
-- The e2e test verifies `PhaseCancelled` and owned Job cleanup.
-
-**Expected files:**
-- `test/e2e/agentsession_test.go`
-- `test/e2e/helpers_test.go` only if a helper is needed
-
-**Verification command:**  
-`make test-e2e`
 
 ### Task: Session cancellation docs/status update
 
@@ -418,7 +340,7 @@ Add a separate lightweight CI check for formatting/vet/lint if needed.
 **Verification command:**  
 `make test`
 
-**Recently completed** (do not re-implement unless regressions): envtest controller suite, `promptConfigMapRef`, status patch strategy (live read + condition union + `Status().Update`), **`status.podName`** (newest Job-owned Pod by creation timestamp; envtest + e2e), **`spec.cancelRequested`** API, cancellation Job delete (partial — status/events pending).
+**Recently completed** (do not re-implement unless regressions): envtest controller suite, `promptConfigMapRef`, status patch strategy, **`status.podName`**, **`spec.cancelRequested`** + cancellation Job delete + **`PhaseCancelled`** status/events, **cancellation e2e** (2 specs).
 
 ---
 
@@ -829,7 +751,7 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | **Policy propagation** | Done | Inline policy → env vars in agent container |
 | **Policy enforcement** | Not started | Env vars are hooks only; no network/tool/file gates |
 | **Dev environment** | Done | Devcontainer + kind (`relay-dev`) + bootstrap scripts |
-| **E2E tests** | Done | `make test-e2e` — 8 specs against live kind cluster |
+| **E2E tests** | Done | `make test-e2e` — 10 specs against live kind cluster |
 | **Unit / envtest** | Done | Controller suite with validation + reconciler specs (~65% coverage) |
 | **CI** | Not started | No `.github/workflows` |
 | **In-cluster deploy** | Ready | `make dev-deploy` builds image + deploys manager |
@@ -839,13 +761,14 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 
 ### What works today
 
-- Create `AgentSession` → controller validates → creates owned Job → tracks `Pending` → `Starting` → `Running` → `Succeeded` / `Failed` / `TimedOut` / `Denied`
+- Create `AgentSession` → controller validates → creates owned Job → tracks `Pending` → `Starting` → `Running` → `Succeeded` / `Failed` / `TimedOut` / `Denied` / `Cancelled`
 - CRD admission rejects invalid `temperature` (string + Pattern)
 - Controller validation denies bad specs (e.g. empty task) without creating a Job
 - `task.promptConfigMapRef` loads prompt from ConfigMap into `AGENT_TASK_PROMPT`
 - Policy fields injected as `AGENT_POLICY_*` / `RELAY_*` env vars
 - Workspace emptyDir mount, resource limits, timeout, basic container hardening
-- Kubernetes Events on validation, Job create, running, success, failure
+- Kubernetes Events on validation, Job create, running, success, failure, cancellation
+- `spec.cancelRequested: true` deletes the owned Job and reaches terminal `PhaseCancelled` with `Completed` condition
 - `status.podName` set to the newest Pod owned by the session's Job (when a Pod exists)
 - Sample manifests (success + failing) and README documentation
 
@@ -859,8 +782,8 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | `status.violations` | Yes | No — no enforcement backend yet |
 | `status.artifacts` | Yes | No — `outputs.collectArtifacts` not implemented |
 | `policy.requireHumanApproval` | Yes | Surfaced only; does not block execution |
-| `spec.cancelRequested` | Yes | Deletes owned Job; `PhaseCancelled`/events pending |
-| `PhaseCancelled` | Yes | Terminal phase exists; set only after controller cancel flow |
+| `spec.cancelRequested` | Yes | Done — deletes Job; sets `PhaseCancelled`, condition, event |
+| `PhaseCancelled` | Yes | Done — terminal via cancel reconcile path |
 | Terminal session + missing Job | — | **Gap:** reconcile may recreate Job via `ensureJob` (see Discovered Follow-Up Tasks) |
 | AgentSession delete | — | **Gap:** `DeletionTimestamp` returns early; no Job cleanup until finalizers |
 | Orchestrators beyond `kubernetes-job` | Enum reserved | Rejected at validation |
@@ -869,7 +792,9 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 
 ### Recent fixes
 
-- **Session cancellation (controller)** — `spec.cancelRequested` deletes owned Job via `stopRuntimeJob`; does not recreate Job; envtest for delete + idempotent missing Job
+- **Cancellation e2e** — cancel running session → Job deleted + `PhaseCancelled`; cancel at create → no Job
+- **Session cancellation (status/events)** — `applyCancellationStatus`: `PhaseCancelled`, `Completed`/`SessionCancelled`, result outcome `cancelled`, `SessionCancelled` event; envtest coverage
+- **Session cancellation (controller)** — `spec.cancelRequested` deletes owned Job via `stopRuntimeJob`; envtest for delete + idempotent missing Job
 - **`spec.cancelRequested`** — declarative cancellation request on `AgentSessionSpec`; CRD default `false`
 - **`status.podName`** — select newest Pod owned by the Job; list errors fail reconcile; envtest + e2e coverage on success/failure paths
 - **Envtest controller tests** — validation, denial, Job create, succeeded transition, promptConfigMapRef
@@ -910,7 +835,7 @@ Complete the vertical slice so the API and controller behavior match, and the pr
 - [x] **PromptConfigMapRef** — Load prompt from ConfigMap in reconciler; validate ref exists
 - [x] **Status patch strategy** — Live read + condition union + `Status().Update` (CRDs do not support strategic merge patch on status)
 - [x] **Populate `status.podName` reliably** — Newest Job-owned Pod by creation timestamp; envtest + e2e coverage
-- [~] **Session cancellation** — API + Job delete (done); `PhaseCancelled`, events, e2e, docs pending
+- [~] **Session cancellation** — API + Job delete + status/events + e2e (done); docs pending
 - [ ] **Finalizers** — Graceful cleanup of Jobs on AgentSession delete
 - [ ] **CI pipeline** — GitHub Actions: `make test`, `make test-e2e` (kind), lint, build image
 - [ ] **Admission webhook** (optional) — Move duplicate validation to validating webhook for earlier rejection
@@ -1020,12 +945,12 @@ One-time scan performed while tightening Cursor rules. **No product code changed
 
 | Area | Finding | Tracking |
 |------|---------|----------|
-| Cancellation | API + Job delete done; `PhaseCancelled`/events/e2e/docs pending | Ready for Cursor Queue |
+| Cancellation | API + Job delete + status/events + e2e done; docs pending | Ready for Cursor Queue |
 | Finalizers | Not implemented; delete path no-ops today | Ready for Cursor Queue |
 | CI | No `.github/workflows/` | Ready for Cursor Queue |
 | Terminal + missing Job | `ensureJob` may recreate Job for terminal sessions | Discovered Follow-Up Tasks |
-| E2e | No TimedOut or cancellation specs | Queue + Discovered Follow-Up Tasks |
-| Envtest cancel | Job delete + idempotent tests exist | Envtest task narrowed to `Cancelled` status |
+| E2e | 10 specs incl. cancellation; TimedOut pending | Discovered Follow-Up Tasks |
+| Envtest cancel | Job delete, idempotent missing Job, `PhaseCancelled`/condition/event | Done in controller tests |
 | RBAC | Matches current controller; audit not documented | Discovered Follow-Up Tasks |
 | Samples / README | Samples valid; README lacks cancel + future-only status clarity | Discovered Follow-Up Tasks |
 | Enforcement / UI / extra CRDs | Not implemented (expected) | Roadmap Phases 2–7 |
