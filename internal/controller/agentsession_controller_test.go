@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package controller
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -79,6 +80,164 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(validated).NotTo(BeNil())
 			Expect(validated.Reason).To(Equal("InvalidTask"))
 			Expect(validated.Message).To(ContainSubstring("ConfigMap"))
+		})
+
+		It("denies when spec.model.provider is empty", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "denied-empty-provider")
+			session.Spec.Model.Provider = "   "
+
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			waitForPhase(client.ObjectKeyFromObject(session), relayv1alpha1.PhaseDenied)
+			expectJobAbsent(ns, session)
+		})
+
+		It("denies when policyRefs points to a missing AgentPolicy", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "denied-missing-policy")
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+				Kind: "AgentPolicy",
+				Name: "does-not-exist",
+			}}
+
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			waitForPhase(key, relayv1alpha1.PhaseDenied)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			validated := getCondition(&got, ConditionValidated)
+			Expect(validated).NotTo(BeNil())
+			Expect(validated.Reason).To(Equal("InvalidPolicy"))
+			expectJobAbsent(ns, session)
+		})
+
+		It("denies when spec.workspace.size is invalid", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "denied-bad-workspace-size")
+			session.Spec.Workspace = relayv1alpha1.WorkspaceSpec{
+				Ephemeral: true,
+				Size:      "not-a-quantity",
+			}
+
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			waitForPhase(client.ObjectKeyFromObject(session), relayv1alpha1.PhaseDenied)
+			expectJobAbsent(ns, session)
+		})
+	})
+
+	Context("policy resolution", func() {
+		It("merges AgentPolicy refs with inline overrides into effective policy and Job env", func() {
+			ns := newTestNamespace()
+			ap := &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "baseline", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					Mode: relayv1alpha1.PolicyModeDryRun,
+					PolicyRules: relayv1alpha1.PolicyRules{
+						DeniedDomains: []string{"dropbox.com"},
+						DeniedTools:   []string{"kubectl-prod"},
+						AllowedTools:  []string{"shell"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
+
+			session := minimalAgentSession(ns, "policy-ref-merge")
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+				Kind: "AgentPolicy",
+				Name: "baseline",
+			}}
+			session.Spec.Policy = relayv1alpha1.InlinePolicySpec{
+				PolicyRules: relayv1alpha1.PolicyRules{
+					AllowedDomains: []string{"github.com"},
+					DeniedTools:    []string{"deploy"},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			waitForJob(ns, session)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			Expect(got.Status.EffectivePolicy).NotTo(BeNil())
+			Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeDryRun))
+			Expect(got.Status.EffectivePolicy.AllowedDomains).To(ContainElements("github.com"))
+			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElements("dropbox.com"))
+			Expect(got.Status.EffectivePolicy.DeniedTools).To(ContainElements("kubectl-prod", "deploy"))
+			Expect(got.Status.MatchedPolicies).To(HaveLen(1))
+			Expect(got.Status.MatchedPolicies[0].Name).To(Equal("baseline"))
+
+			policyResolved := getCondition(&got, ConditionPolicyResolved)
+			Expect(policyResolved).NotTo(BeNil())
+			Expect(policyResolved.Status).To(Equal(metav1.ConditionTrue))
+
+			var job batchv1.Job
+			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
+			Expect(env[EnvPolicyMode]).To(Equal("dry-run"))
+			Expect(env[EnvPolicyDeniedDomains]).To(Equal("dropbox.com"))
+			Expect(env[EnvPolicyAllowedDomains]).To(Equal("github.com"))
+			Expect(env[EnvPolicyDeniedTools]).To(ContainSubstring("kubectl-prod"))
+			Expect(env[EnvPolicyDeniedTools]).To(ContainSubstring("deploy"))
+		})
+	})
+
+	Context("Job ownership conflict", func() {
+		It("denies when a foreign Job already occupies the deterministic name", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "foreign-job-conflict")
+			foreign := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: ns,
+					Name:      jobNameFor(session),
+				},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							RestartPolicy: corev1.RestartPolicyNever,
+							Containers: []corev1.Container{{
+								Name:    "other",
+								Image:   "busybox:latest",
+								Command: []string{"true"},
+							}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, foreign)).To(Succeed())
+
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			waitForPhase(key, relayv1alpha1.PhaseDenied)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			validated := getCondition(&got, ConditionValidated)
+			Expect(validated).NotTo(BeNil())
+			Expect(validated.Reason).To(Equal("JobConflict"))
+		})
+	})
+
+	Context("syncStatusFromJob", func() {
+		It("maps FailureTarget DeadlineExceeded to TimedOut before Failed count increments", func() {
+			session := minimalAgentSession("default", "sync-timedout")
+			session.Status.Phase = relayv1alpha1.PhaseStarting
+			job := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{Name: jobNameFor(session)},
+				Status: batchv1.JobStatus{
+					Conditions: []batchv1.JobCondition{{
+						Type:   batchv1.JobFailureTarget,
+						Status: corev1.ConditionTrue,
+						Reason: "DeadlineExceeded",
+					}},
+				},
+			}
+			testReconciler().syncStatusFromJob(context.Background(), session, job)
+			Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseTimedOut))
+			completed := getCondition(session, ConditionCompleted)
+			Expect(completed).NotTo(BeNil())
+			Expect(completed.Reason).To(Equal("JobTimedOut"))
 		})
 	})
 

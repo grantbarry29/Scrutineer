@@ -1,2 +1,3 @@
 resources:
 - bases/relay.secureai.dev_agentsessions.yaml
+- bases/relay.secureai.dev_agentpolicies.yaml

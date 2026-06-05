@@ -84,6 +84,7 @@ var _ = Describe("status patch strategy", func() {
 		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
 		Expect(conditionTypes(after.Status.Conditions)).To(ConsistOf(
 			ConditionValidated,
+			ConditionPolicyResolved,
 			ConditionRuntimeCreated,
 			ConditionCompleted,
 		))

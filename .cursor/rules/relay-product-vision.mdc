@@ -59,8 +59,8 @@ This file describes **product direction**, not permission to implement the full 
 
 - Work on **one narrow task or vertical slice** at a time. Read `.cursor/relay-project-status.md` for current state and `.cursor/relay-cursor-workflow.md` for implementation rules.
 - Follow the **Cursor Implementation Contract** in `.cursor/rules/relay-project-status.mdc` and `.cursor/relay-cursor-workflow.md` before coding.
-- Follow **Out-of-Scope Future Work Handling** in `.cursor/relay-cursor-workflow.md`: do not silently implement adjacent future work; add scoped tasks to `.cursor/relay-project-status.md` instead.
-- End implementation summaries with **### Out-of-scope future work noticed** (see project-status rules).
+- Follow **Out-of-Scope Future Work Handling** in `.cursor/relay-cursor-workflow.md`: do not silently implement adjacent future work; **every** out-of-scope item must become a **Discovered Follow-Up Tasks** card (or roadmap bullet) in `.cursor/relay-project-status.md` in the **same session** — chat-only notes are not tracking.
+- End implementation summaries with **### Out-of-scope future work noticed**; each bullet must cite where it is tracked or confirm the task card was added (see project-status rules).
 - **Do not** implement multiple roadmap phases in a single change. Do not bundle unrelated capabilities.
 - **Do not** add new CRDs, sidecars, webhooks, dashboards, policy engines, Envoy, Cilium, eBPF, gVisor/Kata, or tool gateways unless the user explicitly requests them.
 - Preserve **control-plane / data-plane separation**: controllers declare and propagate governance; enforcement belongs in future data-plane components.

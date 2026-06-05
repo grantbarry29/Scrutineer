@@ -24,9 +24,9 @@ Full detail: [`.cursor/relay-cursor-workflow.md`](../relay-cursor-workflow.md).
 3. Plan first: task, acceptance, files, verification, non-goals.
 4. Implement only that task; prefer 1–4 non-generated files.
 5. Explain as you go; update status when done.
-6. End with **### Out-of-scope future work noticed**.
-7. Track discovered work in status; do not implement unless asked.
+6. End with **### Out-of-scope future work noticed** (every item must show **Already tracked** or confirm a new task card was added **in the same session**).
+7. **No lost work:** every out-of-scope item MUST land in **`relay-project-status.md`** as a **Discovered Follow-Up Tasks** card (or roadmap bullet) — not chat-only, not a one-line queue hint. Edit the status file before finishing; missing tracking leaves project holes.
 
-Scope boundaries and out-of-scope handling: see **workflow** file.
+Scope boundaries and out-of-scope handling: see **Out-of-Scope Future Work Handling** in [`.cursor/relay-cursor-workflow.md`](../relay-cursor-workflow.md).
 
 Unless explicitly selected by the user, do not add new CRDs, webhooks, sidecars, policy engines, UI, Envoy, Cilium/eBPF, gVisor/Kata, tool gateways, real policy enforcement, approval workflows, multi-cluster support, a new orchestrator adapter, or a replacement for Kubernetes Job reconciliation.

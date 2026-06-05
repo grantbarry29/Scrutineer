@@ -12,6 +12,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/policy"
 )
 
 // AgentSessionReconciler reconciles an AgentSession object.
@@ -49,6 +51,7 @@ const requeueAfter = 15 * time.Second
 // deletionRequeueAfter is used while finalizer cleanup waits for the owned Job to finish deleting.
 const deletionRequeueAfter = 2 * time.Second
 
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/finalizers,verbs=update
@@ -111,7 +114,11 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid spec")
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
 	}
-	setCondition(session, ConditionValidated, metav1.ConditionTrue, "SpecValid", "AgentSession spec accepted")
+	// Do not re-assert SpecValid on terminal sessions; a prior reconcile may have set JobConflict
+	// or InvalidSpec and those reasons must survive status merges on requeue.
+	if !isTerminal(session.Status.Phase) {
+		setCondition(session, ConditionValidated, metav1.ConditionTrue, "SpecValid", "AgentSession spec accepted")
+	}
 
 	resolvedTask, err := r.resolveTask(ctx, session)
 	if err != nil {
@@ -124,12 +131,27 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
 	}
 
-	// Approval gate: if any approval reasons are listed, surface them. The MVP does not
-	// block execution; future ApprovalPolicy/ApprovalRequest CRDs will introduce a
-	// real gate (e.g. block-and-wait until a signed Approval object exists).
-	if len(session.Spec.Policy.RequireHumanApproval) > 0 {
-		logger.V(1).Info("session declares required approvals (not yet enforced)",
-			"approvals", session.Spec.Policy.RequireHumanApproval)
+	resolvedPolicy, err := r.resolvePolicy(ctx, session)
+	if err != nil {
+		logger.Info("AgentSession policy resolution failed", "reason", err.Error())
+		session.Status.Phase = relayv1alpha1.PhaseDenied
+		setCompletionTime(session)
+		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidPolicy", err.Error())
+		r.recordWarning(session, EventReasonValidationFailed, err.Error())
+		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid policy")
+		return ctrl.Result{}, r.patchStatus(ctx, original, session)
+	}
+	if len(resolvedPolicy.Matched) > 0 {
+		r.recordNormal(session, EventReasonPolicyResolved,
+			fmt.Sprintf("Merged %d referenced policies (mode=%s)", len(resolvedPolicy.Matched), resolvedPolicy.Mode))
+	}
+
+	// Approval gate: surface declared approvals from effective policy. MVP does not block execution.
+	if len(resolvedPolicy.Rules.RequireHumanApproval) > 0 {
+		msg := fmt.Sprintf("requireHumanApproval is declared (%v) but not enforced in MVP",
+			resolvedPolicy.Rules.RequireHumanApproval)
+		logger.Info(msg)
+		r.recordWarning(session, EventReasonApprovalNotEnforced, msg)
 	}
 
 	if session.Spec.CancelRequested {
@@ -147,8 +169,14 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
 	}
 
-	job, err := r.ensureJob(ctx, session, resolvedTask)
+	job, err := r.ensureJob(ctx, session, resolvedTask, resolvedPolicy)
 	if err != nil {
+		if errors.Is(err, ErrJobNotOwned) {
+			session.Status.Phase = relayv1alpha1.PhaseDenied
+			setCondition(session, ConditionValidated, metav1.ConditionFalse, "JobConflict", err.Error())
+			r.recordWarning(session, EventReasonSessionDenied, err.Error())
+			return ctrl.Result{}, r.patchStatus(ctx, original, session)
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -342,11 +370,14 @@ func (r *AgentSessionReconciler) applyCancellationStatus(session *relayv1alpha1.
 // a Create — a follow-up reconcile that reads a stale cached AgentSession would
 // otherwise issue a JSON-merge-patch that overwrites the conditions array and drops
 // RuntimeCreated. Re-asserting on each reconcile keeps the condition convergent.
-func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask) (*batchv1.Job, error) {
+func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved) (*batchv1.Job, error) {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
 
 	var existing batchv1.Job
 	if err := r.Get(ctx, jobKey, &existing); err == nil {
+		if !metav1.IsControlledBy(&existing, session) {
+			return nil, fmt.Errorf("%w: Job %q", ErrJobNotOwned, existing.Name)
+		}
 		session.Status.JobName = existing.Name
 		setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
 			fmt.Sprintf("Job %q exists", existing.Name))
@@ -355,7 +386,7 @@ func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1
 		return nil, fmt.Errorf("get Job %s: %w", jobKey, err)
 	}
 
-	desired := buildJob(session, task)
+	desired := buildJob(session, task, pol)
 	if err := controllerutil.SetControllerReference(session, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("set owner reference on Job: %w", err)
 	}
@@ -370,6 +401,9 @@ func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1
 			var got batchv1.Job
 			if gErr := r.Get(ctx, jobKey, &got); gErr != nil {
 				return nil, fmt.Errorf("get Job after AlreadyExists: %w", gErr)
+			}
+			if !metav1.IsControlledBy(&got, session) {
+				return nil, fmt.Errorf("%w: Job %q", ErrJobNotOwned, got.Name)
 			}
 			return &got, nil
 		}
@@ -413,21 +447,29 @@ func (r *AgentSessionReconciler) syncStatusFromJob(ctx context.Context, session 
 			}
 		}
 
-	case job.Status.Failed > 0 && backoffExhausted(job):
-		reason := "JobFailed"
-		msg := "Underlying Job failed"
-		phase := relayv1alpha1.PhaseFailed
-		if jobTimedOut(job) {
-			phase = relayv1alpha1.PhaseTimedOut
-			reason = "JobTimedOut"
-			msg = "Underlying Job exceeded its activeDeadlineSeconds"
-		}
-		if session.Status.Phase != phase {
+	case jobTimedOut(job):
+		msg := "Underlying Job exceeded its activeDeadlineSeconds"
+		if session.Status.Phase != relayv1alpha1.PhaseTimedOut {
 			r.recordWarning(session, EventReasonJobFailed, msg)
 		}
-		session.Status.Phase = phase
+		session.Status.Phase = relayv1alpha1.PhaseTimedOut
 		setCompletionTime(session)
-		setCondition(session, ConditionCompleted, metav1.ConditionFalse, reason, msg)
+		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobTimedOut", msg)
+		if session.Status.Result == nil {
+			session.Status.Result = &relayv1alpha1.SessionResult{
+				Outcome: "failed",
+				Summary: msg,
+			}
+		}
+
+	case job.Status.Failed > 0 && backoffExhausted(job):
+		msg := "Underlying Job failed"
+		if session.Status.Phase != relayv1alpha1.PhaseFailed {
+			r.recordWarning(session, EventReasonJobFailed, msg)
+		}
+		session.Status.Phase = relayv1alpha1.PhaseFailed
+		setCompletionTime(session)
+		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobFailed", msg)
 		if session.Status.Result == nil {
 			session.Status.Result = &relayv1alpha1.SessionResult{
 				Outcome: "failed",

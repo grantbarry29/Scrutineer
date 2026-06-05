@@ -35,6 +35,14 @@ rules:
 - apiGroups:
   - relay.secureai.dev
   resources:
+  - agentpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - relay.secureai.dev
+  resources:
   - agentsessions
   verbs:
   - create

@@ -31,19 +31,31 @@ const (
 // Condition types used on AgentSession.status.conditions.
 const (
 	ConditionValidated      = "Validated"
+	ConditionPolicyResolved = "PolicyResolved"
 	ConditionRuntimeCreated = "RuntimeCreated"
 	ConditionCompleted      = "Completed"
 )
 
-// Event reasons emitted by the controller.
+// Event reasons emitted by the controller (Kubernetes Events on AgentSession).
 const (
+	// EventReasonValidationFailed — spec failed validateSpec; session denied.
 	EventReasonValidationFailed = "ValidationFailed"
-	EventReasonJobCreated       = "JobCreated"
-	EventReasonJobRunning       = "JobRunning"
-	EventReasonJobSucceeded     = "JobSucceeded"
-	EventReasonJobFailed        = "JobFailed"
-	EventReasonSessionDenied    = "SessionDenied"
+	// EventReasonJobCreated — owned Job was created for this session.
+	EventReasonJobCreated = "JobCreated"
+	// EventReasonJobRunning — Job has active pods; session phase Running.
+	EventReasonJobRunning = "JobRunning"
+	// EventReasonJobSucceeded — Job completed successfully.
+	EventReasonJobSucceeded = "JobSucceeded"
+	// EventReasonJobFailed — Job failed or timed out (warning).
+	EventReasonJobFailed = "JobFailed"
+	// EventReasonSessionDenied — session denied (validation, task resolution, Job conflict).
+	EventReasonSessionDenied = "SessionDenied"
+	// EventReasonSessionCancelled — user set cancelRequested; Job stopped.
 	EventReasonSessionCancelled = "SessionCancelled"
+	// EventReasonApprovalNotEnforced — requireHumanApproval declared but MVP does not gate execution.
+	EventReasonApprovalNotEnforced = "ApprovalNotEnforced"
+	// EventReasonPolicyResolved — referenced policies merged into effective policy.
+	EventReasonPolicyResolved = "PolicyResolved"
 )
 
 // Orchestrator values supported by Relay.
@@ -71,4 +83,5 @@ const (
 	EnvPolicyRequireApproval = "AGENT_POLICY_REQUIRE_HUMAN_APPROVAL"
 	EnvPolicyMaxNetReqs      = "AGENT_POLICY_MAX_NETWORK_REQUESTS"
 	EnvPolicyMaxToolCalls    = "AGENT_POLICY_MAX_TOOL_CALLS"
+	EnvPolicyMode            = "AGENT_POLICY_MODE"
 )

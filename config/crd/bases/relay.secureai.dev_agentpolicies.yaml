@@ -1,0 +1,137 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: agentpolicies.relay.secureai.dev
+spec:
+  group: relay.secureai.dev
+  names:
+    kind: AgentPolicy
+    listKind: AgentPolicyList
+    plural: agentpolicies
+    shortNames:
+    - ap
+    - agentpol
+    singular: agentpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AgentPolicy is a reusable governance policy that AgentSessions
+          can reference.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentPolicySpec defines reusable governance rules for AgentSessions.
+            properties:
+              allowedCIDRs:
+                description: AllowedCIDRs is an IP/CIDR allowlist for outbound network
+                  access.
+                items:
+                  type: string
+                type: array
+              allowedDomains:
+                description: AllowedDomains is an FQDN allowlist for outbound network
+                  access.
+                items:
+                  type: string
+                type: array
+              allowedTools:
+                description: AllowedTools lists tool identifiers the agent is permitted
+                  to invoke.
+                items:
+                  type: string
+                type: array
+              deniedCIDRs:
+                description: DeniedCIDRs is an IP/CIDR denylist for outbound network
+                  access.
+                items:
+                  type: string
+                type: array
+              deniedDomains:
+                description: DeniedDomains is an FQDN denylist for outbound network
+                  access.
+                items:
+                  type: string
+                type: array
+              deniedTools:
+                description: DeniedTools lists tool identifiers the agent must not
+                  invoke.
+                items:
+                  type: string
+                type: array
+              maxNetworkRequests:
+                description: MaxNetworkRequests caps the total number of network requests
+                  the agent may issue.
+                format: int32
+                minimum: 0
+                type: integer
+              maxToolCalls:
+                description: MaxToolCalls caps the total number of tool calls the
+                  agent may issue.
+                format: int32
+                minimum: 0
+                type: integer
+              mode:
+                allOf:
+                - enum:
+                  - audit-only
+                  - dry-run
+                  - enforced
+                - enum:
+                  - audit-only
+                  - dry-run
+                  - enforced
+                default: audit-only
+                description: |-
+                  Mode controls how rules are interpreted once enforcement exists.
+                  Defaults to audit-only when unset.
+                type: string
+              requireHumanApproval:
+                description: RequireHumanApproval lists action types that require
+                  human approval before execution.
+                items:
+                  type: string
+                type: array
+            type: object
+          status:
+            description: AgentPolicyStatus defines the observed state of an AgentPolicy.
+            properties:
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the last spec generation observed by a controller.
+                  Reserved for a future AgentPolicy controller; unused in Phase 2 slice.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

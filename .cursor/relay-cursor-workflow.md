@@ -59,6 +59,8 @@ Same pattern elsewhere: API shape → reconciler → tests → CI. Never multipl
 
 ## Out-of-Scope Future Work Handling
 
+**No lost work rule (mandatory):** Anything noticed during implementation that is not in the current task scope **must** be recorded in **`relay-project-status.md`** before the session ends. Chat summaries, roadmap checkboxes alone, or one-line “suggested next picks” are **not** sufficient — they do not prevent holes in the project.
+
 When implementing any task, distinguish:
 
 1. **Current task requirements** — required for acceptance criteria.
@@ -67,13 +69,34 @@ When implementing any task, distinguish:
 
 **Do not implement future requirements** unless the user explicitly asks.
 
-Instead:
+Instead, for **every** future requirement:
 
-1. Notice the future requirement.
-2. Check **`relay-project-status.md`** (Ready for Cursor Queue, Discovered Follow-Up Tasks, roadmap).
-3. If tracked, mention briefly in the summary.
-4. If not tracked, add a scoped task card to the status file (use **Task Execution Template** below) or a roadmap bullet.
-5. Continue with only the original task.
+1. Notice it (gap, follow-up, adjacent phase, TODO in code, “we should later…”, enforcement hook, doc debt, test gap).
+2. Search **`relay-project-status.md`** (Ready for Cursor Queue, **Discovered Follow-Up Tasks**, roadmap).
+3. **If already tracked** — note where (task card title or roadmap bullet) in the end summary.
+4. **If not tracked** — add a **scoped task card** under **Discovered Follow-Up Tasks** using the **Task Execution Template** below (preferred), or a roadmap checkbox if it is a large multi-slice capability without a clear next step yet.
+5. **In the same session** — edit the status file; do not defer “I’ll add it later.”
+6. Continue with only the original task.
+
+### What counts as “tracked”
+
+| Tracking | Sufficient? |
+|----------|-------------|
+| Full **Discovered Follow-Up Tasks** card (Why, Scope, Acceptance, Files, Verification) | Yes |
+| Roadmap phase bullet (for coarse capabilities) | Yes, if no immediate slice exists |
+| “Next suggested queue picks” one-liner only | **No** — promote to task cards |
+| Mention only in chat / PR comment | **No** |
+| “We’ll do it later” without editing status | **No** |
+
+If multiple small items belong together, one task card may cover them; if they are independent, use separate cards so nothing is bundled into oblivion.
+
+### End-of-task checklist (agents)
+
+Before marking work complete:
+
+- [ ] Every out-of-scope item from this session has **Already tracked: yes** with a pointer to a task card or roadmap line, **or** was added to **`relay-project-status.md`** in this session.
+- [ ] User-facing summary includes **### Out-of-scope future work noticed** (see below).
+- [ ] Completed work reflected in status (recent fixes, gaps table, roadmap `[x]` where appropriate).
 
 ### End-of-task summary requirement
 
@@ -83,7 +106,10 @@ After every implementation task, include:
 
 - `None.` — if nothing relevant.
 
-Or bullets with description, **Already tracked:** yes/no (where), and if no, where added in **`relay-project-status.md`**.
+Or one bullet per item:
+
+- **Description** — what was noticed
+- **Already tracked:** yes → link to task card title / roadmap section; **no** → confirm added under **Discovered Follow-Up Tasks** (task title) in this session
 
 ### Examples
 

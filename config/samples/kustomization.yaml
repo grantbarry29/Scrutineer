@@ -1,5 +1,7 @@
 resources:
+- relay_v1alpha1_agentpolicy.yaml
 - relay_v1alpha1_agentsession.yaml
 - relay_v1alpha1_agentsession_failing.yaml
 - relay_v1alpha1_agentsession_cancel.yaml
 - relay_v1alpha1_agentsession_prompt_cm.yaml
+- relay_v1alpha1_agentsession_policy_ref.yaml

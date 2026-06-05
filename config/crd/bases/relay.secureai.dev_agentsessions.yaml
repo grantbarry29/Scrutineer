@@ -80,10 +80,12 @@ spec:
                     type: integer
                   name:
                     description: Name is the model identifier, e.g. "gpt-4.1".
+                    minLength: 1
                     type: string
                   provider:
                     description: Provider is the model provider, e.g. "openai", "anthropic",
                       "bedrock".
+                    minLength: 1
                     type: string
                   temperature:
                     description: |-
@@ -118,7 +120,8 @@ spec:
                     type: boolean
                 type: object
               policy:
-                description: Policy describes inline governance rules for this session.
+                description: Policy describes inline governance overrides for this
+                  session.
                 properties:
                   allowedCIDRs:
                     description: AllowedCIDRs is an IP/CIDR allowlist for outbound
@@ -175,6 +178,30 @@ spec:
                       type: string
                     type: array
                 type: object
+              policyRefs:
+                description: |-
+                  PolicyRefs lists reusable policies to merge before spec.policy overrides.
+                  Refs are resolved in order within the same namespace as the AgentSession.
+                items:
+                  description: PolicyRef references a reusable policy CRD in the same
+                    namespace as the AgentSession.
+                  properties:
+                    kind:
+                      default: AgentPolicy
+                      description: Kind is the policy resource kind. MVP supports
+                        AgentPolicy only.
+                      enum:
+                      - AgentPolicy
+                      type: string
+                    name:
+                      description: Name is the policy resource name in the AgentSession
+                        namespace.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
               runtime:
                 description: Runtime describes how the agent should be executed.
                 properties:
@@ -583,10 +610,110 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              effectivePolicy:
+                description: EffectivePolicy is the merged policy propagated to the
+                  runtime (env vars today).
+                properties:
+                  allowedCIDRs:
+                    description: AllowedCIDRs is an IP/CIDR allowlist for outbound
+                      network access.
+                    items:
+                      type: string
+                    type: array
+                  allowedDomains:
+                    description: AllowedDomains is an FQDN allowlist for outbound
+                      network access.
+                    items:
+                      type: string
+                    type: array
+                  allowedTools:
+                    description: AllowedTools lists tool identifiers the agent is
+                      permitted to invoke.
+                    items:
+                      type: string
+                    type: array
+                  deniedCIDRs:
+                    description: DeniedCIDRs is an IP/CIDR denylist for outbound network
+                      access.
+                    items:
+                      type: string
+                    type: array
+                  deniedDomains:
+                    description: DeniedDomains is an FQDN denylist for outbound network
+                      access.
+                    items:
+                      type: string
+                    type: array
+                  deniedTools:
+                    description: DeniedTools lists tool identifiers the agent must
+                      not invoke.
+                    items:
+                      type: string
+                    type: array
+                  maxNetworkRequests:
+                    description: MaxNetworkRequests caps the total number of network
+                      requests the agent may issue.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  maxToolCalls:
+                    description: MaxToolCalls caps the total number of tool calls
+                      the agent may issue.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  mode:
+                    description: Mode is the strictest mode across matched policies
+                      (enforced > dry-run > audit-only).
+                    enum:
+                    - audit-only
+                    - dry-run
+                    - enforced
+                    type: string
+                  requireHumanApproval:
+                    description: RequireHumanApproval lists action types that require
+                      human approval before execution.
+                    items:
+                      type: string
+                    type: array
+                type: object
               jobName:
                 description: JobName is the name of the underlying batch/v1 Job, when
                   one has been created.
                 type: string
+              matchedPolicies:
+                description: MatchedPolicies lists policy CRDs that contributed to
+                  status.effectivePolicy.
+                items:
+                  description: MatchedPolicyRef records a policy CRD that contributed
+                    to the effective policy.
+                  properties:
+                    generation:
+                      description: Generation is the policy generation at resolution
+                        time.
+                      format: int64
+                      type: integer
+                    kind:
+                      description: Kind is the policy resource kind.
+                      type: string
+                    mode:
+                      description: Mode is the mode declared on the matched policy.
+                      enum:
+                      - audit-only
+                      - dry-run
+                      - enforced
+                      type: string
+                    name:
+                      description: Name is the policy resource name.
+                      type: string
+                    uid:
+                      description: UID is the policy object UID at resolution time.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
               observedGeneration:
                 description: ObservedGeneration is the last generation reconciled
                   by the controller.

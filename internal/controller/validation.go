@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // validateSpec enforces the invariants that are most useful in the controller path.
@@ -34,9 +35,30 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 	if err := validatePromptConfigMapRef(spec.Task.PromptConfigMapRef); err != nil {
 		return err
 	}
+	for i, ref := range spec.PolicyRefs {
+		if strings.TrimSpace(ref.Name) == "" {
+			return fmt.Errorf("spec.policyRefs[%d].name is required", i)
+		}
+		if ref.Kind != "" && ref.Kind != "AgentPolicy" {
+			return fmt.Errorf("spec.policyRefs[%d].kind %q is not supported in MVP (allowed: AgentPolicy)", i, ref.Kind)
+		}
+	}
 
 	if strings.TrimSpace(spec.Runtime.Image) == "" {
 		return fmt.Errorf("spec.runtime.image is required")
+	}
+
+	if strings.TrimSpace(spec.Model.Provider) == "" {
+		return fmt.Errorf("spec.model.provider is required")
+	}
+	if strings.TrimSpace(spec.Model.Name) == "" {
+		return fmt.Errorf("spec.model.name is required")
+	}
+
+	if strings.TrimSpace(spec.Workspace.Size) != "" {
+		if _, err := resource.ParseQuantity(spec.Workspace.Size); err != nil {
+			return fmt.Errorf("spec.workspace.size %q is not a valid quantity: %w", spec.Workspace.Size, err)
+		}
 	}
 
 	orchestrator := spec.Runtime.Orchestrator

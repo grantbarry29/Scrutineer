@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/policy"
 )
 
 // Avoid an unused import lint when intstr is not needed.
@@ -46,7 +47,7 @@ func commonLabelsFor(session *relayv1alpha1.AgentSession) map[string]string {
 // Future enforcement hooks (Envoy sidecar, DNS proxy, eBPF agents, Cilium policies, etc.)
 // should be added by composing additional containers/volumes/policies onto the spec
 // returned here, rather than by special-casing the controller.
-func buildJob(session *relayv1alpha1.AgentSession, task *ResolvedTask) *batchv1.Job {
+func buildJob(session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved) *batchv1.Job {
 	labels := commonLabelsFor(session)
 	rt := session.Spec.Runtime
 
@@ -60,7 +61,7 @@ func buildJob(session *relayv1alpha1.AgentSession, task *ResolvedTask) *batchv1.
 		Command:         rt.Command,
 		Args:            rt.Args,
 		Resources:       rt.Resources,
-		Env:             buildEnv(session, task),
+		Env:             buildEnv(session, task, pol),
 		SecurityContext: defaultContainerSecurityContext(),
 	}
 
@@ -157,10 +158,15 @@ func buildWorkspaceVolumes(ws *relayv1alpha1.WorkspaceSpec) ([]corev1.Volume, []
 // Future enforcement (Envoy sidecar / DNS proxy / tool gateway) will read these env vars
 // or a sibling ConfigMap to apply policy at runtime. Until then they exist primarily so
 // the agent process inside the container can self-report what policy it believes is active.
-func buildEnv(session *relayv1alpha1.AgentSession, task *ResolvedTask) []corev1.EnvVar {
-	pol := session.Spec.Policy
+func buildEnv(session *relayv1alpha1.AgentSession, task *ResolvedTask, resolved *policy.Resolved) []corev1.EnvVar {
 	if task == nil {
 		task = &ResolvedTask{}
+	}
+	rules := session.Spec.Policy.PolicyRules
+	mode := relayv1alpha1.PolicyModeAuditOnly
+	if resolved != nil {
+		rules = resolved.Rules
+		mode = resolved.Mode
 	}
 
 	env := []corev1.EnvVar{
@@ -170,15 +176,16 @@ func buildEnv(session *relayv1alpha1.AgentSession, task *ResolvedTask) []corev1.
 		{Name: EnvTaskPrompt, Value: task.Prompt},
 		{Name: EnvModelProvider, Value: session.Spec.Model.Provider},
 		{Name: EnvModelName, Value: session.Spec.Model.Name},
-		{Name: EnvPolicyAllowedDomains, Value: csv(pol.AllowedDomains)},
-		{Name: EnvPolicyDeniedDomains, Value: csv(pol.DeniedDomains)},
-		{Name: EnvPolicyAllowedCIDRs, Value: csv(pol.AllowedCIDRs)},
-		{Name: EnvPolicyDeniedCIDRs, Value: csv(pol.DeniedCIDRs)},
-		{Name: EnvPolicyAllowedTools, Value: csv(pol.AllowedTools)},
-		{Name: EnvPolicyDeniedTools, Value: csv(pol.DeniedTools)},
-		{Name: EnvPolicyRequireApproval, Value: csv(pol.RequireHumanApproval)},
-		{Name: EnvPolicyMaxNetReqs, Value: int32PtrToStr(pol.MaxNetworkRequests)},
-		{Name: EnvPolicyMaxToolCalls, Value: int32PtrToStr(pol.MaxToolCalls)},
+		{Name: EnvPolicyAllowedDomains, Value: csv(rules.AllowedDomains)},
+		{Name: EnvPolicyDeniedDomains, Value: csv(rules.DeniedDomains)},
+		{Name: EnvPolicyAllowedCIDRs, Value: csv(rules.AllowedCIDRs)},
+		{Name: EnvPolicyDeniedCIDRs, Value: csv(rules.DeniedCIDRs)},
+		{Name: EnvPolicyAllowedTools, Value: csv(rules.AllowedTools)},
+		{Name: EnvPolicyDeniedTools, Value: csv(rules.DeniedTools)},
+		{Name: EnvPolicyRequireApproval, Value: csv(rules.RequireHumanApproval)},
+		{Name: EnvPolicyMaxNetReqs, Value: int32PtrToStr(rules.MaxNetworkRequests)},
+		{Name: EnvPolicyMaxToolCalls, Value: int32PtrToStr(rules.MaxToolCalls)},
+		{Name: EnvPolicyMode, Value: string(mode)},
 	}
 
 	env = append(env, session.Spec.Runtime.Env...)

@@ -67,8 +67,10 @@ type PromptConfigMapRef struct {
 // ModelSpec describes which model/provider the agent should use.
 type ModelSpec struct {
 	// Provider is the model provider, e.g. "openai", "anthropic", "bedrock".
+	// +kubebuilder:validation:MinLength=1
 	Provider string `json:"provider"`
 	// Name is the model identifier, e.g. "gpt-4.1".
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 	// Temperature controls sampling temperature for the model. It is the
 	// numeric value [0.0, 2.0] encoded as a string (e.g. "0.2", "1.5").
@@ -139,47 +141,10 @@ type RuntimeSpec struct {
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
-// InlinePolicySpec captures the governance policy for this session.
-// In the MVP, policy lives inline. In future versions, this will be replaced/augmented
-// by referenced AgentPolicy / ToolPolicy / ApprovalPolicy CRDs.
+// InlinePolicySpec captures session-specific governance overrides.
+// Referenced AgentPolicy objects are merged first; inline fields override on conflict.
 type InlinePolicySpec struct {
-	// AllowedDomains is an FQDN allowlist for outbound network access.
-	// +optional
-	AllowedDomains []string `json:"allowedDomains,omitempty"`
-
-	// DeniedDomains is an FQDN denylist for outbound network access.
-	// +optional
-	DeniedDomains []string `json:"deniedDomains,omitempty"`
-
-	// AllowedCIDRs is an IP/CIDR allowlist for outbound network access.
-	// +optional
-	AllowedCIDRs []string `json:"allowedCIDRs,omitempty"`
-
-	// DeniedCIDRs is an IP/CIDR denylist for outbound network access.
-	// +optional
-	DeniedCIDRs []string `json:"deniedCIDRs,omitempty"`
-
-	// AllowedTools lists tool identifiers the agent is permitted to invoke.
-	// +optional
-	AllowedTools []string `json:"allowedTools,omitempty"`
-
-	// DeniedTools lists tool identifiers the agent must not invoke.
-	// +optional
-	DeniedTools []string `json:"deniedTools,omitempty"`
-
-	// RequireHumanApproval lists action types that require human approval before execution.
-	// +optional
-	RequireHumanApproval []string `json:"requireHumanApproval,omitempty"`
-
-	// MaxNetworkRequests caps the total number of network requests the agent may issue.
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	MaxNetworkRequests *int32 `json:"maxNetworkRequests,omitempty"`
-
-	// MaxToolCalls caps the total number of tool calls the agent may issue.
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	MaxToolCalls *int32 `json:"maxToolCalls,omitempty"`
+	PolicyRules `json:",inline"`
 }
 
 // WorkspaceSpec describes the agent workspace volume.
@@ -223,7 +188,12 @@ type AgentSessionSpec struct {
 	// Runtime describes how the agent should be executed.
 	Runtime RuntimeSpec `json:"runtime"`
 
-	// Policy describes inline governance rules for this session.
+	// PolicyRefs lists reusable policies to merge before spec.policy overrides.
+	// Refs are resolved in order within the same namespace as the AgentSession.
+	// +optional
+	PolicyRefs []PolicyRef `json:"policyRefs,omitempty"`
+
+	// Policy describes inline governance overrides for this session.
 	// +optional
 	Policy InlinePolicySpec `json:"policy,omitempty"`
 
@@ -337,6 +307,14 @@ type AgentSessionStatus struct {
 	// (name breaks ties). Pods from a replaced Job or without the session label are ignored.
 	// +optional
 	PodName string `json:"podName,omitempty"`
+
+	// MatchedPolicies lists policy CRDs that contributed to status.effectivePolicy.
+	// +optional
+	MatchedPolicies []MatchedPolicyRef `json:"matchedPolicies,omitempty"`
+
+	// EffectivePolicy is the merged policy propagated to the runtime (env vars today).
+	// +optional
+	EffectivePolicy *EffectivePolicyStatus `json:"effectivePolicy,omitempty"`
 
 	// Result captures the terminal outcome of the session.
 	// +optional

@@ -1,0 +1,13 @@
+apiVersion: relay.secureai.dev/v1alpha1
+kind: AgentPolicy
+metadata:
+  name: prod-agents-baseline
+  namespace: default
+spec:
+  mode: audit-only
+  deniedDomains:
+  - dropbox.com
+  - gmail.com
+  deniedTools:
+  - kubectl-prod
+  maxToolCalls: 50
