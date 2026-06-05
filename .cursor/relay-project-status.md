@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-05 (Phase 2 slice: AgentPolicy + policyRefs)
+> **Last updated:** 2026-06-05 (AgentPolicy watch → session re-reconcile)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -15,9 +15,9 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 
 _(Queue empty — promote a task from **Discovered Follow-Up Tasks** or Phase 1 roadmap when ready.)_
 
-**Recently completed** (do not re-implement unless regressions): **Phase 2 slice** (`AgentPolicy` CRD, `spec.policyRefs`, merge + `status.effectivePolicy` / `status.matchedPolicies`, `AGENT_POLICY_MODE` env, `PolicyResolved` condition), rules compliance fixes, **validate sample manifests**, e2e TimedOut, finalizers, CI, session cancellation, envtest suite.
+**Recently completed** (do not re-implement unless regressions): **AgentPolicy watch** (policy update → referencing session reconcile + `status.effectivePolicy` refresh), **Phase 2 slice** (`AgentPolicy` CRD, `policyRefs`, merge/status/env), rules compliance fixes, verify-samples, e2e, finalizers, CI, cancellation, envtest suite.
 
-**Next suggested queue picks:** Policy decision records · watch `AgentPolicy` for session re-reconcile · ToolPolicy CRD · README policy-ref docs.
+**Next suggested queue picks:** Document policyRefs in README · Policy decision records · Watch owned Pods · ToolPolicy CRD.
 
 ---
 
@@ -150,31 +150,6 @@ Events are the primary MVP observability surface; operators need a stable catalo
 **Verification command:**  
 `make test`
 
-### Task: Watch AgentPolicy changes for session re-reconcile
-
-**Why it matters:**  
-Sessions only pick up `AgentPolicy` updates on their own reconcile (e.g. `RequeueAfter`). Watching referenced policies lets platform teams roll out baseline changes without waiting.
-
-**Scope:**
-- Register a controller-runtime watch on `AgentPolicy` (or index policy refs → sessions).
-- Map policy create/update/delete to reconcile requests for AgentSessions listing that ref in `spec.policyRefs`.
-- Envtest: update AgentPolicy → session `status.effectivePolicy` / Job env reflects change.
-
-**Non-goals:**
-- Do not implement ToolPolicy watch until ToolPolicy CRD exists.
-- Do not add cross-namespace ref resolution.
-
-**Acceptance criteria:**
-- Changing a referenced `AgentPolicy` triggers affected AgentSession reconcile.
-- Envtest or integration test demonstrates updated `status.effectivePolicy`.
-
-**Expected files:**
-- `internal/controller/agentsession_controller.go`
-- `config/rbac/role.yaml` (generated, only if markers change)
-
-**Verification command:**  
-`make test`
-
 ### Task: Document policyRefs and merge semantics in README
 
 **Why it matters:**  
@@ -198,6 +173,29 @@ Phase 2 introduced `AgentPolicy`, `spec.policyRefs`, and merge rules; operators 
 
 **Verification command:**  
 `make verify-samples` (docs-only)
+
+### Task: Sync Job env when effective policy changes on running sessions
+
+**Why it matters:**  
+`status.effectivePolicy` updates when `AgentPolicy` changes, but existing Job pod templates are immutable — `AGENT_POLICY_*` env in a running Job may stay stale until the Job is replaced.
+
+**Scope:**
+- Define MVP behavior: document immutability, and/or replace Job when effective policy changes on non-terminal sessions (with clear event/condition).
+- Envtest or docs for not-yet-started vs running Jobs.
+
+**Non-goals:**
+- Do not implement in-pod hot reload or sidecar enforcement (Phase 3).
+
+**Acceptance criteria:**
+- Behavior documented in README and/or API comments.
+- Controller surfaces policy drift on immutable Jobs (condition or Job replace path).
+
+**Expected files:**
+- `internal/controller/agentsession_controller.go` and/or `job.go`
+- `README.md`
+
+**Verification command:**  
+`make test`
 
 ### Task: Policy decision records in AgentSession status
 
@@ -351,6 +349,7 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 - Foreign Job name collision → `PhaseDenied` with `JobConflict` (no adoption of unowned Jobs)
 - `task.promptConfigMapRef` loads prompt from ConfigMap into `AGENT_TASK_PROMPT`
 - `AgentPolicy` CRD + `spec.policyRefs` — merge referenced policies with inline overrides → `status.effectivePolicy`, `status.matchedPolicies`, `AGENT_POLICY_MODE` env
+- `AgentPolicy` watch — update/delete on a referenced policy re-reconciles affected AgentSessions (same namespace)
 - Policy fields injected as `AGENT_POLICY_*` / `RELAY_*` env vars (from effective merged policy)
 - Workspace emptyDir mount, resource limits, timeout, basic container hardening
 - Kubernetes Events on validation, Job create, running, success, failure, cancellation
@@ -426,6 +425,7 @@ Documented in `internal/policy/`:
 
 ### Recent fixes
 
+- **AgentPolicy watch** — `Watches(AgentPolicy)` maps to sessions with matching `spec.policyRefs`; envtest verifies `status.effectivePolicy` updates on policy change (`internal/controller/policy_watch.go`)
 - **Phase 2 reusable policy (slice)** — `AgentPolicy` CRD, `PolicyRules` shared type, `policyRefs`, `internal/policy` merge/resolve, `PolicyResolved` condition, samples, envtest (38 specs)
 - **Rules compliance audit** — Job ownership denial (`JobConflict`), main `APIReader`, model/workspace validation, TimedOut sync without `Failed>0`, `ApprovalNotEnforced` warning event, terminal `Denied` preserves validation reason; envtest coverage (36 specs)
 - **validate sample manifests** — `make verify-samples` (server dry-run on `config/samples/relay_*.yaml`); prompt CM sample in kustomization; README sample list

@@ -54,6 +54,7 @@ var _ = Describe("status patch strategy", func() {
 			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
 			live.Status.Phase = relayv1alpha1.PhaseRunning
 			setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
+			setCondition(&live, ConditionPolicyResolved, metav1.ConditionTrue, "PoliciesMerged", "merged 0 referenced policies")
 			setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
 			g.Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
 		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())

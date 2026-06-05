@@ -28,6 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
@@ -535,6 +536,10 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&relayv1alpha1.AgentSession{}).
 		Owns(&batchv1.Job{}).
+		Watches(
+			&relayv1alpha1.AgentPolicy{},
+			handler.EnqueueRequestsFromMapFunc(r.mapAgentPolicyToSessions),
+		).
 		Complete(r)
 }
 

@@ -181,6 +181,48 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(env[EnvPolicyDeniedTools]).To(ContainSubstring("kubectl-prod"))
 			Expect(env[EnvPolicyDeniedTools]).To(ContainSubstring("deploy"))
 		})
+
+		It("reconciles when a referenced AgentPolicy is updated", func() {
+			ns := newTestNamespace()
+			ap := &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "rolling-baseline", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					Mode: relayv1alpha1.PolicyModeAuditOnly,
+					PolicyRules: relayv1alpha1.PolicyRules{
+						DeniedDomains: []string{"dropbox.com"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
+
+			session := minimalAgentSession(ns, "policy-watch")
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+				Kind: "AgentPolicy",
+				Name: "rolling-baseline",
+			}}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			Eventually(func(g Gomega) {
+				var got relayv1alpha1.AgentSession
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				g.Expect(got.Status.EffectivePolicy).NotTo(BeNil())
+				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeAuditOnly))
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(ap), ap)).To(Succeed())
+			ap.Spec.Mode = relayv1alpha1.PolicyModeEnforced
+			ap.Spec.DeniedDomains = []string{"dropbox.com", "evil.example"}
+			Expect(k8sClient.Update(testCtx, ap)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				var got relayv1alpha1.AgentSession
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				g.Expect(got.Status.EffectivePolicy).NotTo(BeNil())
+				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeEnforced))
+				g.Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElement("evil.example"))
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+		})
 	})
 
 	Context("Job ownership conflict", func() {
