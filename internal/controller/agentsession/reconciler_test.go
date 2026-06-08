@@ -56,6 +56,9 @@ var _ = Describe("AgentSession reconciler", func() {
 			validated := getCondition(&got, ConditionValidated)
 			Expect(validated).NotTo(BeNil())
 			Expect(validated.Status).To(Equal(metav1.ConditionFalse))
+			ready := getCondition(&got, ConditionReady)
+			Expect(ready).NotTo(BeNil())
+			Expect(ready.Status).To(Equal(metav1.ConditionFalse))
 
 			expectJobAbsent(ns, session)
 		})
@@ -557,6 +560,35 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			runtimeCreated := getCondition(&got, ConditionRuntimeCreated)
 			Expect(runtimeCreated.Status).To(Equal(metav1.ConditionTrue))
+		})
+
+		It("marks Ready=true when the underlying Job has active pods", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "ready-running")
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			waitForJob(ns, session)
+
+			var runtimeJob batchv1.Job
+			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &runtimeJob)).To(Succeed())
+			runtimeJob.Status.Active = 1
+			runtimeJob.Status.Succeeded = 0
+			runtimeJob.Status.Failed = 0
+			Expect(k8sClient.Status().Update(testCtx, &runtimeJob)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
+				g.Expect(err).NotTo(HaveOccurred())
+
+				var got relayv1alpha1.AgentSession
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				g.Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseRunning))
+
+				ready := getCondition(&got, ConditionReady)
+				g.Expect(ready).NotTo(BeNil())
+				g.Expect(ready.Status).To(Equal(metav1.ConditionTrue))
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 		})
 
 		It("marks Succeeded when the Job completes and retains RuntimeCreated", func() {

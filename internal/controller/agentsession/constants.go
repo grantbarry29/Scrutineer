@@ -21,6 +21,7 @@ const (
 	ConditionRuntimeProfileResolved = "RuntimeProfileResolved"
 	ConditionRuntimeCreated         = "RuntimeCreated"
 	ConditionCompleted              = "Completed"
+	ConditionReady                  = "Ready"
 )
 
 // Event reasons emitted by the controller (Kubernetes Events on AgentSession).

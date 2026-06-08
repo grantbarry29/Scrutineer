@@ -44,26 +44,18 @@ The MVP in this repo is the first vertical slice of that vision: the
 
 ## What the MVP does
 
-1. Defines a namespaced CRD `AgentSession` in group `relay.secureai.dev/v1alpha1`.
-2. Accepts inline policy on the AgentSession spec.
-3. Reconciles each `AgentSession` into a `batch/v1` Job named
-   `relay-session-<agentsession-name>`, owned by the AgentSession so GC works.
-4. Injects task / model / policy information into the Job's agent container as
-   `RELAY_*` and `AGENT_*` environment variables.
-5. Applies basic runtime constraints:
-   - `backoffLimit: 0`
-   - `activeDeadlineSeconds` from `spec.runtime.timeoutSeconds`
-   - container `securityContext`: `allowPrivilegeEscalation=false`, drop ALL caps
-   - resource requests/limits from `spec.runtime.resources`
-   - optional emptyDir workspace mount
-6. Tracks lifecycle in `status`:
-   `Pending` → `Starting` → `Running` → `Succeeded` / `Failed` / `TimedOut` / `Denied` / `Cancelled`
-7. Supports **session cancellation** via `spec.cancelRequested` (stops the owned Job, sets `Phase=Cancelled`).
-8. Emits Kubernetes Events for every interesting transition.
-9. Ships sample AgentSessions (success, failure, cancellation).
-10. Is structured for extensibility — the controller will be the integration
-   point for `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`,
-   `ToolGateway`, external orchestrators, and runtime enforcement backends.
+1. Defines namespaced CRDs: `AgentSession`, `AgentPolicy`, `ToolPolicy`, and `RuntimeProfile` (`relay.secureai.dev/v1alpha1`).
+2. Reconciles each `AgentSession` into a `batch/v1` Job named `relay-session-<name>`, owned by the session.
+3. Merges reusable policies (`spec.policyRefs`) with inline `spec.policy` overrides → `status.effectivePolicy` + `AGENT_POLICY_*` env vars.
+4. Applies optional `RuntimeProfile` hardening to the Job pod template via `spec.runtimeProfileRef`.
+5. Injects task / model / policy into the agent container as `RELAY_*` and `AGENT_*` environment variables.
+6. Tracks lifecycle in `status.phase` and structured `status.conditions` (including aggregate `Ready`).
+7. Watches owned Jobs, session Pods, and referenced policy/profile CRDs to re-reconcile promptly.
+8. Supports **session cancellation** (`spec.cancelRequested`) and **finalizer-gated deletion** (Job cleanup before session removal).
+9. Emits Kubernetes Events for validation, Job lifecycle, policy/profile resolution, and drift.
+10. Ships samples and envtest/e2e coverage for the vertical slice above.
+
+See [AgentSession controller reference](#agentsession-controller-reference) for the full behavior catalog.
 
 ### What the MVP intentionally does **not** do yet
 
@@ -285,18 +277,22 @@ spec:
 
 ### Status fields
 
-| Field                 | Meaning                                                |
-|-----------------------|--------------------------------------------------------|
-| `phase`               | One of `Pending` / `Validating` / `Starting` / `Running` / `Succeeded` / `Failed` / `Denied` / `TimedOut` / `Cancelled` |
-| `observedGeneration`  | Last spec generation the controller acted on           |
-| `startTime`           | When the session left `Pending`                        |
-| `completionTime`      | When the session reached a terminal phase              |
-| `conditions`          | `Validated`, `RuntimeCreated`, `Completed`             |
-| `jobName` / `podName` | Backing `Job` and `Pod` names                          |
-| `result`              | Terminal outcome / summary / exit code / message       |
-| `usage`               | Tokens / tool calls / network requests (populated by future sidecar/audit) |
-| `violations`          | List of policy violations observed during the session  |
-| `artifacts`           | Artifacts collected from the workspace                 |
+| Field | Populated? | Meaning |
+|-------|------------|---------|
+| `phase` | Yes | `Pending` → `Starting` → `Running` → `Succeeded` / `Failed` / `TimedOut` / `Denied` / `Cancelled` |
+| `observedGeneration` | Yes | Last spec generation reconciled |
+| `startTime` | Yes | Set when the owned Job is first created |
+| `completionTime` | Yes | Set when the session reaches a terminal phase |
+| `conditions` | Yes | See [Conditions](#conditions) |
+| `jobName` / `podName` | Yes | Owned Job name; newest Job-owned Pod (when known) |
+| `matchedPolicies` | Yes | Policy CRDs that contributed to `effectivePolicy` |
+| `effectivePolicy` | Yes | Merged rules + mode propagated to the Job |
+| `policyDecisions` | Yes | Merge-time audit entries only (max 64); runtime append is Phase 3 |
+| `matchedRuntimeProfile` | Yes | Applied `RuntimeProfile` ref (when set) |
+| `result` | Yes | Terminal outcome / summary (on success, failure, timeout, cancel) |
+| `usage` | **No** (reserved) | Phase 4 — token/tool/network metrics from observability backends |
+| `violations` | **No** (reserved) | Phase 3 — real-time policy violations from enforcement backends |
+| `artifacts` | **No** (reserved) | Phase 4 — collected workspace artifacts (`spec.outputs`) |
 
 ### Environment variables injected into the agent container
 
@@ -328,58 +324,190 @@ Plus any `spec.runtime.env` entries the user adds.
 
 ---
 
-## Reconciler flow
+## AgentSession controller reference
+
+The controller lives in `internal/controller/agentsession/` (reconcile loop, policy/runtime watches, validation) and delegates Job construction to `internal/controller/job/` (build, drift detection, status helpers).
+
+### Reconcile triggers
+
+| Source | Mechanism | Effect |
+|--------|-----------|--------|
+| `AgentSession` | Primary `For()` watch | Any spec/status change on the session |
+| Owned `Job` | `Owns(&batchv1.Job{})` | Job status transitions re-queue the parent session |
+| Session `Pod` | `Watches(&corev1.Pod{})` | Job-owned Pods labeled `relay.secureai.dev/session=<name>` re-queue the session (faster `podName` / Running updates) |
+| `AgentPolicy` | Secondary watch | Sessions with matching `spec.policyRefs` re-reconcile |
+| `ToolPolicy` | Secondary watch | Sessions with matching `spec.policyRefs` re-reconcile |
+| `RuntimeProfile` | Secondary watch | Sessions with matching `spec.runtimeProfileRef` re-reconcile |
+| Timer | `RequeueAfter: 15s` | Backstop poll while Job is in flight (non-terminal sessions) |
+
+### Reconcile flow
 
 ```
-                              ┌─────────────────────────────┐
-                              │ Fetch AgentSession           │
-                              └──────────────┬──────────────┘
-                                             ▼
-                                        deleted?
-                                             │ yes ─► return
-                                             ▼
-                              ┌─────────────────────────────┐
-                              │ Initialize phase = Pending   │
-                              └──────────────┬──────────────┘
-                                             ▼
-                              ┌─────────────────────────────┐
-                              │ Validate spec                │
-                              │   - task non-empty           │
-                              │   - runtime.image required   │
-                              │   - orchestrator allowed     │
-                              │   - bounds (temp, tokens, …) │
-                              └──────────────┬──────────────┘
-                                             │ fail ─► Denied + ValidationFailed + return
-                                             ▼
-                              ┌─────────────────────────────┐
-                              │ Ensure backing Job exists    │
-                              │   create if missing          │
-                              │   set OwnerReference         │
-                              │   phase = Starting           │
-                              │   event JobCreated           │
-                              └──────────────┬──────────────┘
-                                             ▼
-                              ┌─────────────────────────────┐
-                              │ Sync status from Job         │
-                              │   active > 0  -> Running     │
-                              │   succeeded   -> Succeeded   │
-                              │   failed/DL   -> Failed /    │
-                              │                  TimedOut    │
-                              └──────────────┬──────────────┘
-                                             ▼
-                              ┌─────────────────────────────┐
-                              │ Find owning Pod, set podName │
-                              └──────────────┬──────────────┘
-                                             ▼
-                              ┌─────────────────────────────┐
-                              │ Patch status subresource     │
-                              │ Requeue if non-terminal      │
-                              └─────────────────────────────┘
+Fetch AgentSession
+    │
+    ├─ deleting? ──► stop owned Job ──► remove finalizer ──► return
+    │
+    ├─ ensure finalizer relay.secureai.dev/finalizer
+    │
+    ├─ phase = Pending (first observation); observedGeneration = generation
+    │
+    ├─ validateSpec ──fail──► Denied, Validated=False, Ready=False, events ──► return
+    │
+    ├─ resolveTask (inline prompt or ConfigMap ref) ──fail──► Denied ──► return
+    │
+    ├─ resolvePolicy (policyRefs merge + inline overrides) ──fail──► Denied ──► return
+    │       └── status.effectivePolicy, matchedPolicies, policyDecisions, PolicyResolved
+    │
+    ├─ resolveRuntimeProfile (optional ref) ──fail──► Denied ──► return
+    │       └── matchedRuntimeProfile, RuntimeProfileResolved
+    │
+    ├─ requireHumanApproval declared? ──► ApprovalNotEnforced warning event (no gate)
+    │
+    ├─ cancelRequested? ──► delete Job ──► Cancelled, Completed, Ready=False ──► return
+    │
+    ├─ already terminal? ──► patch status ──► return (no new Job)
+    │
+    ├─ ensureJob (create or sync owned Job)
+    │       ├── policy env drift / runtime profile drift on pending Job → replace Job
+    │       └── active Job with stale policy env → PolicyEnvDrift condition + warning event
+    │
+    ├─ syncStatusFromJob (Running / Succeeded / Failed / TimedOut)
+    ├─ findPodName (newest Pod owned by current Job UID)
+    ├─ set Ready condition from phase
+    └─ patch status; requeue after 15s if non-terminal
 ```
 
-Reconciliation is idempotent and uses the status subresource exclusively for
-status updates. Garbage collection of the Job (and its Pods) is delegated to
-Kubernetes via owner references.
+Reconciliation is **idempotent**. Status updates use the status subresource with condition merging so concurrent writes do not drop condition types. The owned Job is named deterministically `relay-session-<session-name>`; a foreign Job at that name causes `Phase=Denied` (`JobConflict`).
+
+### Validation (`validateSpec`)
+
+Controller-side checks (in addition to CRD OpenAPI validation):
+
+| Check | Denial reason |
+|-------|---------------|
+| Task: description, prompt, or `promptConfigMapRef` required | `InvalidSpec` |
+| `runtime.image` and `model.provider` / `model.name` non-empty | `InvalidSpec` |
+| `runtime.orchestrator` must be `kubernetes-job` | `InvalidSpec` |
+| Temperature in `[0, 2]`; `maxTokens >= 1`; `timeoutSeconds >= 1` | `InvalidSpec` |
+| Policy numeric caps `>= 0` | `InvalidSpec` |
+| `policyRefs[].kind` in `AgentPolicy`, `ToolPolicy` | `InvalidSpec` |
+| `runtimeProfileRef` shape | `InvalidSpec` |
+| Workspace `size` parseable as quantity | `InvalidSpec` |
+| Missing ConfigMap / key (task resolution) | `InvalidTask` |
+| Missing or invalid `policyRefs` target (policy resolution) | `InvalidPolicy` |
+| Missing `RuntimeProfile` (profile resolution) | `InvalidRuntimeProfile` |
+| Foreign Job occupies deterministic name | `JobConflict` |
+
+### Task resolution
+
+- Inline `spec.task.description` and `spec.task.prompt` pass through to Job env vars.
+- `spec.task.promptConfigMapRef` loads the prompt from a ConfigMap key in the **same namespace** as the session.
+
+### Policy resolution and propagation
+
+Merge order:
+
+1. `spec.policyRefs` in list order (`AgentPolicy`, then `ToolPolicy` recommended)
+2. `spec.policy` inline overrides last
+3. List fields union; numeric caps take the **minimum** (strictest)
+4. Effective mode = strictest (`enforced` > `dry-run` > `audit-only`)
+
+Written to status each reconcile: `effectivePolicy`, `matchedPolicies`, `policyDecisions` (merge-time, max 64). Propagated to the Job as `AGENT_POLICY_*` env vars. **Declared only** — network/tool enforcement is Phase 3.
+
+When a referenced policy changes:
+
+- `status.effectivePolicy` updates immediately
+- **Pending** Job (`Active==0`): controller **replaces** the Job (`PolicyEnvSynced` event)
+- **Active** Job: pod template is immutable; `PolicyPropagated=False` / `PolicyEnvDrift` surfaces stale env
+
+### Runtime profile resolution
+
+When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` (same namespace) and merges container/pod security fields into the Job template. `spec.sidecars` is schema-only until Phase 3. Profile drift follows the same pending-Job-replace rules as policy env drift.
+
+### Job lifecycle (`internal/controller/job`)
+
+| Setting | Value |
+|---------|-------|
+| Name | `relay-session-<session-name>` |
+| Labels | `relay.secureai.dev/session`, `app.kubernetes.io/name=relay`, `app.kubernetes.io/component=agent-session` |
+| `backoffLimit` | `0` |
+| `ttlSecondsAfterFinished` | `300` |
+| Container | `agent`; baseline drops `ALL` capabilities, `allowPrivilegeEscalation=false` |
+| Workspace | Optional `emptyDir` when `spec.workspace.ephemeral=true` |
+
+### Phase mapping from Job status
+
+| Job observation | Session `phase` | `Completed` condition |
+|-----------------|---------------|----------------------|
+| `status.succeeded > 0` | `Succeeded` | `True` / `JobSucceeded` |
+| `status.active > 0` | `Running` | (unchanged) |
+| `DeadlineExceeded` condition | `TimedOut` | `False` / `JobTimedOut` |
+| `status.failed > backoffLimit` | `Failed` | `False` / `JobFailed` |
+| Job created, not yet active | `Starting` | (unchanged) |
+
+### `status.podName` selection
+
+1. List Pods in the session namespace with label `relay.secureai.dev/session=<session.Name>`
+2. Keep only Pods whose ownerReference points at the **current** Job UID
+3. Pick the Pod with the latest `creationTimestamp` (name breaks ties lexicographically)
+
+### Cancellation and deletion
+
+**Cancellation** (`spec.cancelRequested: true`): deletes the owned Job, sets `phase=Cancelled`, `result.outcome=cancelled`, `Completed=True` / `SessionCancelled`, `Ready=False`. Idempotent when the Job is already gone.
+
+**Deletion**: finalizer `relay.secureai.dev/finalizer` blocks AgentSession removal until the owned Job is deleted. `blockOwnerDeletion` is cleared on the Job so deletion cannot deadlock.
+
+### Conditions
+
+| Type | When `True` | When `False` | Common reasons |
+|------|-------------|--------------|----------------|
+| `Validated` | Spec accepted | Validation / resolution failed | `SpecValid`, `InvalidSpec`, `InvalidTask`, `InvalidPolicy`, `InvalidRuntimeProfile`, `JobConflict` |
+| `PolicyResolved` | Policies merged | — | `PoliciesMerged` |
+| `PolicyPropagated` | Job env matches effective policy | Active Job has stale env | `EnvCurrent`, `PolicyEnvDrift` |
+| `RuntimeProfileResolved` | Profile applied or not referenced | — | `ProfileApplied`, `NoProfileRef` |
+| `RuntimeCreated` | Owned Job exists | — | `JobCreated` |
+| `Completed` | Terminal success or cancel | Terminal failure / timeout | `JobSucceeded`, `JobFailed`, `JobTimedOut`, `SessionCancelled` |
+| `Ready` | Session running or succeeded | Not yet running, denied, failed, timed out, or cancelled | `JobRunning`, `JobSucceeded`, `NotReady`, `SessionDenied`, `JobFailed`, `JobTimedOut`, `SessionCancelled` |
+
+`Ready` is an **aggregate** summary derived from `status.phase` — not a Pod readiness probe. It answers: “Is this session actively running or successfully finished?”
+
+### Kubernetes Events
+
+Inspect with:
+
+```bash
+kubectl describe agentsession <name> -n <namespace>
+kubectl get events -n <namespace> --field-selector involvedObject.kind=AgentSession
+```
+
+| Reason | Type | When emitted |
+|--------|------|--------------|
+| `ValidationFailed` | Warning | Spec validation or task/policy/profile resolution failed |
+| `SessionDenied` | Warning | Session reached `Phase=Denied` |
+| `JobCreated` | Normal | Owned Job created |
+| `JobRunning` | Normal | Job has active pods (`Phase=Running`) |
+| `JobSucceeded` | Normal | Job completed successfully |
+| `JobFailed` | Warning | Job failed or timed out |
+| `SessionCancelled` | Normal | `spec.cancelRequested` processed |
+| `ApprovalNotEnforced` | Warning | `requireHumanApproval` declared but MVP does not gate execution |
+| `PolicyResolved` | Normal | Referenced policies merged |
+| `RuntimeProfileResolved` | Normal | RuntimeProfile applied to Job template |
+| `PolicyEnvDrift` | Warning | Effective policy changed but active Job env is stale |
+| `PolicyEnvSynced` | Normal | Pending Job replaced to sync policy env |
+
+### Inspecting a session
+
+```bash
+# High-level phase and conditions
+kubectl get agentsession <name> -o jsonpath='{.status.phase}{"\n"}{range .status.conditions[*]}{.type}={.status} ({.reason}){"\n"}{end}'
+
+# Effective policy and Job linkage
+kubectl get agentsession <name> -o jsonpath='{.status.effectivePolicy.mode}{"\n"}{.status.jobName}{"\n"}{.status.podName}{"\n"}'
+
+# Owned Job and labeled Pods
+kubectl get job relay-session-<name> -o wide
+kubectl get pods -l relay.secureai.dev/session=<name>
+```
 
 ---
 
@@ -576,16 +704,19 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | Reconcile to Kubernetes Job | Yes | `runtime.orchestrator: kubernetes-job` only |
 | Task prompt / ConfigMap prompt | Yes | `spec.task` or `promptConfigMapRef` (same namespace) |
 | `AgentPolicy` + `spec.policyRefs` | Yes | Same-namespace; merge → `status.effectivePolicy` |
-| `ToolPolicy` in `policyRefs` | Yes | Tool/MCP rules merged after earlier refs |
+| `ToolPolicy` in `policyRefs` | Yes | Tool/MCP rules + `maxCallsPerMinute` merged and propagated |
 | Inline `spec.policy` overrides | Yes | Merged last; propagated as `AGENT_POLICY_*` env |
 | Policy modes (`audit-only` / `dry-run` / `enforced`) | Yes | Declared in status + `AGENT_POLICY_MODE`; not enforced yet |
 | `status.policyDecisions` | Yes | Merge-time audit entries only (max 64) |
 | Policy change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
 | `RuntimeProfile.spec.sidecars` | Schema only | Declared; not injected until Phase 3 |
+| Pod watch for reconcile | Yes | Faster `podName` / Running updates |
+| `Ready` condition | Yes | Aggregate readiness from `status.phase` |
+| Finalizer + Job cleanup on delete | Yes | `relay.secureai.dev/finalizer` |
 | Session cancellation | Yes | `spec.cancelRequested` → Job delete + `Phase=Cancelled` |
 | Human approval gate | No | Declared only; does not block runs |
-| `status.usage` / `violations` / `artifacts` | No | Reserved for future observability backends |
+| `status.usage` / `violations` / `artifacts` | No | Reserved — see [Status fields](#status-fields) |
 
 Project tracking: [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).
 
@@ -618,6 +749,7 @@ After running the controller and applying the success sample:
 - [x] `status.jobName` is populated
 - [x] `status.podName` is populated once a pod exists
 - [x] Kubernetes Events `JobCreated`, `JobRunning`, `JobSucceeded` are visible in `kubectl describe`
+- [x] `status.conditions` include `Validated`, `RuntimeCreated`, `Completed`, and `Ready`
 - [x] The failing sample transitions to `Failed` and emits `JobFailed`
 
 ---

@@ -113,6 +113,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		session.Status.Phase = relayv1alpha1.PhaseDenied
 		setCompletionTime(session)
 		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidSpec", verr.Error())
+		setReadyCondition(session)
 		r.recordWarning(session, EventReasonValidationFailed, verr.Error())
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid spec")
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
@@ -129,6 +130,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		session.Status.Phase = relayv1alpha1.PhaseDenied
 		setCompletionTime(session)
 		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidTask", err.Error())
+		setReadyCondition(session)
 		r.recordWarning(session, EventReasonValidationFailed, err.Error())
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid task")
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
@@ -140,6 +142,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		session.Status.Phase = relayv1alpha1.PhaseDenied
 		setCompletionTime(session)
 		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidPolicy", err.Error())
+		setReadyCondition(session)
 		r.recordWarning(session, EventReasonValidationFailed, err.Error())
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid policy")
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
@@ -155,6 +158,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		session.Status.Phase = relayv1alpha1.PhaseDenied
 		setCompletionTime(session)
 		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidRuntimeProfile", err.Error())
+		setReadyCondition(session)
 		r.recordWarning(session, EventReasonValidationFailed, err.Error())
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid runtime profile")
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
@@ -178,6 +182,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, fmt.Errorf("stop runtime Job: %w", err)
 		}
 		r.applyCancellationStatus(session)
+		setReadyCondition(session)
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
 	}
 
@@ -192,6 +197,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if errors.Is(err, ErrJobNotOwned) {
 			session.Status.Phase = relayv1alpha1.PhaseDenied
 			setCondition(session, ConditionValidated, metav1.ConditionFalse, "JobConflict", err.Error())
+			setReadyCondition(session)
 			r.recordWarning(session, EventReasonSessionDenied, err.Error())
 			return ctrl.Result{}, r.patchStatus(ctx, original, session)
 		}
@@ -207,6 +213,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		session.Status.PodName = podName
 	}
 
+	setReadyCondition(session)
 	if err := r.patchStatus(ctx, original, session); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -599,6 +606,31 @@ func setCompletionTime(session *relayv1alpha1.AgentSession) {
 	if session.Status.CompletionTime == nil {
 		now := metav1.Now()
 		session.Status.CompletionTime = &now
+	}
+}
+
+func setReadyCondition(session *relayv1alpha1.AgentSession) {
+	phase := session.Status.Phase
+	if phase == "" {
+		phase = relayv1alpha1.PhasePending
+	}
+
+	switch phase {
+	case relayv1alpha1.PhaseRunning:
+		setCondition(session, ConditionReady, metav1.ConditionTrue, "JobRunning", "Underlying Job is running")
+	case relayv1alpha1.PhaseSucceeded:
+		setCondition(session, ConditionReady, metav1.ConditionTrue, "JobSucceeded", "Underlying Job completed successfully")
+	case relayv1alpha1.PhaseDenied:
+		setCondition(session, ConditionReady, metav1.ConditionFalse, "SessionDenied", "Session was denied by validation or policy")
+	case relayv1alpha1.PhaseFailed:
+		setCondition(session, ConditionReady, metav1.ConditionFalse, "JobFailed", "Underlying Job failed")
+	case relayv1alpha1.PhaseTimedOut:
+		setCondition(session, ConditionReady, metav1.ConditionFalse, "JobTimedOut", "Underlying Job exceeded its activeDeadlineSeconds")
+	case relayv1alpha1.PhaseCancelled:
+		setCondition(session, ConditionReady, metav1.ConditionFalse, "SessionCancelled", "Session was cancelled by user request")
+	default:
+		// Pending/Validating/Starting and any unknown phase.
+		setCondition(session, ConditionReady, metav1.ConditionFalse, "NotReady", "Session is not ready yet")
 	}
 }
 

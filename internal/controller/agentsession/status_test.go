@@ -92,6 +92,7 @@ var _ = Describe("status patch strategy", func() {
 			ConditionPolicyPropagated,
 			ConditionRuntimeCreated,
 			ConditionCompleted,
+			ConditionReady,
 		))
 		Expect(after.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
 	})

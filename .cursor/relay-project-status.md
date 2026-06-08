@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (watch owned Pods)
+> **Last updated:** 2026-06-08 (Phase 3 slice 1: enforcement backend contract)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,11 +13,40 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-_(Queue empty — **Phase 2 is complete**. Promote from **Discovered Follow-Up Tasks** or start **Phase 3** planning when ready.)_
+### Task: Runtime policy decision append
 
-**Next suggested picks:** Document Kubernetes Events · Document future-only status fields · Phase 3 enforcement architecture (design).
+**Goal:**  
+Wire bounded append of `status.policyDecisions` entries with `phase: runtime` into the AgentSession reconciler without wiping merge-time decisions.
 
-**Recently completed** (do not re-implement unless regressions): **Watch owned Pods** (`Watches(Pod)` + Pod→AgentSession mapper + tests); **Propagate `ToolPolicy.maxCallsPerMinute`** (merge → `status.effectivePolicy`, `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE` env); **Controller package split** (`internal/controller/agentsession/`, `internal/controller/job/`); **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+**Why it matters:**  
+Phase 3 backends and reporters need a safe status update path. Slice 1 defined `internal/enforcement` types and `AppendRuntimeDecisions`; this slice connects that helper to controller status patches.
+
+**Scope:**
+- Add reconciler helper(s) to merge runtime reports into `status.policyDecisions` using `enforcement.AppendRuntimeDecisions`.
+- Preserve merge-time entries and controller-owned status fields on patch.
+- Envtest coverage for append + truncation behavior.
+
+**Non-goals:**
+- Do not implement NetworkPolicy, sidecars, or real runtime reporters yet.
+- Do not populate `status.violations` (slice 4).
+- Do not add new CRDs.
+
+**Acceptance criteria:**
+- Runtime decisions append with `phase: runtime` under the shared cap (`enforcement.MaxPolicyDecisions`).
+- Merge-time decisions are never dropped when appending a bounded runtime batch.
+- `make test` passes.
+
+**Expected files:**
+- `internal/controller/agentsession/` (status patch helper)
+- `internal/enforcement/` (reuse existing append helper)
+- `.cursor/relay-project-status.md`
+
+**Verification command:**  
+`make test`
+
+**Next suggested picks:** NetworkPolicy baseline · Violation reporting MVP.
+
+**Recently completed** (do not re-implement unless regressions): **Phase 3 enforcement backend contract** (`internal/enforcement/` — `SessionContext`, `Backend`, mode semantics, `AppendRuntimeDecisions` stub); **Phase 3 enforcement plan** (`docs/phase-3-enforcement-architecture.md` + task decomposition); **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
 
 ---
 
@@ -278,78 +307,29 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 **Verification:** `make test` (pass 2026-06-08)
 
-### Task: Document future-only status fields
+### Task: Document future-only status fields — **done (2026-06-08)**
 
-**Why it matters:**  
-`status.usage`, `status.violations`, and `status.artifacts` exist in the API but are not populated; operators should not expect them in MVP.
+**Shipped:** API comments on `usage` / `violations` / `artifacts`; README status table with populated vs reserved (Phase 3/4).
 
-**Scope:**
-- Add kubebuilder/API comments marking fields as reserved for future phases.
-- Add a README table: field → populated? → which phase owns it.
+**Verification:** `make manifests && make test` (pass 2026-06-08)
 
-**Non-goals:**
-- Do not implement sidecars, enforcement, or artifact collection.
+### Task: Document Kubernetes Events emitted by the controller — **done (2026-06-08)**
 
-**Acceptance criteria:**
-- CRD OpenAPI descriptions state MVP population status.
-- README lists future-only status fields explicitly.
+**Shipped:** README [Kubernetes Events](#kubernetes-events) catalog (all `EventReason*` constants, Normal/Warning, `kubectl describe` examples). Constants already commented in `internal/controller/agentsession/constants.go`.
 
-**Expected files:**
-- `api/v1alpha1/agentsession_types.go`
-- `config/crd/bases/relay.secureai.dev_agentsessions.yaml` (generated)
-- `README.md`
+**Verification:** `make test` (pass 2026-06-08)
 
-**Verification command:**  
-`make manifests && make test`
+### Task: Add AgentSession Ready condition — **done (2026-06-08)**
 
-### Task: Document Kubernetes Events emitted by the controller
+**Shipped:**
+- Added `status.conditions` type `Ready` (`internal/controller/agentsession/constants.go`)
+- Reconciler sets `Ready` before every status patch based on `status.phase` (`internal/controller/agentsession/reconciler.go`)
+- API comment documents all condition types including `Ready`
+- Envtest coverage:
+  - Denied path asserts `Ready=False`
+  - Job-running path asserts `Ready=True`
 
-**Why it matters:**  
-Events are the primary MVP observability surface; operators need a stable catalog before Phase 4 structured events.
-
-**Scope:**
-- Document `EventReason*` constants and when each fires (validation, Job create, running, success, failure, denial, cancellation once added).
-- Cross-link to README “inspect events” section.
-
-**Non-goals:**
-- Do not add OTLP, audit sinks, or UI.
-- Do not change event text unless incorrect.
-
-**Acceptance criteria:**
-- README (or `docs/`) lists all current event reasons and types (Normal/Warning).
-
-**Expected files:**
-- `README.md`
-- `internal/controller/constants.go` (inline comments on constants — partial done 2026-06-04)
-
-**Verification command:**  
-`make test` (no behavior change; docs-only)
-
-### Task: Add AgentSession Ready condition
-
-**Why it matters:**  
-`kubernetes-controller.mdc` expects a `Ready` condition summarizing whether the session can proceed; today `Validated`, `PolicyResolved`, `PolicyPropagated`, `RuntimeCreated`, and `Completed` exist but no aggregate `Ready`.
-
-**Scope:**
-- Define `Ready` condition semantics (e.g. True when Job running or terminal success path; False when denied/validation failed).
-- Set/update in reconciler alongside existing conditions.
-- Envtest assertions on happy path and denial.
-
-**Non-goals:**
-- Do not add approval blocking or enforcement.
-- Do not add new CRDs.
-
-**Acceptance criteria:**
-- `status.conditions` includes `Ready` with documented meaning in API comments.
-- Envtest covers at least Running and Denied.
-
-**Expected files:**
-- `api/v1alpha1/agentsession_types.go` (comments)
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/agentsession_controller_test.go`
-
-**Verification command:**  
-`make test`
+**Verification:** `make test` (pass 2026-06-08)
 
 ### Task: ToolPolicy MCP argument constraints (schema design)
 
@@ -380,21 +360,27 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-08)
 
+### Task: Phase 3 enforcement backend contract — **done (2026-06-08)**
+
+**Shipped:** `internal/enforcement/` — `SessionContext`, `Backend`, `Capabilities`, `RuntimeReport`, `EvaluateRestrictive`, `ActionForMode`, `AppendRuntimeDecisions`; unit tests for mode mapping, context build, and truncation.
+
+**Verification:** `make test` (pass 2026-06-08)
+
 ### Task: Append runtime policy decisions from enforcement backends
 
 **Why it matters:**  
-`status.policyDecisions` is merge-time only today; Phase 3 sidecars/gateways need to append `phase: runtime` entries without wiping merge decisions.
+`status.policyDecisions` is merge-time only today; Phase 3 sidecars/gateways need to append `phase: runtime` entries without wiping merge decisions. **Append helper exists in `internal/enforcement`** — next slice wires it into the reconciler (promoted to **Ready for Cursor Queue**).
 
 **Scope:**
-- Define append/merge strategy for runtime decisions (cap total list, preserve merge summary).
-- Extension point for enforcement backends to report allow/deny/dry-run at request time.
+- Wire `enforcement.AppendRuntimeDecisions` into AgentSession status patches.
+- Envtest for bounded append preserving merge-time entries.
 
 **Non-goals:**
-- Do not implement Envoy/tool gateway in this task.
+- Do not implement Envoy/tool gateway or real runtime reporters in this task.
 
 **Acceptance criteria:**
-- Documented contract for runtime decision producers.
-- Status update path supports bounded append.
+- Reconciler status path supports bounded runtime append.
+- Merge-time decisions preserved under cap.
 
 **Expected files:**
 - `api/v1alpha1/policy_types.go`
@@ -428,30 +414,11 @@ RBAC must match kubebuilder markers and actual client calls (Jobs delete, Config
 **Verification command:**  
 `make manifests && make test`
 
-### Task: Update README current-state section
+### Task: Update README current-state section — **done (2026-06-08)**
 
-**Why it matters:**  
-README mixes vision and MVP reality; `cancelRequested`, declared-vs-enforced policy, and unimplemented `outputs` should be obvious.
+**Shipped:** README [AgentSession controller reference](#agentsession-controller-reference), updated MVP behavior table, status fields, and “What the MVP does” list.
 
-**Scope:**
-- Add/update a “Current MVP behavior” section aligned with **What works today** and **Known gaps** here.
-- Document `spec.cancelRequested` once cancellation status/events are done.
-- Clarify env vars are propagation hooks, not enforcement.
-
-**Non-goals:**
-- Do not document unimplemented features as shipped.
-- Do not add UI or enforcement guides.
-
-**Acceptance criteria:**
-- README accurately reflects controller behavior and explicit non-goals.
-- Cancellation and policy sections match the status file.
-
-**Expected files:**
-- `README.md`
-- `.cursor/relay-project-status.md`
-
-**Verification command:**  
-`make test` (docs-only)
+**Verification:** `make test` (pass 2026-06-08)
 
 ### Task: Pin dev tool versions in README
 
@@ -721,13 +688,22 @@ Extract inline policy into composable, versioned CRDs without breaking AgentSess
 
 Real governance beyond env var propagation. Start narrow, prove value, then expand.
 
-- [ ] **Enforcement architecture** — Define control-plane vs data-plane interfaces (sidecar, gateway, eBPF agent contracts)
-- [ ] **NetworkPolicy baseline** — Auto-generate namespace-scoped NetworkPolicy from session policy (CIDR/domain hints)
-- [ ] **DNS / egress proxy** — FQDN allow/deny enforcement (Envoy or dedicated DNS proxy sidecar)
-- [ ] **Envoy sidecar injection** — Optional per-session sidecar via RuntimeProfile; egress filter config from policy
-- [ ] **Tool gateway integration** — Route tool/MCP calls through governed gateway; log + enforce
-- [ ] **Violation reporting** — Populate `status.violations` from enforcement backends in real time
-- [ ] **File/workspace policy** — Read/write path restrictions (volume mounts, seccomp, or FS proxy)
+**Planning outline:** [`docs/phase-3-enforcement-architecture.md`](../docs/phase-3-enforcement-architecture.md)
+
+**Phase 3 principle:** the controller declares desired governance state; replaceable data-plane backends enforce and report runtime evidence. Keep each slice backend-neutral until a backend-specific task needs otherwise.
+
+**Ordered implementation slices:**
+
+1. [x] **Enforcement backend contract** — `internal/enforcement/` (`SessionContext`, `Backend`, mode semantics, `AppendRuntimeDecisions`); unit tests; aligns with architecture doc.
+2. [ ] **Runtime policy decision append** — Preserve merge-time decisions while appending bounded `phase: runtime` decisions.
+3. [ ] **NetworkPolicy baseline** — Generate owned namespace-scoped NetworkPolicies for coarse CIDR/network enforcement and document FQDN limits.
+4. [ ] **Violation reporting MVP** — Populate bounded `status.violations` from runtime decision reports.
+5. [ ] **RuntimeProfile sidecar injection** — Inject known enabled sidecar types from `RuntimeProfile.spec.sidecars[]` into pending Job pod templates.
+6. [ ] **Tool gateway contract** — Define request/response/reporting contract for MCP/tool authorization; no production gateway yet.
+7. [ ] **DNS / egress proxy prototype** — First richer network backend for FQDN/CIDR policy, honoring `audit-only` / `dry-run` / `enforced`.
+8. [ ] **File/workspace policy design** — Define feasible read/write restriction model (mount strategy, FS proxy, sandbox, or explicit deferral).
+
+**Tracked but intentionally later:** Envoy, Cilium/eBPF, gVisor/Kata/Firecracker, multi-backend orchestration, approval gates, and UI timelines.
 
 ---
 

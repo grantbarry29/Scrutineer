@@ -554,9 +554,13 @@ spec:
             description: AgentSessionStatus defines the observed state of an AgentSession.
             properties:
               artifacts:
-                description: Artifacts references artifacts collected from this session.
+                description: |-
+                  Artifacts references artifacts collected from this session.
+                  Not populated in the MVP; reserved for Phase 4 log/artifact collection.
                 items:
-                  description: ArtifactRef references an artifact produced by an AgentSession.
+                  description: |-
+                    ArtifactRef references an artifact produced by an AgentSession.
+                    Reserved for Phase 4 log/artifact collection; the MVP controller does not populate this field.
                   properties:
                     mediaType:
                       description: MediaType is the artifact's MIME type.
@@ -578,8 +582,17 @@ spec:
                 format: date-time
                 type: string
               conditions:
-                description: Conditions represent the latest available observations
-                  of the session's state.
+                description: |-
+                  Conditions represent the latest available observations of the session's state.
+
+                  Condition types (value stored in metav1.Condition.Type):
+                  - Validated: spec/task/policy validation result
+                  - PolicyResolved: referenced policies merged into an effective policy (control-plane)
+                  - PolicyPropagated: effective policy propagated to the runtime Job env/template
+                  - RuntimeProfileResolved: runtime profile referenced by spec.runtimeProfileRef is applied
+                  - RuntimeCreated: underlying runtime Job created/exists
+                  - Completed: terminal state mapping from Job succeeded/failed/timeout
+                  - Ready: aggregate readiness — True when phase is Running or Succeeded; False otherwise
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -924,7 +937,9 @@ spec:
                 format: date-time
                 type: string
               usage:
-                description: Usage captures resource/usage metrics for the session.
+                description: |-
+                  Usage captures resource/usage metrics for the session.
+                  Not populated in the MVP; reserved for Phase 4 observability backends.
                 properties:
                   inputTokens:
                     description: InputTokens is the total number of input tokens consumed.
@@ -947,11 +962,13 @@ spec:
                     type: integer
                 type: object
               violations:
-                description: Violations records policy violations observed during
-                  this session.
+                description: |-
+                  Violations records policy violations observed during this session.
+                  Not populated in the MVP; reserved for Phase 3 enforcement backends.
                 items:
-                  description: PolicyViolation records a single policy violation observed
-                    during a session.
+                  description: |-
+                    PolicyViolation records a single policy violation observed during a session.
+                    Reserved for Phase 3 enforcement backends; the MVP controller does not populate this field.
                   properties:
                     message:
                       description: Message is a human-readable description of the

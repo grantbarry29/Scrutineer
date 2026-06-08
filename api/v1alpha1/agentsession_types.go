@@ -238,6 +238,7 @@ type SessionResult struct {
 }
 
 // SessionUsage captures resource/usage metrics for an AgentSession.
+// Reserved for Phase 4 observability backends; the MVP controller does not populate this field.
 type SessionUsage struct {
 	// InputTokens is the total number of input tokens consumed.
 	// +optional
@@ -254,6 +255,7 @@ type SessionUsage struct {
 }
 
 // PolicyViolation records a single policy violation observed during a session.
+// Reserved for Phase 3 enforcement backends; the MVP controller does not populate this field.
 type PolicyViolation struct {
 	// Time when the violation was observed.
 	Time metav1.Time `json:"time"`
@@ -267,6 +269,7 @@ type PolicyViolation struct {
 }
 
 // ArtifactRef references an artifact produced by an AgentSession.
+// Reserved for Phase 4 log/artifact collection; the MVP controller does not populate this field.
 type ArtifactRef struct {
 	// Name is a human-readable name of the artifact.
 	Name string `json:"name"`
@@ -296,6 +299,15 @@ type AgentSessionStatus struct {
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
 
 	// Conditions represent the latest available observations of the session's state.
+	//
+	// Condition types (value stored in metav1.Condition.Type):
+	// - Validated: spec/task/policy validation result
+	// - PolicyResolved: referenced policies merged into an effective policy (control-plane)
+	// - PolicyPropagated: effective policy propagated to the runtime Job env/template
+	// - RuntimeProfileResolved: runtime profile referenced by spec.runtimeProfileRef is applied
+	// - RuntimeCreated: underlying runtime Job created/exists
+	// - Completed: terminal state mapping from Job succeeded/failed/timeout
+	// - Ready: aggregate readiness — True when phase is Running or Succeeded; False otherwise
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -338,14 +350,17 @@ type AgentSessionStatus struct {
 	Result *SessionResult `json:"result,omitempty"`
 
 	// Usage captures resource/usage metrics for the session.
+	// Not populated in the MVP; reserved for Phase 4 observability backends.
 	// +optional
 	Usage *SessionUsage `json:"usage,omitempty"`
 
 	// Violations records policy violations observed during this session.
+	// Not populated in the MVP; reserved for Phase 3 enforcement backends.
 	// +optional
 	Violations []PolicyViolation `json:"violations,omitempty"`
 
 	// Artifacts references artifacts collected from this session.
+	// Not populated in the MVP; reserved for Phase 4 log/artifact collection.
 	// +optional
 	Artifacts []ArtifactRef `json:"artifacts,omitempty"`
 }
