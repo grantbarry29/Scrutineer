@@ -128,6 +128,11 @@ type PolicyRules struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MaxToolCalls *int32 `json:"maxToolCalls,omitempty"`
+
+	// MaxCallsPerMinute caps tool invocations per minute (declared and propagated; enforcement is Phase 3).
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxCallsPerMinute *int32 `json:"maxCallsPerMinute,omitempty"`
 }
 
 // PolicyRef references a reusable policy CRD in the same namespace as the AgentSession.

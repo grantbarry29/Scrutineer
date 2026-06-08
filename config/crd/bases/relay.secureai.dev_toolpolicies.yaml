@@ -64,8 +64,8 @@ spec:
                   type: string
                 type: array
               maxCallsPerMinute:
-                description: MaxCallsPerMinute caps tool invocations per minute (MVP
-                  declaration only).
+                description: MaxCallsPerMinute caps tool invocations per minute (propagated
+                  to effective policy and env; enforcement is Phase 3).
                 format: int32
                 minimum: 0
                 type: integer

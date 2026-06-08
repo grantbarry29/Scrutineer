@@ -46,6 +46,18 @@ func TestMergeRules_minCaps(t *testing.T) {
 	}
 }
 
+func TestMergeRules_minMaxCallsPerMinute(t *testing.T) {
+	a := int32(60)
+	b := int32(10)
+	got := MergeRules(
+		relayv1alpha1.PolicyRules{MaxCallsPerMinute: &a},
+		relayv1alpha1.PolicyRules{MaxCallsPerMinute: &b},
+	)
+	if got.MaxCallsPerMinute == nil || *got.MaxCallsPerMinute != 10 {
+		t.Fatalf("MaxCallsPerMinute = %v, want 10", got.MaxCallsPerMinute)
+	}
+}
+
 func TestStrictestMode(t *testing.T) {
 	got := StrictestMode(
 		relayv1alpha1.PolicyModeAuditOnly,

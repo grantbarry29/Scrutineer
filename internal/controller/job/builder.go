@@ -204,6 +204,7 @@ func buildEnv(session *relayv1alpha1.AgentSession, task *Task, resolved *policy.
 		{Name: EnvPolicyRequireApproval, Value: csv(rules.RequireHumanApproval)},
 		{Name: EnvPolicyMaxNetReqs, Value: int32PtrToStr(rules.MaxNetworkRequests)},
 		{Name: EnvPolicyMaxToolCalls, Value: int32PtrToStr(rules.MaxToolCalls)},
+		{Name: EnvPolicyMaxToolCallsPerMinute, Value: int32PtrToStr(rules.MaxCallsPerMinute)},
 		{Name: EnvPolicyMode, Value: string(mode)},
 	}
 

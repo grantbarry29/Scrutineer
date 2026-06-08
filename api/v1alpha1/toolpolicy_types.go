@@ -36,7 +36,7 @@ type ToolPolicySpec struct {
 	// +optional
 	MaxToolCalls *int32 `json:"maxToolCalls,omitempty"`
 
-	// MaxCallsPerMinute caps tool invocations per minute (MVP declaration only).
+	// MaxCallsPerMinute caps tool invocations per minute (propagated to effective policy and env; enforcement is Phase 3).
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MaxCallsPerMinute *int32 `json:"maxCallsPerMinute,omitempty"`
@@ -45,9 +45,10 @@ type ToolPolicySpec struct {
 // ToolPolicyRules maps a ToolPolicy spec into PolicyRules for merge.
 func (s *ToolPolicySpec) ToolPolicyRules() PolicyRules {
 	return PolicyRules{
-		AllowedTools: s.AllowedTools,
-		DeniedTools:  s.DeniedTools,
-		MaxToolCalls: s.MaxToolCalls,
+		AllowedTools:      s.AllowedTools,
+		DeniedTools:       s.DeniedTools,
+		MaxToolCalls:      s.MaxToolCalls,
+		MaxCallsPerMinute: s.MaxCallsPerMinute,
 	}
 }
 

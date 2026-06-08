@@ -99,6 +99,9 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 	if spec.Policy.MaxToolCalls != nil && *spec.Policy.MaxToolCalls < 0 {
 		return fmt.Errorf("spec.policy.maxToolCalls must be >= 0")
 	}
+	if spec.Policy.MaxCallsPerMinute != nil && *spec.Policy.MaxCallsPerMinute < 0 {
+		return fmt.Errorf("spec.policy.maxCallsPerMinute must be >= 0")
+	}
 
 	return nil
 }

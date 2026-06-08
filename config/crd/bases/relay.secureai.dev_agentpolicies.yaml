@@ -86,6 +86,12 @@ spec:
                 items:
                   type: string
                 type: array
+              maxCallsPerMinute:
+                description: MaxCallsPerMinute caps tool invocations per minute (declared
+                  and propagated; enforcement is Phase 3).
+                format: int32
+                minimum: 0
+                type: integer
               maxNetworkRequests:
                 description: MaxNetworkRequests caps the total number of network requests
                   the agent may issue.

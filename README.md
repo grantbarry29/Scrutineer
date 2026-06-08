@@ -318,7 +318,11 @@ AGENT_POLICY_DENIED_TOOLS            # comma-separated
 AGENT_POLICY_REQUIRE_HUMAN_APPROVAL  # comma-separated
 AGENT_POLICY_MAX_NETWORK_REQUESTS
 AGENT_POLICY_MAX_TOOL_CALLS
+AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE
+AGENT_POLICY_MODE
 ```
+
+`AGENT_POLICY_*` values are **declared and propagated** from merged policy; rate limiting and other enforcement are **Phase 3** (sidecar / tool gateway).
 
 Plus any `spec.runtime.env` entries the user adds.
 

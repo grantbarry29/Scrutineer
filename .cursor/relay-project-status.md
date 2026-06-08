@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (controller package split)
+> **Last updated:** 2026-06-08 (propagate maxCallsPerMinute)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -15,9 +15,9 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 
 _(Queue empty — **Phase 2 is complete**. Promote from **Discovered Follow-Up Tasks** or start **Phase 3** planning when ready.)_
 
-**Next suggested picks:** Propagate `maxCallsPerMinute` · Watch owned Pods · Document Kubernetes Events · Phase 3 enforcement architecture (design).
+**Next suggested picks:** Watch owned Pods · Document Kubernetes Events · Phase 3 enforcement architecture (design).
 
-**Recently completed** (do not re-implement unless regressions): **Controller package split** (`internal/controller/agentsession/`, `internal/controller/job/`); **Phase 2 reusable policy model** (AgentPolicy, ToolPolicy, RuntimeProfile, policy merge, watches, Job sync, docs, samples, e2e); Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+**Recently completed** (do not re-implement unless regressions): **Propagate `ToolPolicy.maxCallsPerMinute`** (merge → `status.effectivePolicy`, `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE` env); **Controller package split** (`internal/controller/agentsession/`, `internal/controller/job/`); **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
 
 ---
 
@@ -47,7 +47,7 @@ _(Queue empty — **Phase 2 is complete**. Promote from **Discovered Follow-Up T
 | Profile → Job pod template | Yes | Yes | — |
 | `RuntimeProfile` watch + pending Job replace | Yes | Yes | — |
 
-**Deferred (tracked, not Phase 2 blockers):** `maxCallsPerMinute`, ToolPolicy argument constraints, mode enforcement, runtime `policyDecisions` append — see table under Phase 2 roadmap below.
+**Deferred (tracked, not Phase 2 blockers):** ToolPolicy argument constraints, mode enforcement, runtime `policyDecisions` append — see table under Phase 2 roadmap below.
 
 ---
 
@@ -393,26 +393,11 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 **Verification command:**  
 `make manifests && make test`
 
-### Task: Propagate ToolPolicy maxCallsPerMinute to runtime hooks
+### Task: Propagate ToolPolicy maxCallsPerMinute to runtime hooks — **done (2026-06-08)**
 
-**Why it matters:**  
-`ToolPolicy.spec.maxCallsPerMinute` is stored in the CRD but not merged into `PolicyRules` or env vars; operators may assume it is active.
+**Shipped:** `MaxCallsPerMinute` on `PolicyRules`; min-merge semantics; `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE` env + drift detection; merge-time `policyDecisions` cap entry; envtest + README. **Enforcement:** Phase 3 only.
 
-**Scope:**
-- Decide propagation path (env var and/or `status.effectivePolicy` extension).
-- Document until enforced in Phase 3.
-
-**Non-goals:**
-- Do not implement rate limiting enforcement.
-
-**Acceptance criteria:**
-- Field is visible in effective policy or documented as schema-only until Phase 3.
-
-**Expected files:**
-- `api/v1alpha1/toolpolicy_types.go`, `internal/policy/`, `README.md`
-
-**Verification command:**  
-`make test`
+**Verification:** `make test` (pass 2026-06-08)
 
 ### Task: Append runtime policy decisions from enforcement backends
 
@@ -516,7 +501,7 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 |------|-------|-------|
 | **AgentSession CRD** | Done | `relay.secureai.dev/v1alpha1`, spec/status + `policyRefs` |
 | **AgentPolicy CRD** | Done | Reusable rules + `mode`; `spec.policyRefs`; watch → re-reconcile |
-| **ToolPolicy CRD** | Done | Tool/MCP rules; merge + watch; `maxCallsPerMinute` schema-only until follow-up |
+| **ToolPolicy CRD** | Done | Tool/MCP rules; merge + watch; `maxCallsPerMinute` propagated to effective policy + env |
 | **Controller (kubernetes-job)** | Done | Reconciles to `batch/v1` Job, lifecycle phases, conditions, events |
 | **Policy propagation** | Done | Merge `policyRefs` + inline → `status.effectivePolicy` → `AGENT_POLICY_*` env |
 | **Policy enforcement** | Not started | Env vars are hooks only; no network/tool/file gates |
@@ -741,14 +726,13 @@ Extract inline policy into composable, versioned CRDs without breaking AgentSess
 
 | Item | Where tracked | Notes |
 |------|---------------|-------|
-| `ToolPolicy.maxCallsPerMinute` not in effective policy/env | Discovered: *Propagate ToolPolicy maxCallsPerMinute* | Schema exists; not merged yet |
 | ToolPolicy MCP **argument constraints** | Discovered: *ToolPolicy MCP argument constraints* | Roadmap mentioned; out of initial ToolPolicy slice |
 | Inline `spec.policy.mode` override | Not planned | Only CRD modes merge today |
 | Runtime `policyDecisions` append | Discovered: *Append runtime policy decisions* | Phase 3 enforcement |
 | Active Job env stale after policy change | `PolicyEnvDrift` condition | Documented; immutable Job template |
 | Mode **enforcement** (audit/dry-run/enforced behavior) | Phase 3 roadmap | Declared + propagated only |
 
-**Phase 2 is complete** for control-plane policy and runtime profiles. Optional polish (`maxCallsPerMinute`, argument constraints) stays in **Discovered Follow-Up Tasks**. Mode enforcement and sidecar injection are **Phase 3**.
+**Phase 2 is complete** for control-plane policy and runtime profiles. Optional polish (argument constraints) stays in **Discovered Follow-Up Tasks**. Mode enforcement and sidecar injection are **Phase 3**.
 
 ---
 

@@ -27,6 +27,7 @@ func MergeRules(base, overlay relayv1alpha1.PolicyRules) relayv1alpha1.PolicyRul
 		RequireHumanApproval: unionStrings(base.RequireHumanApproval, overlay.RequireHumanApproval),
 		MaxNetworkRequests:   minInt32Ptr(base.MaxNetworkRequests, overlay.MaxNetworkRequests),
 		MaxToolCalls:         minInt32Ptr(base.MaxToolCalls, overlay.MaxToolCalls),
+		MaxCallsPerMinute:    minInt32Ptr(base.MaxCallsPerMinute, overlay.MaxCallsPerMinute),
 	}
 }
 

@@ -391,12 +391,14 @@ var _ = Describe("AgentSession reconciler", func() {
 				},
 			})).To(Succeed())
 			maxTools := int32(20)
+			maxPerMin := int32(10)
 			Expect(k8sClient.Create(testCtx, &relayv1alpha1.ToolPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "tool-base", Namespace: ns},
 				Spec: relayv1alpha1.ToolPolicySpec{
-					AllowedTools: []string{"shell"},
-					DeniedTools:  []string{"kubectl"},
-					MaxToolCalls: &maxTools,
+					AllowedTools:      []string{"shell"},
+					DeniedTools:       []string{"kubectl"},
+					MaxToolCalls:      &maxTools,
+					MaxCallsPerMinute: &maxPerMin,
 				},
 			})).To(Succeed())
 
@@ -417,12 +419,18 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElement("dropbox.com"))
 			Expect(got.Status.EffectivePolicy.DeniedTools).To(ContainElements("kubectl", "deploy"))
+			Expect(got.Status.EffectivePolicy.MaxToolCalls).NotTo(BeNil())
+			Expect(*got.Status.EffectivePolicy.MaxToolCalls).To(Equal(int32(20)))
+			Expect(got.Status.EffectivePolicy.MaxCallsPerMinute).NotTo(BeNil())
+			Expect(*got.Status.EffectivePolicy.MaxCallsPerMinute).To(Equal(int32(10)))
 			Expect(got.Status.MatchedPolicies).To(HaveLen(2))
 
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
 			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl"))
+			Expect(env[relayjob.EnvPolicyMaxToolCalls]).To(Equal("20"))
+			Expect(env[relayjob.EnvPolicyMaxToolCallsPerMinute]).To(Equal("10"))
 		})
 
 		It("replaces a pending Job when policy env changes", func() {

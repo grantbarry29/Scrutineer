@@ -73,6 +73,9 @@ func BuildMergeDecisions(resolved Resolved, now time.Time) []relayv1alpha1.Polic
 	if resolved.Rules.MaxToolCalls != nil {
 		out = append(out, capDecision(ts, mode, "maxToolCalls", *resolved.Rules.MaxToolCalls))
 	}
+	if resolved.Rules.MaxCallsPerMinute != nil {
+		out = append(out, capDecision(ts, mode, "maxCallsPerMinute", *resolved.Rules.MaxCallsPerMinute))
+	}
 
 	if len(out) > MaxMergePolicyDecisions {
 		omitted := len(out) - (MaxMergePolicyDecisions - 1)
