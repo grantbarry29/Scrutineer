@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (propagate maxCallsPerMinute)
+> **Last updated:** 2026-06-08 (watch owned Pods)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -15,9 +15,9 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 
 _(Queue empty — **Phase 2 is complete**. Promote from **Discovered Follow-Up Tasks** or start **Phase 3** planning when ready.)_
 
-**Next suggested picks:** Watch owned Pods · Document Kubernetes Events · Phase 3 enforcement architecture (design).
+**Next suggested picks:** Document Kubernetes Events · Document future-only status fields · Phase 3 enforcement architecture (design).
 
-**Recently completed** (do not re-implement unless regressions): **Propagate `ToolPolicy.maxCallsPerMinute`** (merge → `status.effectivePolicy`, `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE` env); **Controller package split** (`internal/controller/agentsession/`, `internal/controller/job/`); **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+**Recently completed** (do not re-implement unless regressions): **Watch owned Pods** (`Watches(Pod)` + Pod→AgentSession mapper + tests); **Propagate `ToolPolicy.maxCallsPerMinute`** (merge → `status.effectivePolicy`, `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE` env); **Controller package split** (`internal/controller/agentsession/`, `internal/controller/job/`); **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
 
 ---
 
@@ -272,30 +272,11 @@ Review only (no code change required beyond status file)
 
 Scoped tasks found by repository audit or implementation work. **Not in the active queue** until promoted. Pick one at a time into **Ready for Cursor Queue** when appropriate.
 
-### Task: Watch owned Pods for reconcile triggers
+### Task: Watch owned Pods for reconcile triggers — **done (2026-06-08)**
 
-**Why it matters:**  
-`status.podName` and Running transitions currently depend on Job reconcile and `RequeueAfter`; watching Pods reduces latency and unnecessary requeues.
+**Shipped:** Added `Watches(&corev1.Pod{})` in `SetupWithManager`; Pod event mapper enqueues the labeled AgentSession only for Job-owned Pods; envtest mapping coverage added.
 
-**Scope:**
-- Register a controller-runtime watch on Pods owned by session Jobs (label or owner reference filter).
-- Map Pod events to AgentSession reconcile requests.
-- Keep RBAC markers aligned (`pods` get/list/watch already granted).
-
-**Non-goals:**
-- Do not implement log/artifact collection.
-- Do not add a new CRD or UI.
-
-**Acceptance criteria:**
-- Pod creation/update triggers AgentSession reconcile without relying solely on `RequeueAfter`.
-- Envtest or integration test demonstrates earlier `status.podName` population where practical.
-
-**Expected files:**
-- `internal/controller/agentsession_controller.go`
-- `config/rbac/role.yaml` (generated, only if markers change)
-
-**Verification command:**  
-`make test`
+**Verification:** `make test` (pass 2026-06-08)
 
 ### Task: Document future-only status fields
 
@@ -586,7 +567,7 @@ Scan against `.cursor/rules/` (product vision, workflow, `kubernetes-controller`
 | Finding | Suggested task |
 |---------|----------------|
 | No `Ready` condition on AgentSession | New queue card: align with controller-rules pattern |
-| Pod watch for faster `podName` / Running | **Watch owned Pods** (discovered) |
+| Pod watch for faster `podName` / Running | Done (2026-06-08): Pod watch + mapper in `internal/controller/agentsession/` |
 | Task one-of only in controller | Optional CRD CEL; controller path sufficient for MVP |
 | `PhaseValidating` unused | Defer or wire on first reconcile |
 | README reconciler diagram / events table | **Document Events** + **README current-state** |

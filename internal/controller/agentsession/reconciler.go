@@ -566,6 +566,10 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&relayv1alpha1.AgentSession{}).
 		Owns(&batchv1.Job{}).
 		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.mapPodToSessions),
+		).
+		Watches(
 			&relayv1alpha1.AgentPolicy{},
 			handler.EnqueueRequestsFromMapFunc(r.mapAgentPolicyToSessions),
 		).
