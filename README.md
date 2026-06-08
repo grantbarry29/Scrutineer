@@ -114,7 +114,8 @@ a generic workflow task. The spec captures four things:
 | `task`     | What the agent should do (description / prompt / prompt ConfigMapRef) |
 | `model`    | Which provider/model the agent should call                            |
 | `runtime`  | Where/how it should execute (orchestrator, image, command, resources) |
-| `policy`   | Inline governance rules (domains, tools, approvals, quotas)           |
+| `policy`   | Inline governance overrides (domains, tools, approvals, quotas)     |
+| `policyRefs` | Reusable `AgentPolicy` / `ToolPolicy` objects (same namespace)    |
 | `workspace`| Per-session workspace volume (ephemeral for MVP)                      |
 | `outputs`  | Whether to retain logs/artifacts                                      |
 | `cancelRequested` | When `true`, stop the owned Job and reach terminal `Cancelled` |
@@ -143,6 +144,56 @@ kubectl apply -f config/samples/relay_v1alpha1_agentsession_cancel.yaml
 ```
 
 Cancellation stops the **Kubernetes runtime** (Job/Pod). It does not send a graceful shutdown signal to agent logic inside the container; stronger teardown belongs in future runtime profiles.
+
+### Reference scoping (MVP)
+
+External references resolve in the **same namespace** as the `AgentSession`:
+
+| Ref | Kind | Namespace behavior |
+|-----|------|-------------------|
+| `spec.task.promptConfigMapRef` | ConfigMap | Same namespace as session |
+| `spec.policyRefs[]` | AgentPolicy, ToolPolicy | Same namespace as session |
+
+Cross-namespace refs are not supported in the MVP. Future CRDs may add an explicit `namespace` field on refs.
+
+### Reusable policy (`AgentPolicy` + `ToolPolicy`)
+
+Platform teams can publish baseline governance once; sessions reference policies and add inline overrides.
+
+**Merge order** (see [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md) for full detail):
+
+1. `spec.policyRefs` in list order (recommended: `AgentPolicy` entries, then `ToolPolicy`)
+2. `spec.policy` inline overrides last (wins on conflict)
+3. List fields are unioned; numeric caps take the **minimum** (strictest)
+4. Effective **mode** = strictest across matched policies (`enforced` > `dry-run` > `audit-only`)
+
+**Status written on reconcile:**
+
+| Field | Meaning |
+|-------|---------|
+| `status.effectivePolicy` | Merged rules + mode propagated to the Job |
+| `status.matchedPolicies` | Which policy CRDs contributed |
+| `status.policyDecisions` | Bounded merge-time audit log (max 64) |
+
+**Propagation today:** `AGENT_POLICY_*` and `AGENT_POLICY_MODE` env vars on the agent container. Modes and rules are **declared**, not enforced at the network/tool layer yet (Phase 3).
+
+**Policy change behavior:**
+
+- Updating a referenced `AgentPolicy` or `ToolPolicy` re-reconciles affected sessions (controller watch).
+- `status.effectivePolicy` updates immediately.
+- If the owned Job has **not** started pods yet (`Active==0`), the controller **replaces** the Job so env vars match.
+- If the Job is **already running**, pod templates are immutable — env inside the pod may be stale; `PolicyPropagated=False` / `PolicyEnvDrift` surfaces the gap.
+
+**Samples:**
+
+```bash
+kubectl apply -f config/samples/relay_v1alpha1_agentpolicy.yaml
+kubectl apply -f config/samples/relay_v1alpha1_agentsession_policy_ref.yaml
+
+kubectl apply -f config/samples/relay_v1alpha1_toolpolicy.yaml
+# prod-agents-baseline must exist for the combined sample:
+kubectl apply -f config/samples/relay_v1alpha1_agentsession_toolpolicy_ref.yaml
+```
 
 ### Inline sample
 
@@ -463,7 +514,7 @@ After `make install` (or `make dev-up`), check that hand-maintained samples stil
 make verify-samples
 ```
 
-This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap).
+This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap, AgentPolicy/ToolPolicy refs).
 
 ---
 
@@ -473,7 +524,12 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 |------------|----------|-------|
 | Reconcile to Kubernetes Job | Yes | `runtime.orchestrator: kubernetes-job` only |
 | Task prompt / ConfigMap prompt | Yes | `spec.task` or `promptConfigMapRef` (same namespace) |
-| Inline policy → env vars | Yes | Not enforced at network/tool layer yet |
+| `AgentPolicy` + `spec.policyRefs` | Yes | Same-namespace; merge → `status.effectivePolicy` |
+| `ToolPolicy` in `policyRefs` | Yes | Tool/MCP rules merged after earlier refs |
+| Inline `spec.policy` overrides | Yes | Merged last; propagated as `AGENT_POLICY_*` env |
+| Policy modes (`audit-only` / `dry-run` / `enforced`) | Yes | Declared in status + `AGENT_POLICY_MODE`; not enforced yet |
+| `status.policyDecisions` | Yes | Merge-time audit entries only (max 64) |
+| Policy change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | Session cancellation | Yes | `spec.cancelRequested` → Job delete + `Phase=Cancelled` |
 | Human approval gate | No | Declared only; does not block runs |
 | `status.usage` / `violations` / `artifacts` | No | Reserved for future observability backends |
@@ -520,11 +576,8 @@ are explicit hook points in the current code:
 
 ### Additional CRDs
 
-- **`AgentPolicy`** — cluster- or namespace-scoped reusable policy, referenced
-  by name from `AgentSession.spec.policyRef`. Inline `policy` becomes one of
-  several ways to compose policy.
-- **`ToolPolicy`** — first-class object describing which tools/MCP servers a
-  session can call and what their per-call constraints are.
+- **`AgentPolicy`** — **shipped** (namespace-scoped). Referenced from `spec.policyRefs`.
+- **`ToolPolicy`** — **shipped** (namespace-scoped). Tool/MCP allowlists and caps via `spec.policyRefs`.
 - **`ApprovalPolicy`** + `ApprovalRequest`/`Approval` — block-and-wait
   semantics for `requireHumanApproval` actions.
 - **`RuntimeProfile`** — opt-in stricter runtime hardening

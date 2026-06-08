@@ -58,7 +58,7 @@ type SessionTaskSpec struct {
 
 // PromptConfigMapRef references a ConfigMap value containing the agent prompt.
 type PromptConfigMapRef struct {
-	// Name of the ConfigMap in the same namespace as the AgentSession.
+	// Name of the ConfigMap in the AgentSession namespace (same-namespace refs only in MVP).
 	Name string `json:"name"`
 	// Key inside the ConfigMap that contains the prompt text.
 	Key string `json:"key"`
@@ -190,6 +190,7 @@ type AgentSessionSpec struct {
 
 	// PolicyRefs lists reusable policies to merge before spec.policy overrides.
 	// Refs are resolved in order within the same namespace as the AgentSession.
+	// Recommended order: AgentPolicy entries, then ToolPolicy, then spec.policy inline overrides.
 	// +optional
 	PolicyRefs []PolicyRef `json:"policyRefs,omitempty"`
 
@@ -315,6 +316,13 @@ type AgentSessionStatus struct {
 	// EffectivePolicy is the merged policy propagated to the runtime (env vars today).
 	// +optional
 	EffectivePolicy *EffectivePolicyStatus `json:"effectivePolicy,omitempty"`
+
+	// PolicyDecisions records merge-time and runtime policy evaluations (bounded list).
+	// Merge-time entries are replaced each reconcile; runtime entries are Phase 3+.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=64
+	PolicyDecisions []PolicyDecision `json:"policyDecisions,omitempty"`
 
 	// Result captures the terminal outcome of the session.
 	// +optional

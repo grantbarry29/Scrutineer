@@ -36,6 +36,7 @@ rules:
   - relay.secureai.dev
   resources:
   - agentpolicies
+  - toolpolicies
   verbs:
   - get
   - list

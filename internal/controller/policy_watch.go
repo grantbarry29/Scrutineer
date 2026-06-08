@@ -20,22 +20,31 @@ import (
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 )
 
-// mapAgentPolicyToSessions enqueues AgentSessions in the policy namespace that reference it.
 func (r *AgentSessionReconciler) mapAgentPolicyToSessions(ctx context.Context, obj client.Object) []reconcile.Request {
 	ap, ok := obj.(*relayv1alpha1.AgentPolicy)
 	if !ok {
 		return nil
 	}
+	return r.sessionsReferencingPolicy(ctx, ap.Namespace, "AgentPolicy", ap.Name)
+}
 
-	var sessions relayv1alpha1.AgentSessionList
-	if err := r.List(ctx, &sessions, client.InNamespace(ap.Namespace)); err != nil {
+func (r *AgentSessionReconciler) mapToolPolicyToSessions(ctx context.Context, obj client.Object) []reconcile.Request {
+	tp, ok := obj.(*relayv1alpha1.ToolPolicy)
+	if !ok {
 		return nil
 	}
+	return r.sessionsReferencingPolicy(ctx, tp.Namespace, "ToolPolicy", tp.Name)
+}
 
+func (r *AgentSessionReconciler) sessionsReferencingPolicy(ctx context.Context, namespace, kind, name string) []reconcile.Request {
+	var sessions relayv1alpha1.AgentSessionList
+	if err := r.List(ctx, &sessions, client.InNamespace(namespace)); err != nil {
+		return nil
+	}
 	var out []reconcile.Request
 	for i := range sessions.Items {
 		session := &sessions.Items[i]
-		if sessionReferencesAgentPolicy(session, ap.Name) {
+		if sessionReferencesPolicy(session, kind, name) {
 			out = append(out, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Namespace: session.Namespace,
@@ -47,14 +56,23 @@ func (r *AgentSessionReconciler) mapAgentPolicyToSessions(ctx context.Context, o
 	return out
 }
 
-func sessionReferencesAgentPolicy(session *relayv1alpha1.AgentSession, policyName string) bool {
+func sessionReferencesPolicy(session *relayv1alpha1.AgentSession, kind, policyName string) bool {
 	for _, ref := range session.Spec.PolicyRefs {
 		if ref.Name != policyName {
 			continue
 		}
-		if ref.Kind == "" || ref.Kind == "AgentPolicy" {
+		refKind := ref.Kind
+		if refKind == "" {
+			refKind = "AgentPolicy"
+		}
+		if refKind == kind {
 			return true
 		}
 	}
 	return false
+}
+
+// sessionReferencesAgentPolicy supports tests that predate ToolPolicy.
+func sessionReferencesAgentPolicy(session *relayv1alpha1.AgentSession, policyName string) bool {
+	return sessionReferencesPolicy(session, "AgentPolicy", policyName)
 }

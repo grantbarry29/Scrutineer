@@ -149,9 +149,5 @@ func setJobSucceeded(job *batchv1.Job) {
 }
 
 func envMap(vars []corev1.EnvVar) map[string]string {
-	out := make(map[string]string, len(vars))
-	for _, v := range vars {
-		out[v.Name] = v.Value
-	}
-	return out
+	return envVarsToMap(vars)
 }

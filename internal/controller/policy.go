@@ -22,7 +22,7 @@ import (
 
 // resolvePolicy loads referenced policies, merges them with inline overrides, and writes status.
 func (r *AgentSessionReconciler) resolvePolicy(ctx context.Context, session *relayv1alpha1.AgentSession) (*policy.Resolved, error) {
-	layers, err := policy.LoadAgentPolicyLayers(ctx, r, session)
+	layers, err := policy.LoadPolicyLayers(ctx, r, session)
 	if err != nil {
 		return nil, err
 	}

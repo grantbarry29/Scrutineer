@@ -30,10 +30,11 @@ const (
 
 // Condition types used on AgentSession.status.conditions.
 const (
-	ConditionValidated      = "Validated"
-	ConditionPolicyResolved = "PolicyResolved"
-	ConditionRuntimeCreated = "RuntimeCreated"
-	ConditionCompleted      = "Completed"
+	ConditionValidated        = "Validated"
+	ConditionPolicyResolved   = "PolicyResolved"
+	ConditionPolicyPropagated = "PolicyPropagated"
+	ConditionRuntimeCreated   = "RuntimeCreated"
+	ConditionCompleted        = "Completed"
 )
 
 // Event reasons emitted by the controller (Kubernetes Events on AgentSession).
@@ -55,7 +56,9 @@ const (
 	// EventReasonApprovalNotEnforced — requireHumanApproval declared but MVP does not gate execution.
 	EventReasonApprovalNotEnforced = "ApprovalNotEnforced"
 	// EventReasonPolicyResolved — referenced policies merged into effective policy.
-	EventReasonPolicyResolved = "PolicyResolved"
+	EventReasonPolicyResolved  = "PolicyResolved"
+	EventReasonPolicyEnvDrift  = "PolicyEnvDrift"
+	EventReasonPolicyEnvSynced = "PolicyEnvSynced"
 )
 
 // Orchestrator values supported by Relay.

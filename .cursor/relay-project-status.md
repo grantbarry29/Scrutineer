@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-05 (AgentPolicy watch → session re-reconcile)
+> **Last updated:** 2026-06-03 (Phase 2 work-item audit)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -15,9 +15,9 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 
 _(Queue empty — promote a task from **Discovered Follow-Up Tasks** or Phase 1 roadmap when ready.)_
 
-**Recently completed** (do not re-implement unless regressions): **AgentPolicy watch** (policy update → referencing session reconcile + `status.effectivePolicy` refresh), **Phase 2 slice** (`AgentPolicy` CRD, `policyRefs`, merge/status/env), rules compliance fixes, verify-samples, e2e, finalizers, CI, cancellation, envtest suite.
+**Recently completed** (do not re-implement unless regressions): **README policy docs**, **ToolPolicy CRD**, **Job env sync** (`PolicyPropagated` / pending Job replace / `PolicyEnvDrift`), policy decision records, AgentPolicy watch, Phase 2 policy slice, verify-samples, e2e, finalizers, CI, cancellation.
 
-**Next suggested queue picks:** Document policyRefs in README · Policy decision records · Watch owned Pods · ToolPolicy CRD.
+**Next suggested queue picks:** Watch owned Pods · RuntimeProfile CRD · Document Kubernetes Events · Add Ready condition.
 
 ---
 
@@ -51,31 +51,6 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 **Verification command:**  
 `make test`
-
-### Task: Define reference scoping rules for external refs
-
-**Why it matters:**  
-`promptConfigMapRef` only loads ConfigMaps in the same namespace; policy, credentials, and templates will need documented scoping before cross-namespace support.
-
-**Scope:**
-- Document same-namespace requirement for `promptConfigMapRef` in API comments and README.
-- Add a short design note in this file for future refs (AgentPolicy, CredentialProfile, SessionTemplate): same-namespace default, optional explicit namespace field later.
-
-**Non-goals:**
-- Do not implement cross-namespace ConfigMap reads.
-- Do not add new CRDs.
-
-**Acceptance criteria:**
-- API/kubebuilder comments and README state current scoping rules.
-- Status file records the intended future pattern for namespaced refs.
-
-**Expected files:**
-- `api/v1alpha1/agentsession_types.go`
-- `README.md`
-- `.cursor/relay-project-status.md`
-
-**Verification command:**  
-`make manifests && make test`
 
 ### Task: Document future-only status fields
 
@@ -127,7 +102,7 @@ Events are the primary MVP observability surface; operators need a stable catalo
 ### Task: Add AgentSession Ready condition
 
 **Why it matters:**  
-`kubernetes-controller.mdc` expects a `Ready` condition summarizing whether the session can proceed; today only `Validated`, `RuntimeCreated`, and `Completed` exist.
+`kubernetes-controller.mdc` expects a `Ready` condition summarizing whether the session can proceed; today `Validated`, `PolicyResolved`, `PolicyPropagated`, `RuntimeCreated`, and `Completed` exist but no aggregate `Ready`.
 
 **Scope:**
 - Define `Ready` condition semantics (e.g. True when Job running or terminal success path; False when denied/validation failed).
@@ -150,105 +125,72 @@ Events are the primary MVP observability surface; operators need a stable catalo
 **Verification command:**  
 `make test`
 
-### Task: Document policyRefs and merge semantics in README
+### Task: ToolPolicy MCP argument constraints (schema design)
 
 **Why it matters:**  
-Phase 2 introduced `AgentPolicy`, `spec.policyRefs`, and merge rules; operators need README guidance beyond the status file.
+Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` slice ships allow/deny lists and caps only.
 
 **Scope:**
-- Document `AgentPolicy` + `policyRefs` usage with the existing samples.
-- Explain merge order (refs in order → inline overrides), mode strictest-wins, and same-namespace scoping.
-- Note `AGENT_POLICY_MODE` and that modes are declared only until Phase 3 enforcement.
+- Design API fields for per-tool argument allow/deny patterns (or defer explicitly to Phase 3 tool gateway).
+- Document non-goals until enforcement exists.
 
 **Non-goals:**
-- Do not document ToolPolicy or enforcement backends as shipped.
+- Do not implement tool gateway enforcement in this task.
+- Do not break existing `ToolPolicy` samples.
 
 **Acceptance criteria:**
-- README section matches **Policy merge semantics** in this file.
-- Sample manifests cross-linked.
+- Either CRD fields + merge semantics defined, or explicit deferral recorded in README and this file.
 
 **Expected files:**
-- `README.md`
-- `.cursor/relay-project-status.md` (only if aligning wording)
+- `api/v1alpha1/toolpolicy_types.go` (if implementing schema)
+- `README.md`, `.cursor/relay-project-status.md`
 
 **Verification command:**  
-`make verify-samples` (docs-only)
+`make manifests && make test`
 
-### Task: Sync Job env when effective policy changes on running sessions
+### Task: Propagate ToolPolicy maxCallsPerMinute to runtime hooks
 
 **Why it matters:**  
-`status.effectivePolicy` updates when `AgentPolicy` changes, but existing Job pod templates are immutable — `AGENT_POLICY_*` env in a running Job may stay stale until the Job is replaced.
+`ToolPolicy.spec.maxCallsPerMinute` is stored in the CRD but not merged into `PolicyRules` or env vars; operators may assume it is active.
 
 **Scope:**
-- Define MVP behavior: document immutability, and/or replace Job when effective policy changes on non-terminal sessions (with clear event/condition).
-- Envtest or docs for not-yet-started vs running Jobs.
+- Decide propagation path (env var and/or `status.effectivePolicy` extension).
+- Document until enforced in Phase 3.
 
 **Non-goals:**
-- Do not implement in-pod hot reload or sidecar enforcement (Phase 3).
+- Do not implement rate limiting enforcement.
 
 **Acceptance criteria:**
-- Behavior documented in README and/or API comments.
-- Controller surfaces policy drift on immutable Jobs (condition or Job replace path).
+- Field is visible in effective policy or documented as schema-only until Phase 3.
 
 **Expected files:**
-- `internal/controller/agentsession_controller.go` and/or `job.go`
-- `README.md`
+- `api/v1alpha1/toolpolicy_types.go`, `internal/policy/`, `README.md`
 
 **Verification command:**  
 `make test`
 
-### Task: Policy decision records in AgentSession status
+### Task: Append runtime policy decisions from enforcement backends
 
 **Why it matters:**  
-Phase 2 records merged policy but not structured allow/deny decisions; audit and future UI need a bounded decision log.
+`status.policyDecisions` is merge-time only today; Phase 3 sidecars/gateways need to append `phase: runtime` entries without wiping merge decisions.
 
 **Scope:**
-- Add `status.policyDecisions[]` (or extend existing types) with timestamp, type, target, allow/deny, reason, matched policy ref.
-- Populate merge-time decisions in Phase 2 (e.g. effective deny list summary); reserve runtime decisions for Phase 3.
-- Keep list bounded (cap entries per session).
+- Define append/merge strategy for runtime decisions (cap total list, preserve merge summary).
+- Extension point for enforcement backends to report allow/deny/dry-run at request time.
 
 **Non-goals:**
-- Do not implement enforcement-side decision streaming yet.
-- Do not build UI.
+- Do not implement Envoy/tool gateway in this task.
 
 **Acceptance criteria:**
-- API types and CRD schema include decision records.
-- Controller writes at least one merge-time decision when policy refs resolve.
-- Envtest asserts presence on policy-ref session.
+- Documented contract for runtime decision producers.
+- Status update path supports bounded append.
 
 **Expected files:**
-- `api/v1alpha1/agentsession_types.go`
-- `internal/policy/` or `internal/controller/policy.go`
-- `internal/controller/agentsession_controller_test.go`
+- `api/v1alpha1/policy_types.go`
+- `internal/controller/` or enforcement adapter stub
 
 **Verification command:**  
-`make manifests && make test`
-
-### Task: ToolPolicy CRD and policyRefs kind support
-
-**Why it matters:**  
-Network/tool rules are split across AgentPolicy today; ToolPolicy enables MCP-specific constraints and a dedicated merge layer.
-
-**Scope:**
-- Add `ToolPolicy` CRD (allowlists, rate limits, argument constraints — narrow MVP fields).
-- Extend `spec.policyRefs` resolution for `kind: ToolPolicy`.
-- Document merge order: AgentPolicy → ToolPolicy → inline.
-
-**Non-goals:**
-- Do not implement tool gateway enforcement (Phase 3).
-- Do not add RuntimeProfile in the same task.
-
-**Acceptance criteria:**
-- `make verify-samples` includes ToolPolicy + referencing session sample.
-- Envtest merge test covers AgentPolicy + ToolPolicy + inline.
-
-**Expected files:**
-- `api/v1alpha1/toolpolicy_types.go`
-- `internal/policy/resolve.go`
-- `config/samples/`, `config/crd/kustomization.yaml`
-
-**Verification command:**  
-`make manifests && make test`
+`make test`
 
 ### Task: Audit controller RBAC for least privilege
 
@@ -328,16 +270,18 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | Area | State | Notes |
 |------|-------|-------|
 | **AgentSession CRD** | Done | `relay.secureai.dev/v1alpha1`, spec/status + `policyRefs` |
-| **AgentPolicy CRD** | Done (slice) | Reusable rules + `mode`; referenced from AgentSession |
+| **AgentPolicy CRD** | Done | Reusable rules + `mode`; `spec.policyRefs`; watch → re-reconcile |
+| **ToolPolicy CRD** | Done | Tool/MCP rules; merge + watch; `maxCallsPerMinute` schema-only until follow-up |
 | **Controller (kubernetes-job)** | Done | Reconciles to `batch/v1` Job, lifecycle phases, conditions, events |
-| **Policy propagation** | Done | Inline policy → env vars in agent container |
+| **Policy propagation** | Done | Merge `policyRefs` + inline → `status.effectivePolicy` → `AGENT_POLICY_*` env |
 | **Policy enforcement** | Not started | Env vars are hooks only; no network/tool/file gates |
 | **Dev environment** | Done | Devcontainer + kind (`relay-dev`) + bootstrap scripts |
 | **E2E tests** | Done | `make test-e2e` — 11 specs against live kind cluster |
 | **Unit / envtest** | Done | Controller suite with validation + reconciler specs (~65% coverage) |
 | **CI** | Done | `.github/workflows/test.yaml`, `e2e.yaml`, `lint.yaml` |
 | **In-cluster deploy** | Ready | `make dev-deploy` builds image + deploys manager |
-| **Additional CRDs** | In progress | `AgentPolicy` done; ToolPolicy, ApprovalPolicy, RuntimeProfile not started |
+| **Additional CRDs (Phase 2)** | Nearly complete | `AgentPolicy` + `ToolPolicy` done; **RuntimeProfile** remains on Phase 2 roadmap |
+| **Additional CRDs (later)** | Not started | ApprovalPolicy, CredentialProfile, SessionTemplate, ToolGateway |
 | **Operational UI** | Not started | Vision documented in product rule |
 | **Audit / observability backend** | Not started | Status fields exist; not populated by sidecars yet |
 
@@ -348,8 +292,10 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 - Controller validation denies bad specs (empty task, empty model fields, invalid workspace size) without creating a Job
 - Foreign Job name collision → `PhaseDenied` with `JobConflict` (no adoption of unowned Jobs)
 - `task.promptConfigMapRef` loads prompt from ConfigMap into `AGENT_TASK_PROMPT`
-- `AgentPolicy` CRD + `spec.policyRefs` — merge referenced policies with inline overrides → `status.effectivePolicy`, `status.matchedPolicies`, `AGENT_POLICY_MODE` env
-- `AgentPolicy` watch — update/delete on a referenced policy re-reconciles affected AgentSessions (same namespace)
+- `AgentPolicy` + `ToolPolicy` CRDs + `spec.policyRefs` — merge referenced policies with inline overrides → `status.effectivePolicy`, `status.matchedPolicies`, `AGENT_POLICY_MODE` env
+- Policy CRD watches — `AgentPolicy` / `ToolPolicy` update/delete re-reconciles affected AgentSessions (same namespace)
+- Job env sync — pending Job replaced on policy drift; active Job → `PolicyPropagated=False` / `PolicyEnvDrift` warning
+- `status.policyDecisions` — merge-time audit entries (mode, matched policies, allow/deny lists, caps); max 64 per session
 - Policy fields injected as `AGENT_POLICY_*` / `RELAY_*` env vars (from effective merged policy)
 - Workspace emptyDir mount, resource limits, timeout, basic container hardening
 - Kubernetes Events on validation, Job create, running, success, failure, cancellation
@@ -366,8 +312,10 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | `status.podName` | Yes | Done — labeled session Pods, current Job UID, newest `CreationTimestamp` (name tie-break); see `internal/controller/pod.go` |
 | `status.violations` | Yes | No — no enforcement backend yet |
 | `status.artifacts` | Yes | No — `outputs.collectArtifacts` not implemented |
-| `spec.policyRefs` / `AgentPolicy` | Yes | Done — same-namespace refs; merge order refs → inline; missing ref → `InvalidPolicy` |
+| `spec.policyRefs` / `AgentPolicy` / `ToolPolicy` | Yes | Done — same-namespace refs; merge order refs → inline; missing ref → `InvalidPolicy` |
+| `PolicyPropagated` / Job env sync | Yes | Pending Job replaced on policy drift; active Job → `PolicyEnvDrift` condition + warning event |
 | `status.effectivePolicy` / `matchedPolicies` | Yes | Done — populated on reconcile |
+| `status.policyDecisions` | Yes | Done — merge-time only (`phase: merge`); replaced each reconcile; capped at 64 |
 | `policy.requireHumanApproval` | Yes | Warning event `ApprovalNotEnforced` on effective policy; does not block execution |
 | `spec.cancelRequested` | Yes | Done — deletes Job; sets `PhaseCancelled`, condition, event |
 | `PhaseCancelled` | Yes | Done — terminal via cancel reconcile path |
@@ -415,16 +363,47 @@ Cursor rules in `.cursor/rules/`: `relay-product-vision.mdc`, `relay-project-sta
 
 ### Policy merge semantics (Phase 2)
 
-Documented in `internal/policy/`:
+Documented in `internal/policy/`, `README.md`, and API comments:
 
-- `spec.policyRefs` resolved in order (same namespace; `AgentPolicy` only in MVP).
+- `spec.policyRefs` resolved in **declaration order** (same namespace; kinds: `AgentPolicy`, `ToolPolicy`).
+- Recommended order: AgentPolicy entries → ToolPolicy → `spec.policy` inline overrides.
 - List fields unioned across layers; numeric caps take the minimum (strictest).
 - `spec.policy` inline overrides merged last.
 - Effective `mode` = strictest across matched policies (`enforced` > `dry-run` > `audit-only`).
-- Propagated to Job via existing `AGENT_POLICY_*` env vars + `AGENT_POLICY_MODE`.
+- Propagated to Job via `AGENT_POLICY_*` env vars + `AGENT_POLICY_MODE`.
+- Policy CRD updates watched → affected sessions re-reconcile; pending Jobs replaced on env drift.
+
+### External reference scoping
+
+| Ref | MVP behavior | Future pattern |
+|-----|--------------|----------------|
+| `promptConfigMapRef` | Same namespace as `AgentSession` | Optional explicit `namespace` field |
+| `policyRefs` (`AgentPolicy`, `ToolPolicy`) | Same namespace | Optional `namespace` on `PolicyRef` |
+| `CredentialProfile` / `SessionTemplate` (planned) | — | Same-namespace default; explicit namespace when added |
+
+Cross-namespace reads are **not** implemented in MVP.
+
+### Policy decision records (Phase 2)
+
+`status.policyDecisions` — bounded audit log (`MaxItems: 64`), rewritten on each reconcile:
+
+| Field | Purpose |
+|-------|---------|
+| `time`, `phase` (`merge`) | When / control-plane vs runtime (runtime = Phase 3) |
+| `type` | `mode`, `policy`, `network`, `tool`, `approval`, `cap`, `summary` |
+| `action` | `allow`, `deny`, `audit`, `dry-run` (restrictive rules follow effective mode) |
+| `actor` | `relay-controller` for merge-time |
+| `target`, `rule`, `reason`, `message` | What was evaluated and why |
+| `policyRef` | Set on matched `AgentPolicy` / `ToolPolicy` entries |
+
+Built in `internal/policy/decisions.go` via `BuildMergeDecisions`.
 
 ### Recent fixes
 
+- **README policy docs** — `AgentPolicy`/`ToolPolicy`, merge semantics, scoping, policy change / Job env behavior, MVP table
+- **ToolPolicy CRD** — `toolpolicy_types.go`, merge via `LoadPolicyLayers`, watch, samples, envtest
+- **Job env sync** — `PolicyPropagated` condition; replace pending Job on drift; `PolicyEnvDrift` when Job active (`job_policy.go`)
+- **Policy decision records** — `PolicyDecision` API type, merge-time population, unit + envtest coverage
 - **AgentPolicy watch** — `Watches(AgentPolicy)` maps to sessions with matching `spec.policyRefs`; envtest verifies `status.effectivePolicy` updates on policy change (`internal/controller/policy_watch.go`)
 - **Phase 2 reusable policy (slice)** — `AgentPolicy` CRD, `PolicyRules` shared type, `policyRefs`, `internal/policy` merge/resolve, `PolicyResolved` condition, samples, envtest (38 specs)
 - **Rules compliance audit** — Job ownership denial (`JobConflict`), main `APIReader`, model/workspace validation, TimedOut sync without `Failed>0`, `ApprovalNotEnforced` warning event, terminal `Denied` preserves validation reason; envtest coverage (36 specs)
@@ -484,7 +463,7 @@ Complete the vertical slice so the API and controller behavior match, and the pr
 - [ ] **Admission webhook** (optional) — Move duplicate validation to validating webhook for earlier rejection
 - [ ] **Helm chart or improved kustomize overlays** — Easier install than raw kustomize for early adopters
 - [x] **Terminal phase stability** — Terminal phases skip Job creation; `syncStatusFromJob` does not regress phase; envtest
-- [ ] **Reference scoping documentation** — Same-namespace rules for ConfigMap/policy/credential refs
+- [x] **Reference scoping documentation** — Same-namespace rules for ConfigMap/policy refs in README + API comments
 - [x] **E2e TimedOut path** — `timeoutSeconds` + sleep; assert `PhaseTimedOut` / `JobTimedOut`
 
 ---
@@ -495,10 +474,26 @@ Extract inline policy into composable, versioned CRDs without breaking AgentSess
 
 - [x] **AgentPolicy CRD** — Reusable network/tool/approval rules; `spec.policyRefs` on AgentSession
 - [x] **Policy composition** — Merge refs in order → inline overrides; `status.matchedPolicies` + `status.effectivePolicy`
-- [x] **Policy modes** — `audit-only` / `dry-run` / `enforced` on AgentPolicy; strictest mode in status + `AGENT_POLICY_MODE` env (declared only until Phase 3)
-- [ ] **Policy decision records** — Structured status entries: who/what/when/allow/deny/reason
-- [ ] **ToolPolicy CRD** — Tool/MCP allowlists, rate limits, argument constraints
-- [ ] **RuntimeProfile CRD** — Stricter security contexts, sandbox selection, sidecar profiles
+- [x] **Policy modes** — `audit-only` / `dry-run` / `enforced`; strictest mode in status + `AGENT_POLICY_MODE` env (declared only until Phase 3)
+- [x] **Policy decision records** — `status.policyDecisions[]` merge-time entries; max 64; runtime append = Phase 3/4
+- [x] **ToolPolicy CRD** — Tool/MCP allowlists + caps; `policyRefs` + watch + samples + README
+- [x] **Policy watches** — `AgentPolicy` + `ToolPolicy` changes re-reconcile referencing sessions
+- [x] **Job env sync (partial)** — Replace pending Job on policy drift; `PolicyPropagated` / `PolicyEnvDrift` when Job active
+- [x] **Operator docs** — README policy section, reference scoping, samples (`make verify-samples`)
+- [ ] **RuntimeProfile CRD** — Stricter security contexts, sandbox selection, sidecar profiles (**last Phase 2 item**)
+
+**Phase 2 deferred / follow-up (tracked, not blocking Phase 3 planning):**
+
+| Item | Where tracked | Notes |
+|------|---------------|-------|
+| `ToolPolicy.maxCallsPerMinute` not in effective policy/env | Discovered: *Propagate ToolPolicy maxCallsPerMinute* | Schema exists; not merged yet |
+| ToolPolicy MCP **argument constraints** | Discovered: *ToolPolicy MCP argument constraints* | Roadmap mentioned; out of initial ToolPolicy slice |
+| Inline `spec.policy.mode` override | Not planned | Only CRD modes merge today |
+| Runtime `policyDecisions` append | Discovered: *Append runtime policy decisions* | Phase 3 enforcement |
+| Active Job env stale after policy change | `PolicyEnvDrift` condition | Documented; immutable Job template |
+| Mode **enforcement** (audit/dry-run/enforced behavior) | Phase 3 roadmap | Declared + propagated only |
+
+**Phase 2 is complete for control-plane policy** once `RuntimeProfile` ships (or is explicitly deferred to Phase 3). Everything else above is polish or Phase 3+.
 
 ---
 
@@ -581,19 +576,3 @@ Multi-tenant, identity, credentials — production-grade control plane.
 - [ ] **Secure sandboxes** — gVisor/Kata/Firecracker via RuntimeProfile
 
 ---
-
-## Repository Audit (2026-05-17)
-
-One-time scan performed while tightening Cursor rules. **No product code changed.**
-
-| Area | Finding | Tracking |
-|------|---------|----------|
-| Cancellation | Complete (API, controller, e2e, README, sample) | Done |
-| Finalizers | Implemented — Job cleanup on delete | Done |
-| CI | `test.yaml`, `e2e.yaml`, `lint.yaml` | Done (image publish not in CI) |
-| Terminal + missing Job | Fixed — terminal guard in reconciler | Done |
-| E2e | 11 specs incl. cancellation + TimedOut | Done |
-| Envtest cancel | Job delete, idempotent missing Job, `PhaseCancelled`/condition/event | Done in controller tests |
-| RBAC | Matches current controller; audit not documented | Discovered Follow-Up Tasks |
-| Samples / README | `make verify-samples`; all `relay_*.yaml` dry-run clean | Done |
-| Enforcement / UI / extra CRDs | Not implemented (expected) | Roadmap Phases 2–7 |

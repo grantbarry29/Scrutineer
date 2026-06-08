@@ -35,4 +35,7 @@ func TestSessionReferencesAgentPolicy(t *testing.T) {
 	if sessionReferencesAgentPolicy(session, "baseline") {
 		t.Fatal("ToolPolicy kind should not match AgentPolicy watch")
 	}
+	if !sessionReferencesPolicy(session, "ToolPolicy", "baseline") {
+		t.Fatal("expected ToolPolicy ref match")
+	}
 }

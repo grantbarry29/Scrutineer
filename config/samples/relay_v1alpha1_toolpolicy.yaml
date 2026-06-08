@@ -1,0 +1,14 @@
+apiVersion: relay.secureai.dev/v1alpha1
+kind: ToolPolicy
+metadata:
+  name: mcp-tools-baseline
+  namespace: default
+spec:
+  mode: audit-only
+  allowedTools:
+  - shell
+  - github
+  deniedTools:
+  - kubectl-prod
+  maxToolCalls: 30
+  maxCallsPerMinute: 10

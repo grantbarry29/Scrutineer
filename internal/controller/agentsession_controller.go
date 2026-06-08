@@ -53,6 +53,7 @@ const requeueAfter = 15 * time.Second
 const deletionRequeueAfter = 2 * time.Second
 
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=toolpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/finalizers,verbs=update
@@ -374,20 +375,40 @@ func (r *AgentSessionReconciler) applyCancellationStatus(session *relayv1alpha1.
 func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved) (*batchv1.Job, error) {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
 
+	desired := buildJob(session, task, pol)
+
 	var existing batchv1.Job
 	if err := r.Get(ctx, jobKey, &existing); err == nil {
 		if !metav1.IsControlledBy(&existing, session) {
 			return nil, fmt.Errorf("%w: Job %q", ErrJobNotOwned, existing.Name)
 		}
-		session.Status.JobName = existing.Name
-		setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-			fmt.Sprintf("Job %q exists", existing.Name))
-		return &existing, nil
+		if relayPolicyEnvDrift(&existing, desired) {
+			if jobReplaceableForPolicySync(&existing) {
+				policy := metav1.DeletePropagationBackground
+				if err := r.Delete(ctx, &existing, client.PropagationPolicy(policy)); err != nil && !apierrors.IsNotFound(err) {
+					return nil, fmt.Errorf("delete Job %s for policy env sync: %w", jobKey, err)
+				}
+				r.recordNormal(session, EventReasonPolicyEnvSynced, "Replaced pending Job to sync policy env vars")
+			} else {
+				msg := policyEnvDriftMessage(session)
+				session.Status.JobName = existing.Name
+				setCondition(session, ConditionPolicyPropagated, metav1.ConditionFalse, "PolicyEnvDrift", msg)
+				setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
+					fmt.Sprintf("Job %q exists", existing.Name))
+				r.recordWarning(session, EventReasonPolicyEnvDrift, msg)
+				return &existing, nil
+			}
+		} else {
+			session.Status.JobName = existing.Name
+			setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
+				"Job policy env vars match effective policy")
+			setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
+				fmt.Sprintf("Job %q exists", existing.Name))
+			return &existing, nil
+		}
 	} else if !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("get Job %s: %w", jobKey, err)
 	}
-
-	desired := buildJob(session, task, pol)
 	if err := controllerutil.SetControllerReference(session, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("set owner reference on Job: %w", err)
 	}
@@ -417,6 +438,8 @@ func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1
 		session.Status.StartTime = &now
 	}
 	session.Status.Phase = relayv1alpha1.PhaseStarting
+	setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
+		"Job policy env vars match effective policy")
 	setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
 		fmt.Sprintf("Created Job %q", desired.Name))
 	r.recordNormal(session, EventReasonJobCreated, fmt.Sprintf("Created Job %s", desired.Name))
@@ -539,6 +562,10 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&relayv1alpha1.AgentPolicy{},
 			handler.EnqueueRequestsFromMapFunc(r.mapAgentPolicyToSessions),
+		).
+		Watches(
+			&relayv1alpha1.ToolPolicy{},
+			handler.EnqueueRequestsFromMapFunc(r.mapToolPolicyToSessions),
 		).
 		Complete(r)
 }

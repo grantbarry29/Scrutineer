@@ -182,16 +182,18 @@ spec:
                 description: |-
                   PolicyRefs lists reusable policies to merge before spec.policy overrides.
                   Refs are resolved in order within the same namespace as the AgentSession.
+                  Recommended order: AgentPolicy entries, then ToolPolicy, then spec.policy inline overrides.
                 items:
                   description: PolicyRef references a reusable policy CRD in the same
                     namespace as the AgentSession.
                   properties:
                     kind:
                       default: AgentPolicy
-                      description: Kind is the policy resource kind. MVP supports
-                        AgentPolicy only.
+                      description: Kind is the policy resource kind (AgentPolicy or
+                        ToolPolicy).
                       enum:
                       - AgentPolicy
+                      - ToolPolicy
                       type: string
                     name:
                       description: Name is the policy resource name in the AgentSession
@@ -492,8 +494,8 @@ spec:
                           text.
                         type: string
                       name:
-                        description: Name of the ConfigMap in the same namespace as
-                          the AgentSession.
+                        description: Name of the ConfigMap in the AgentSession namespace
+                          (same-namespace refs only in MVP).
                         type: string
                     required:
                     - key
@@ -739,6 +741,107 @@ spec:
                   current Job (ownerReference UID), and records the newest by CreationTimestamp
                   (name breaks ties). Pods from a replaced Job or without the session label are ignored.
                 type: string
+              policyDecisions:
+                description: |-
+                  PolicyDecisions records merge-time and runtime policy evaluations (bounded list).
+                  Merge-time entries are replaced each reconcile; runtime entries are Phase 3+.
+                items:
+                  description: |-
+                    PolicyDecision records a structured policy evaluation for audit and future UI timelines.
+                    Phase 2 populates merge-time decisions; Phase 3 enforcement backends append runtime entries.
+                  properties:
+                    action:
+                      description: Action is allow, deny, audit, or dry-run (would-deny
+                        under dry-run mode).
+                      enum:
+                      - allow
+                      - deny
+                      - audit
+                      - dry-run
+                      type: string
+                    actor:
+                      description: Actor is who or what produced the decision. Merge-time
+                        uses "relay-controller".
+                      type: string
+                    message:
+                      description: Message is a human-readable description.
+                      type: string
+                    mode:
+                      description: Mode is the effective policy mode when the decision
+                        was made.
+                      enum:
+                      - audit-only
+                      - dry-run
+                      - enforced
+                      type: string
+                    phase:
+                      description: Phase is merge (control-plane resolution) or runtime
+                        (enforcement observation).
+                      enum:
+                      - merge
+                      - runtime
+                      type: string
+                    policyRef:
+                      description: PolicyRef identifies the matched policy CRD when
+                        applicable.
+                      properties:
+                        generation:
+                          description: Generation is the policy generation at resolution
+                            time.
+                          format: int64
+                          type: integer
+                        kind:
+                          description: Kind is the policy resource kind.
+                          type: string
+                        mode:
+                          description: Mode is the mode declared on the matched policy.
+                          enum:
+                          - audit-only
+                          - dry-run
+                          - enforced
+                          type: string
+                        name:
+                          description: Name is the policy resource name.
+                          type: string
+                        uid:
+                          description: UID is the policy object UID at resolution
+                            time.
+                          type: string
+                      required:
+                      - kind
+                      - name
+                      type: object
+                    reason:
+                      description: Reason is a short machine-readable code for filtering
+                        (e.g. DeniedTools, StrictestMode).
+                      type: string
+                    rule:
+                      description: Rule is the policy rule field that produced the
+                        decision (e.g. deniedTools).
+                      type: string
+                    target:
+                      description: Target is the entity evaluated (domain, tool, approval
+                        reason, cap name).
+                      type: string
+                    time:
+                      description: Time is when the decision was recorded.
+                      format: date-time
+                      type: string
+                    type:
+                      description: 'Type categorizes the decision: mode, policy, network,
+                        tool, approval, cap.'
+                      type: string
+                  required:
+                  - action
+                  - message
+                  - phase
+                  - reason
+                  - time
+                  - type
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-type: atomic
               result:
                 description: Result captures the terminal outcome of the session.
                 properties:

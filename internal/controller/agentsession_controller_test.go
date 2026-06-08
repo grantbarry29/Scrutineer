@@ -168,6 +168,25 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(got.Status.MatchedPolicies).To(HaveLen(1))
 			Expect(got.Status.MatchedPolicies[0].Name).To(Equal("baseline"))
 
+			Expect(got.Status.PolicyDecisions).NotTo(BeEmpty())
+			var matchedDecision, deniedTool *relayv1alpha1.PolicyDecision
+			for i := range got.Status.PolicyDecisions {
+				d := &got.Status.PolicyDecisions[i]
+				if d.Reason == "PolicyMatched" {
+					matchedDecision = d
+				}
+				if d.Target == "kubectl-prod" {
+					deniedTool = d
+				}
+			}
+			Expect(matchedDecision).NotTo(BeNil())
+			Expect(matchedDecision.Phase).To(Equal(relayv1alpha1.PolicyDecisionPhaseMerge))
+			Expect(matchedDecision.PolicyRef).NotTo(BeNil())
+			Expect(matchedDecision.PolicyRef.Name).To(Equal("baseline"))
+			Expect(deniedTool).NotTo(BeNil())
+			Expect(deniedTool.Action).To(Equal(relayv1alpha1.PolicyDecisionDryRun))
+			Expect(deniedTool.Rule).To(Equal("deniedTools"))
+
 			policyResolved := getCondition(&got, ConditionPolicyResolved)
 			Expect(policyResolved).NotTo(BeNil())
 			Expect(policyResolved.Status).To(Equal(metav1.ConditionTrue))
@@ -222,6 +241,92 @@ var _ = Describe("AgentSession reconciler", func() {
 				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeEnforced))
 				g.Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElement("evil.example"))
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+		})
+
+		It("merges ToolPolicy refs with AgentPolicy and inline overrides", func() {
+			ns := newTestNamespace()
+			Expect(k8sClient.Create(testCtx, &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "net-base", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					PolicyRules: relayv1alpha1.PolicyRules{DeniedDomains: []string{"dropbox.com"}},
+				},
+			})).To(Succeed())
+			maxTools := int32(20)
+			Expect(k8sClient.Create(testCtx, &relayv1alpha1.ToolPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "tool-base", Namespace: ns},
+				Spec: relayv1alpha1.ToolPolicySpec{
+					AllowedTools: []string{"shell"},
+					DeniedTools:  []string{"kubectl"},
+					MaxToolCalls: &maxTools,
+				},
+			})).To(Succeed())
+
+			session := minimalAgentSession(ns, "toolpolicy-merge")
+			session.Spec.Runtime.Command = []string{"sleep", "300"}
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{
+				{Kind: "AgentPolicy", Name: "net-base"},
+				{Kind: "ToolPolicy", Name: "tool-base"},
+			}
+			session.Spec.Policy = relayv1alpha1.InlinePolicySpec{
+				PolicyRules: relayv1alpha1.PolicyRules{DeniedTools: []string{"deploy"}},
+			}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			waitForJob(ns, session)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElement("dropbox.com"))
+			Expect(got.Status.EffectivePolicy.DeniedTools).To(ContainElements("kubectl", "deploy"))
+			Expect(got.Status.MatchedPolicies).To(HaveLen(2))
+
+			var job batchv1.Job
+			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
+			Expect(env[EnvPolicyDeniedTools]).To(ContainSubstring("kubectl"))
+		})
+
+		It("replaces a pending Job when policy env changes", func() {
+			ns := newTestNamespace()
+			ap := &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "env-sync", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					Mode: relayv1alpha1.PolicyModeAuditOnly,
+				},
+			}
+			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
+
+			session := minimalAgentSession(ns, "policy-env-sync")
+			session.Spec.Runtime.Command = []string{"sleep", "300"}
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "env-sync"}}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			waitForJob(ns, session)
+
+			Eventually(func(g Gomega) {
+				var job batchv1.Job
+				g.Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+				g.Expect(job.Status.Active).To(BeZero())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(ap), ap)).To(Succeed())
+			ap.Spec.Mode = relayv1alpha1.PolicyModeEnforced
+			ap.Spec.DeniedTools = []string{"blocked-tool"}
+			Expect(k8sClient.Update(testCtx, ap)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				var job batchv1.Job
+				g.Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+				env := envMap(job.Spec.Template.Spec.Containers[0].Env)
+				g.Expect(env[EnvPolicyMode]).To(Equal("enforced"))
+				g.Expect(env[EnvPolicyDeniedTools]).To(Equal("blocked-tool"))
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			propagated := getCondition(&got, ConditionPolicyPropagated)
+			Expect(propagated).NotTo(BeNil())
+			Expect(propagated.Status).To(Equal(metav1.ConditionTrue))
 		})
 	})
 

@@ -39,8 +39,10 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 		if strings.TrimSpace(ref.Name) == "" {
 			return fmt.Errorf("spec.policyRefs[%d].name is required", i)
 		}
-		if ref.Kind != "" && ref.Kind != "AgentPolicy" {
-			return fmt.Errorf("spec.policyRefs[%d].kind %q is not supported in MVP (allowed: AgentPolicy)", i, ref.Kind)
+		switch ref.Kind {
+		case "", "AgentPolicy", "ToolPolicy":
+		default:
+			return fmt.Errorf("spec.policyRefs[%d].kind %q is not supported (allowed: AgentPolicy, ToolPolicy)", i, ref.Kind)
 		}
 	}
 
