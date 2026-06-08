@@ -18,6 +18,7 @@ import (
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/enforcement"
+	"github.com/secureai/relay/internal/enforcement/toolgateway"
 )
 
 func TestApplyRuntimePolicyReport_enforcedViolationFromDecision(t *testing.T) {
@@ -94,6 +95,28 @@ func TestApplyRuntimePolicyReport_explicitViolationsDeduped(t *testing.T) {
 	})
 	if len(session.Status.Violations) != 1 {
 		t.Fatalf("violations = %d, want deduped single entry", len(session.Status.Violations))
+	}
+}
+
+func TestApplyRuntimePolicyReport_toolGatewayReport(t *testing.T) {
+	ts := metav1.NewTime(time.Unix(0, 0))
+	ctx := enforcement.SessionContext{
+		SessionNamespace: "team-a",
+		SessionName:      "demo",
+		Mode:             relayv1alpha1.PolicyModeEnforced,
+		Policy:           relayv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
+	}
+	auth := toolgateway.EvaluateTool(ctx, toolgateway.ToolRequest{Tool: "kubectl"})
+	report := toolgateway.RuntimeReport(ctx, toolgateway.ToolRequest{Tool: "kubectl"}, auth, ts.Time)
+
+	session := &relayv1alpha1.AgentSession{}
+	ApplyRuntimePolicyReport(session, report)
+
+	if len(session.Status.PolicyDecisions) != 1 || len(session.Status.Violations) != 1 {
+		t.Fatalf("decisions=%d violations=%d", len(session.Status.PolicyDecisions), len(session.Status.Violations))
+	}
+	if session.Status.PolicyDecisions[0].Type != "tool" {
+		t.Fatalf("type=%q", session.Status.PolicyDecisions[0].Type)
 	}
 }
 

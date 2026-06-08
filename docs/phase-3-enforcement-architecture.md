@@ -145,9 +145,14 @@ Acceptance:
 - Pending Job replace behavior handles profile drift.
 - No external proxy implementation required yet.
 
-### Slice 6: Tool Gateway Contract
+### Slice 6: Tool Gateway Contract — done
 
-Define how agents route MCP/tool calls through a governed endpoint.
+Implemented in `internal/enforcement/toolgateway/`; see [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md).
+
+- `ToolRequest` — tool identity and correlation metadata
+- `EvaluateTool` — allow/deny using shared mode semantics
+- `RuntimeReport` — decisions + violations for `ApplyRuntimePolicyReport`
+- `GatewayConfig` + `Backend` — desired config for future sidecar injection
 
 Acceptance:
 

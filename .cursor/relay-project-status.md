@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (Phase 3 slice 4: violation reporting MVP)
+> **Last updated:** 2026-06-08 (Phase 3 slice 6: tool gateway contract)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -19,7 +19,7 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 Inject enabled sidecars from `RuntimeProfile.spec.sidecars[]` into AgentSession Job pod templates.
 
 **Why it matters:**  
-RuntimeProfile already declares sidecar intent (dns-proxy, tool-gateway, envoy); Phase 3 needs the controller to materialize known types into pod specs before data-plane images ship.
+RuntimeProfile already declares sidecar intent (`dns-proxy`, `tool-gateway`, `envoy`). Slice 6 defined gateway contracts; slice 5 materializes sidecar containers so slice 7 can ship working proxies.
 
 **Scope:**
 - Map enabled `RuntimeProfileSidecar` entries to container definitions in Job build path.
@@ -42,9 +42,9 @@ RuntimeProfile already declares sidecar intent (dns-proxy, tool-gateway, envoy);
 **Verification command:**  
 `make test`
 
-**Next suggested picks:** Tool gateway contract · DNS/egress proxy prototype.
+**Next suggested picks:** DNS/egress proxy prototype · File/workspace policy design.
 
-**Recently completed** (do not re-implement unless regressions): **Violation reporting MVP** (`enforcement.AppendViolations`, `ApplyRuntimePolicyReport`, `patchStatus` violation merge); **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Phase 3 enforcement plan**; **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+**Recently completed** (do not re-implement unless regressions): **Tool gateway contract** (`internal/enforcement/toolgateway/`, `docs/phase-3-tool-gateway-contract.md`); **Violation reporting MVP**; **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
 
 ---
 
@@ -361,6 +361,12 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 ### Task: Phase 3 enforcement backend contract — **done (2026-06-08)**
 
 **Shipped:** `internal/enforcement/` — `SessionContext`, `Backend`, `Capabilities`, `RuntimeReport`, `EvaluateRestrictive`, `ActionForMode`, `AppendRuntimeDecisions`; unit tests for mode mapping, context build, and truncation.
+
+**Verification:** `make test` (pass 2026-06-08)
+
+### Task: Tool gateway contract — **done (2026-06-08)**
+
+**Shipped:** `internal/enforcement/toolgateway/` (`ToolRequest`, `EvaluateTool`, `RuntimeReport`, `GatewayConfig`, `Backend`); `docs/phase-3-tool-gateway-contract.md`; integration test via `ApplyRuntimePolicyReport`.
 
 **Verification:** `make test` (pass 2026-06-08)
 
@@ -691,7 +697,7 @@ Real governance beyond env var propagation. Start narrow, prove value, then expa
 3. [x] **NetworkPolicy baseline** — `internal/enforcement/networkpolicy/` + reconciler; enforced CIDR egress; FQDN not covered.
 4. [x] **Violation reporting MVP** — `AppendViolations`, `ApplyRuntimePolicyReport` derives `deny`/`dry-run` violations; `patchStatus` merge; README updated.
 5. [ ] **RuntimeProfile sidecar injection** — Inject known enabled sidecar types from `RuntimeProfile.spec.sidecars[]` into pending Job pod templates.
-6. [ ] **Tool gateway contract** — Define request/response/reporting contract for MCP/tool authorization; no production gateway yet.
+6. [x] **Tool gateway contract** — `internal/enforcement/toolgateway/` + `docs/phase-3-tool-gateway-contract.md`; evaluate + report; no production gateway.
 7. [ ] **DNS / egress proxy prototype** — First richer network backend for FQDN/CIDR policy, honoring `audit-only` / `dry-run` / `enforced`.
 8. [ ] **File/workspace policy design** — Define feasible read/write restriction model (mount strategy, FS proxy, sandbox, or explicit deferral).
 
