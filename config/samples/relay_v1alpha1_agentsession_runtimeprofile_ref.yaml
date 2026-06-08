@@ -1,0 +1,23 @@
+apiVersion: relay.secureai.dev/v1alpha1
+kind: AgentSession
+metadata:
+  name: session-with-runtimeprofile
+  namespace: default
+spec:
+  task:
+    description: "Run with a referenced runtime hardening profile"
+    prompt: "Echo that the session started under a RuntimeProfile."
+  model:
+    provider: openai
+    name: gpt-4.1
+  runtime:
+    orchestrator: kubernetes-job
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - |
+      echo "Session running with RuntimeProfile applied to Job template"
+      sleep 3
+  runtimeProfileRef:
+    name: hardened-agent

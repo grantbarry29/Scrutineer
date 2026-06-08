@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package agentsession
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/controller/job"
 )
 
 // Pod selection for status.podName (MVP and retry scenarios):
@@ -35,20 +36,20 @@ import (
 //
 // MVP sets Job backoffLimit=0, so a single Pod per Job is typical. The same rules apply when
 // backoffLimit>0 (multiple Pods per Job UID) or when manual tests inject extra labeled Pods.
-func (r *AgentSessionReconciler) findPodName(ctx context.Context, session *relayv1alpha1.AgentSession, job *batchv1.Job) (string, error) {
-	if job == nil {
+func (r *AgentSessionReconciler) findPodName(ctx context.Context, session *relayv1alpha1.AgentSession, runtimeJob *batchv1.Job) (string, error) {
+	if runtimeJob == nil {
 		return "", nil
 	}
 
 	var pods corev1.PodList
 	if err := r.List(ctx, &pods,
 		client.InNamespace(session.Namespace),
-		client.MatchingLabels{LabelSessionRef: session.Name},
+		client.MatchingLabels{job.LabelSessionRef: session.Name},
 	); err != nil {
 		return "", err
 	}
 
-	if chosen := newestPodOwnedByJob(pods.Items, job.UID); chosen != nil {
+	if chosen := newestPodOwnedByJob(pods.Items, runtimeJob.UID); chosen != nil {
 		return chosen.Name, nil
 	}
 	return "", nil

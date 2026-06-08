@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package agentsession
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -81,5 +81,34 @@ var _ = Describe("validateSpec", func() {
 			},
 		}
 		Expect(validateSpec(session)).To(MatchError(ContainSubstring("temperature")))
+	})
+
+	It("rejects empty runtimeProfileRef name", func() {
+		session := &relayv1alpha1.AgentSession{
+			Spec: relayv1alpha1.AgentSessionSpec{
+				Task:    relayv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   relayv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime: relayv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				RuntimeProfileRef: &relayv1alpha1.RuntimeProfileRef{
+					Name: " ",
+				},
+			},
+		}
+		Expect(validateSpec(session)).To(MatchError(ContainSubstring("runtimeProfileRef.name")))
+	})
+
+	It("rejects unsupported runtimeProfileRef kind", func() {
+		session := &relayv1alpha1.AgentSession{
+			Spec: relayv1alpha1.AgentSessionSpec{
+				Task:    relayv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   relayv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime: relayv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				RuntimeProfileRef: &relayv1alpha1.RuntimeProfileRef{
+					Kind: "OtherProfile",
+					Name: "x",
+				},
+			},
+		}
+		Expect(validateSpec(session)).To(MatchError(ContainSubstring("runtimeProfileRef.kind")))
 	})
 })

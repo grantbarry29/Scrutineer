@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package agentsession
 
 import (
 	"time"
@@ -19,6 +19,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/secureai/relay/internal/controller/job"
 )
 
 var _ = Describe("pod selection for status.podName", func() {
@@ -84,7 +86,7 @@ var _ = Describe("pod selection for status.podName", func() {
 		pods := []corev1.Pod{{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   "unrelated",
-				Labels: map[string]string{LabelSessionRef: "session-a"},
+				Labels: map[string]string{job.LabelSessionRef: "session-a"},
 			},
 		}}
 		Expect(newestPodOwnedByJob(pods, jobUID)).To(BeNil())
@@ -106,7 +108,7 @@ var _ = Describe("pod selection for status.podName", func() {
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "pod-stale-job",
-					Labels: map[string]string{LabelSessionRef: "session-a"},
+					Labels: map[string]string{job.LabelSessionRef: "session-a"},
 					OwnerReferences: []metav1.OwnerReference{{
 						Kind: "Job",
 						UID:  "stale-job-uid",

@@ -473,6 +473,26 @@ spec:
                 required:
                 - image
                 type: object
+              runtimeProfileRef:
+                description: |-
+                  RuntimeProfileRef optionally references a RuntimeProfile in the same namespace.
+                  The profile is applied to the session Job pod template once wired in the reconciler.
+                properties:
+                  kind:
+                    default: RuntimeProfile
+                    description: Kind is the profile resource kind. Only RuntimeProfile
+                      is supported in MVP.
+                    enum:
+                    - RuntimeProfile
+                    type: string
+                  name:
+                    description: Name is the RuntimeProfile resource name in the AgentSession
+                      namespace.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               task:
                 description: Task describes what the agent should do.
                 properties:
@@ -716,6 +736,32 @@ spec:
                   - name
                   type: object
                 type: array
+              matchedRuntimeProfile:
+                description: MatchedRuntimeProfile records the RuntimeProfile applied
+                  to the session Job template.
+                properties:
+                  generation:
+                    description: Generation is the profile generation at resolution
+                      time.
+                    format: int64
+                    type: integer
+                  kind:
+                    description: Kind is the profile resource kind.
+                    type: string
+                  name:
+                    description: Name is the profile resource name.
+                    type: string
+                  resourceVersion:
+                    description: ResourceVersion is the profile resourceVersion at
+                      resolution time.
+                    type: string
+                  uid:
+                    description: UID is the profile object UID at resolution time.
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the last generation reconciled
                   by the controller.

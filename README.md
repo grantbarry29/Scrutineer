@@ -87,7 +87,9 @@ The MVP in this repo is the first vertical slice of that vision: the
 ├── .devcontainer/                # one-shot Cursor/VS Code dev env (kind + CRDs)
 ├── api/v1alpha1/                 # CRD types + deepcopy
 ├── cmd/main.go                   # controller-manager entrypoint
-├── internal/controller/          # AgentSessionReconciler + helpers
+├── internal/controller/
+│   ├── agentsession/             # AgentSession reconciler + policy/runtime watches
+│   └── job/                      # Kubernetes Job build, drift detection, status helpers
 ├── config/
 │   ├── crd/bases/                # CRD YAML
 │   ├── default/                  # top-level kustomization
@@ -153,8 +155,43 @@ External references resolve in the **same namespace** as the `AgentSession`:
 |-----|------|-------------------|
 | `spec.task.promptConfigMapRef` | ConfigMap | Same namespace as session |
 | `spec.policyRefs[]` | AgentPolicy, ToolPolicy | Same namespace as session |
+| `spec.runtimeProfileRef` | RuntimeProfile | Same namespace as session |
 
 Cross-namespace refs are not supported in the MVP. Future CRDs may add an explicit `namespace` field on refs.
+
+### Reusable runtime profile (`RuntimeProfile`)
+
+Platform teams can publish opt-in runtime hardening once; sessions reference a profile via `spec.runtimeProfileRef`.
+
+**Applied to the Job pod template today:**
+
+| Source | Fields merged into Job |
+|--------|------------------------|
+| Relay baseline | Capability drops (`ALL`), `allowPrivilegeEscalation: false` (busybox-friendly; no forced `runAsNonRoot`) |
+| `RuntimeProfile.spec.container` | `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities` (profile wins when set) |
+| `RuntimeProfile.spec.pod` | `runtimeClassName`, `seccompProfile` |
+
+**Status written on reconcile:**
+
+| Field | Meaning |
+|-------|---------|
+| `status.matchedRuntimeProfile` | Which `RuntimeProfile` was applied (name, UID, resourceVersion) |
+| `RuntimeProfileResolved` condition | `ProfileApplied` when a ref resolves; `NoProfileRef` when unset |
+
+**Schema-only in Phase 2 (not injected yet):** `spec.sidecars[]` (`envoy`, `dns-proxy`, `tool-gateway`) — declared for Phase 3 data-plane injection. Sandbox `runtimeClassName` is written to the pod template but not enforced by Relay until sandbox runtimes are integrated.
+
+**Profile change behavior:**
+
+- Updating a referenced `RuntimeProfile` re-reconciles affected sessions (controller watch).
+- If the owned Job has **not** started pods yet (`Active==0`), the controller **replaces** the Job so the pod template matches.
+- If the Job is **already running**, pod templates are immutable — the running pod may retain the old security context until the Job is replaced manually or the session ends.
+
+**Samples:**
+
+```bash
+kubectl apply -f config/samples/relay_v1alpha1_runtimeprofile.yaml
+kubectl apply -f config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml
+```
 
 ### Reusable policy (`AgentPolicy` + `ToolPolicy`)
 
@@ -506,6 +543,16 @@ Expect `Phase=Cancelled` and no `relay-session-cancel-at-create-sample` Job.
 
 To cancel a long-running session, apply the success sample, wait for `Running`, then patch `cancelRequested` as described in [Cancelling a running session](#cancelling-a-running-session).
 
+### 9. Try the RuntimeProfile sample
+
+```
+kubectl apply -f config/samples/relay_v1alpha1_runtimeprofile.yaml
+kubectl apply -f config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml
+kubectl get agentsession session-with-runtimeprofile -w
+```
+
+Expect a Job whose pod template includes settings from `hardened-agent` (see `kubectl get job relay-session-session-with-runtimeprofile -o yaml`). The sample uses stricter container hardening; use an image compatible with `runAsNonRoot` / `readOnlyRootFilesystem` in production.
+
 ### Validate samples against the installed CRD
 
 After `make install` (or `make dev-up`), check that hand-maintained samples still match the API:
@@ -514,7 +561,7 @@ After `make install` (or `make dev-up`), check that hand-maintained samples stil
 make verify-samples
 ```
 
-This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap, AgentPolicy/ToolPolicy refs).
+This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap, AgentPolicy/ToolPolicy/RuntimeProfile refs).
 
 ---
 
@@ -530,6 +577,8 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | Policy modes (`audit-only` / `dry-run` / `enforced`) | Yes | Declared in status + `AGENT_POLICY_MODE`; not enforced yet |
 | `status.policyDecisions` | Yes | Merge-time audit entries only (max 64) |
 | Policy change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
+| `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
+| `RuntimeProfile.spec.sidecars` | Schema only | Declared; not injected until Phase 3 |
 | Session cancellation | Yes | `spec.cancelRequested` → Job delete + `Phase=Cancelled` |
 | Human approval gate | No | Declared only; does not block runs |
 | `status.usage` / `violations` / `artifacts` | No | Reserved for future observability backends |
@@ -580,9 +629,7 @@ are explicit hook points in the current code:
 - **`ToolPolicy`** — **shipped** (namespace-scoped). Tool/MCP allowlists and caps via `spec.policyRefs`.
 - **`ApprovalPolicy`** + `ApprovalRequest`/`Approval` — block-and-wait
   semantics for `requireHumanApproval` actions.
-- **`RuntimeProfile`** — opt-in stricter runtime hardening
-  (`runAsNonRoot`, `readOnlyRootFilesystem`, seccomp, AppArmor, sandbox
-  runtime selection).
+- **`RuntimeProfile`** — **shipped** (namespace-scoped). Referenced from `spec.runtimeProfileRef`; merges container/pod security into the Job. `spec.sidecars` and sandbox enforcement are Phase 3.
 - **`ToolGateway`** — Relay-managed proxy endpoint that brokers MCP/tool API
   calls, attributes them to the session, and enforces `ToolPolicy`.
 

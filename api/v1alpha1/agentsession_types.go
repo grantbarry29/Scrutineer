@@ -194,6 +194,11 @@ type AgentSessionSpec struct {
 	// +optional
 	PolicyRefs []PolicyRef `json:"policyRefs,omitempty"`
 
+	// RuntimeProfileRef optionally references a RuntimeProfile in the same namespace.
+	// The profile is applied to the session Job pod template once wired in the reconciler.
+	// +optional
+	RuntimeProfileRef *RuntimeProfileRef `json:"runtimeProfileRef,omitempty"`
+
 	// Policy describes inline governance overrides for this session.
 	// +optional
 	Policy InlinePolicySpec `json:"policy,omitempty"`
@@ -323,6 +328,10 @@ type AgentSessionStatus struct {
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=64
 	PolicyDecisions []PolicyDecision `json:"policyDecisions,omitempty"`
+
+	// MatchedRuntimeProfile records the RuntimeProfile applied to the session Job template.
+	// +optional
+	MatchedRuntimeProfile *MatchedRuntimeProfileRef `json:"matchedRuntimeProfile,omitempty"`
 
 	// Result captures the terminal outcome of the session.
 	// +optional

@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-03 (Phase 2 work-item audit)
+> **Last updated:** 2026-06-08 (controller package split)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,11 +13,256 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-_(Queue empty — promote a task from **Discovered Follow-Up Tasks** or Phase 1 roadmap when ready.)_
+_(Queue empty — **Phase 2 is complete**. Promote from **Discovered Follow-Up Tasks** or start **Phase 3** planning when ready.)_
 
-**Recently completed** (do not re-implement unless regressions): **README policy docs**, **ToolPolicy CRD**, **Job env sync** (`PolicyPropagated` / pending Job replace / `PolicyEnvDrift`), policy decision records, AgentPolicy watch, Phase 2 policy slice, verify-samples, e2e, finalizers, CI, cancellation.
+**Next suggested picks:** Propagate `maxCallsPerMinute` · Watch owned Pods · Document Kubernetes Events · Phase 3 enforcement architecture (design).
 
-**Next suggested queue picks:** Watch owned Pods · RuntimeProfile CRD · Document Kubernetes Events · Add Ready condition.
+**Recently completed** (do not re-implement unless regressions): **Controller package split** (`internal/controller/agentsession/`, `internal/controller/job/`); **Phase 2 reusable policy model** (AgentPolicy, ToolPolicy, RuntimeProfile, policy merge, watches, Job sync, docs, samples, e2e); Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+
+---
+
+## Phase 2 — closed (2026-06-03)
+
+**Status:** All roadmap checkboxes and completion tasks (1–6) are **done**. Control-plane policy + runtime profiles ship without data-plane enforcement.
+
+**Verification pass (same session):**
+
+| Check | Result |
+|-------|--------|
+| `make fmt && make vet && make test` | Pass — **47** envtest specs; controller ~**78%** coverage |
+| `make verify-samples` | Pass — 10 `relay_*.yaml` samples (policy, toolpolicy, runtimeprofile refs) |
+| `make test-e2e` | Pass — **12/12** specs on kind |
+
+**Phase 2 capability → test coverage:**
+
+| Capability | Envtest | E2e | Samples |
+|------------|---------|-----|---------|
+| `AgentPolicy` + `policyRefs` merge | Yes | — | `agentpolicy` + `agentsession_policy_ref` |
+| `ToolPolicy` in `policyRefs` | Yes | — | `toolpolicy` + `agentsession_toolpolicy_ref` |
+| Policy watches + pending Job env sync | Yes | — | — |
+| `PolicyPropagated` / `PolicyEnvDrift` | Yes | — | README |
+| `status.policyDecisions` (merge) | Yes | — | — |
+| `RuntimeProfile` CRD | — | — | `runtimeprofile.yaml` |
+| `runtimeProfileRef` + validation | Yes | — | `agentsession_runtimeprofile_ref` |
+| Profile → Job pod template | Yes | Yes | — |
+| `RuntimeProfile` watch + pending Job replace | Yes | Yes | — |
+
+**Deferred (tracked, not Phase 2 blockers):** `maxCallsPerMinute`, ToolPolicy argument constraints, mode enforcement, runtime `policyDecisions` append — see table under Phase 2 roadmap below.
+
+---
+
+## Phase 2 completion tasks (archived — all done 2026-06-03)
+
+Tasks 1–6 below were implemented in sequence; kept for reference. Do not re-run unless regressions.
+
+---
+
+### Task: RuntimeProfile CRD API and manifests
+
+**Goal:**  
+Ship a namespace-scoped `RuntimeProfile` CRD with declarative hardening and future sidecar/sandbox hooks.
+
+**Why it matters:**  
+Phase 2’s last roadmap item; operators need a reusable profile object before sessions can reference it.
+
+**Scope:**
+- Add `api/v1alpha1/runtimeprofile_types.go` with `RuntimeProfileSpec` / `RuntimeProfileStatus` (minimal status: `observedGeneration` reserved).
+- Spec fields (declarative only in this task):
+  - Container: `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities` (drop/add lists) — mirror Kubernetes `SecurityContext` subset.
+  - Pod: `runtimeClassName` (sandbox selection hook), `seccompProfile` (type + localhostProfile).
+  - Sidecars: optional `sidecars[]` with `name`, `type` (e.g. `envoy`, `dns-proxy`), `enabled` — **schema only**, no injection.
+- Register in `groupversion_info.go` / scheme; kubebuilder RBAC markers stub if needed later.
+- `config/crd/kustomization.yaml` includes `runtimeprofiles`.
+- Sample: `config/samples/relay_v1alpha1_runtimeprofile.yaml`; add to `config/samples/kustomization.yaml`.
+
+**Non-goals:**
+- Do not add `runtimeProfileRef` on `AgentSession` yet.
+- Do not change Job reconciliation or inject sidecars.
+- Do not implement gVisor/Kata/Envoy.
+
+**Acceptance criteria:**
+- `make manifests` generates `relay.secureai.dev_runtimeprofiles.yaml`.
+- `make verify-samples` passes including the new sample.
+- OpenAPI describes fields as declarative hooks until Phase 3 enforcement.
+
+**Expected files:**
+- `api/v1alpha1/runtimeprofile_types.go`
+- `api/v1alpha1/zz_generated.deepcopy.go` (generated)
+- `config/crd/bases/relay.secureai.dev_runtimeprofiles.yaml` (generated)
+- `config/crd/kustomization.yaml`
+- `config/samples/relay_v1alpha1_runtimeprofile.yaml`
+- `config/samples/kustomization.yaml`
+
+**Verification command:**  
+`make manifests && make verify-samples`
+
+---
+
+### Task: AgentSession runtimeProfileRef and validation
+
+**Goal:**  
+Sessions can reference a `RuntimeProfile` in the same namespace; invalid refs fail validation like policy refs.
+
+**Why it matters:**  
+Wires the session API to profiles before the reconciler applies them to Jobs.
+
+**Scope:**
+- Add `spec.runtimeProfileRef` on `AgentSessionSpec` (name required; kind defaults to `RuntimeProfile`).
+- API comments: same-namespace only (match `PolicyRef` / `PromptConfigMapRef` pattern).
+- Controller `validateSpec` / resolve path: missing `RuntimeProfile` → `PhaseDenied` with clear reason (mirror `InvalidPolicy`).
+- Optional condition stub: `RuntimeProfileResolved` constant only (full wiring in task 3).
+
+**Non-goals:**
+- Do not apply profile fields to Job pod template yet.
+- Do not add RuntimeProfile watch.
+- Do not add cross-namespace refs.
+
+**Acceptance criteria:**
+- Valid ref passes validation; missing profile denies session without creating a Job.
+- Envtest covers happy ref + missing profile denial.
+
+**Expected files:**
+- `api/v1alpha1/agentsession_types.go`
+- `internal/controller/agentsession_controller.go` (validation)
+- `internal/controller/agentsession_controller_test.go`
+- `internal/controller/constants.go` (condition name constant)
+
+**Verification command:**  
+`make test`
+
+---
+
+### Task: Apply RuntimeProfile to Job pod template
+
+**Goal:**  
+Referenced profiles merge into the owned Job’s pod/container security context and pod-level runtime settings.
+
+**Why it matters:**  
+Completes the control-plane loop: declare profile → materialize on the execution surface (Job template).
+
+**Scope:**
+- Load `RuntimeProfile` when `spec.runtimeProfileRef` is set (`internal/controller/runtimeprofile.go` or equivalent).
+- Merge profile container fields with `defaultContainerSecurityContext()` in `job.go` (profile overrides baseline where set).
+- Apply pod-level `runtimeClassName`, `seccompProfile` on Job pod template.
+- Status: `status.runtimeProfile` (or `matchedRuntimeProfile`) with name + `resourceVersion`/`generation`.
+- Set `RuntimeProfileResolved` condition True/False with reason (e.g. `ProfileApplied`, `ProfileNotFound`).
+- Normal event when profile applied (optional, match `PolicyResolved` style).
+
+**Non-goals:**
+- Do not inject sidecars from `spec.sidecars` (Phase 3).
+- Do not replace running Jobs on profile drift (document immutability; same as policy env on active Jobs).
+- Do not change sample images to require `runAsNonRoot` globally (only sessions with explicit profile).
+
+**Acceptance criteria:**
+- Envtest: session with profile ref produces Job with expected `securityContext` / `runtimeClassName`.
+- Session without ref keeps current baseline behavior (busybox-friendly default).
+- Missing profile → denied path from task 2 still works.
+
+**Expected files:**
+- `internal/controller/runtimeprofile.go` (new)
+- `internal/controller/job.go`
+- `internal/controller/agentsession_controller.go`
+- `internal/controller/agentsession_controller_test.go`
+- `api/v1alpha1/agentsession_types.go` (status field if added)
+
+**Verification command:**  
+`make test`
+
+---
+
+### Task: RuntimeProfile watch for session re-reconcile
+
+**Goal:**  
+Updating or deleting a `RuntimeProfile` re-reconciles sessions that reference it.
+
+**Why it matters:**  
+Matches `AgentPolicy` / `ToolPolicy` watch behavior so profile edits propagate to pending Jobs.
+
+**Scope:**
+- `Watches(RuntimeProfile)` with map function → sessions in same namespace referencing profile name.
+- Reuse list+filter pattern from `internal/controller/policy_watch.go`.
+- Envtest: change profile `runAsNonRoot` (or similar) → session reconcile updates desired Job for pending Job; active Job behavior per immutability rules.
+
+**Non-goals:**
+- Do not implement profile drift replacement for active Jobs beyond existing immutability.
+- Do not watch sidecar ConfigMaps.
+
+**Acceptance criteria:**
+- Envtest proves profile update triggers reconcile and updates Job spec when Job is still pending (`Active==0`).
+- RBAC includes `runtimeprofiles` get/list/watch if not already present.
+
+**Expected files:**
+- `internal/controller/runtimeprofile_watch.go` (new) or extend `policy_watch.go`
+- `internal/controller/agentsession_controller.go` (`SetupWithManager`)
+- `internal/controller/agentsession_controller_test.go`
+- `config/rbac/role.yaml` (generated)
+
+**Verification command:**  
+`make manifests && make test`
+
+---
+
+### Task: RuntimeProfile operator docs, samples, and e2e
+
+**Goal:**  
+Operators can discover, apply, and verify RuntimeProfile usage without reading controller code.
+
+**Why it matters:**  
+Phase 2 parity with policy CRDs (README + samples + verify-samples; e2e where practical).
+
+**Scope:**
+- README section: what RuntimeProfile does, same-namespace `runtimeProfileRef`, merge with baseline security context, immutability on running Jobs.
+- Update long-term / MVP tables (`RuntimeProfile` row: shipped vs schema-only sidecars).
+- Sample session: `config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml` + kustomization entry.
+- External reference scoping table: add `runtimeProfileRef` row.
+- E2e (if practical): assert Job pod spec field from applied profile, or document why envtest-only (image constraints).
+
+**Non-goals:**
+- Do not document Envoy/gVisor enforcement as shipped.
+- Do not add UI.
+
+**Acceptance criteria:**
+- `make verify-samples` includes runtime profile + session ref samples.
+- README accurately states declarative-only sidecar/sandbox fields.
+
+**Expected files:**
+- `README.md`
+- `config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml`
+- `config/samples/kustomization.yaml`
+- `test/e2e/` (optional new spec)
+
+**Verification command:**  
+`make verify-samples` (and `make test-e2e` if e2e added)
+
+---
+
+### Task: Close Phase 2 roadmap and operational state
+
+**Goal:**  
+Status file and roadmap reflect Phase 2 as complete after RuntimeProfile ships.
+
+**Why it matters:**  
+Prevents agents from re-implementing finished work and clarifies Phase 3 entry point.
+
+**Scope:**
+- Mark `[x] RuntimeProfile CRD` on Phase 2 roadmap; add recent-fixes bullet.
+- Update **Current Operational State** table (`Additional CRDs (Phase 2)` → done).
+- Move completed Phase 2 completion cards to **Recently completed**; clear or repoint **Ready for Cursor Queue**.
+- Confirm **Phase 2 deferred** table still accurate (optional polish tasks remain discovered, not Phase 2 blockers).
+
+**Non-goals:**
+- Do not implement new code in this task.
+- Do not start Phase 3 work.
+
+**Acceptance criteria:**
+- No unchecked Phase 2 roadmap bullets except any explicitly deferred items with user approval.
+- **Next up** in queue points to Phase 3 planning or a promoted discovered task.
+
+**Expected files:**
+- `.cursor/relay-project-status.md`
+
+**Verification command:**  
+Review only (no code change required beyond status file)
 
 ---
 
@@ -276,11 +521,12 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | **Policy propagation** | Done | Merge `policyRefs` + inline → `status.effectivePolicy` → `AGENT_POLICY_*` env |
 | **Policy enforcement** | Not started | Env vars are hooks only; no network/tool/file gates |
 | **Dev environment** | Done | Devcontainer + kind (`relay-dev`) + bootstrap scripts |
-| **E2E tests** | Done | `make test-e2e` — 11 specs against live kind cluster |
-| **Unit / envtest** | Done | Controller suite with validation + reconciler specs (~65% coverage) |
+| **E2E tests** | Done | `make test-e2e` — **12** specs against live kind cluster |
+| **Unit / envtest** | Done | Controller suite — **47** envtest specs; ~**78%** coverage |
 | **CI** | Done | `.github/workflows/test.yaml`, `e2e.yaml`, `lint.yaml` |
 | **In-cluster deploy** | Ready | `make dev-deploy` builds image + deploys manager |
-| **Additional CRDs (Phase 2)** | Nearly complete | `AgentPolicy` + `ToolPolicy` done; **RuntimeProfile** remains on Phase 2 roadmap |
+| **RuntimeProfile CRD** | Done | CRD + `runtimeProfileRef` + Job apply + watch + README/samples/e2e |
+| **Additional CRDs (Phase 2)** | **Done** | `AgentPolicy`, `ToolPolicy`, `RuntimeProfile` — control-plane complete |
 | **Additional CRDs (later)** | Not started | ApprovalPolicy, CredentialProfile, SessionTemplate, ToolGateway |
 | **Operational UI** | Not started | Vision documented in product rule |
 | **Audit / observability backend** | Not started | Status fields exist; not populated by sidecars yet |
@@ -301,7 +547,8 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 - Kubernetes Events on validation, Job create, running, success, failure, cancellation
 - `spec.cancelRequested: true` deletes the owned Job and reaches terminal `PhaseCancelled` with `Completed` condition
 - `status.podName` set to the newest Pod owned by the session's Job (when a Pod exists)
-- Sample manifests (success + failing) and README documentation
+- `RuntimeProfile` + `spec.runtimeProfileRef` — merge profile into Job pod template; `status.matchedRuntimeProfile`; `RuntimeProfileResolved` condition; watch + pending Job replace on profile drift
+- Sample manifests (success, failing, policy/toolpolicy/runtimeprofile refs) and README documentation
 
 ### Known gaps (MVP vs schema)
 
@@ -309,10 +556,11 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 |------------|---------------|---------------------------|
 | `task.promptConfigMapRef` | Yes | Done — loads key from same-namespace ConfigMap |
 | `status.usage` | Yes | No — reserved for future sidecar/audit |
-| `status.podName` | Yes | Done — labeled session Pods, current Job UID, newest `CreationTimestamp` (name tie-break); see `internal/controller/pod.go` |
+| `status.podName` | Yes | Done — labeled session Pods, current Job UID, newest `CreationTimestamp` (name tie-break); see `internal/controller/agentsession/pod.go` |
 | `status.violations` | Yes | No — no enforcement backend yet |
 | `status.artifacts` | Yes | No — `outputs.collectArtifacts` not implemented |
 | `spec.policyRefs` / `AgentPolicy` / `ToolPolicy` | Yes | Done — same-namespace refs; merge order refs → inline; missing ref → `InvalidPolicy` |
+| `spec.runtimeProfileRef` | Yes | Done — profile merges into Job container/pod spec; `matchedRuntimeProfile`; `RuntimeProfileResolved` |
 | `PolicyPropagated` / Job env sync | Yes | Pending Job replaced on policy drift; active Job → `PolicyEnvDrift` condition + warning event |
 | `status.effectivePolicy` / `matchedPolicies` | Yes | Done — populated on reconcile |
 | `status.policyDecisions` | Yes | Done — merge-time only (`phase: merge`); replaced each reconcile; capped at 64 |
@@ -327,7 +575,7 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 
 ### status.podName selection semantics
 
-Documented in `internal/controller/pod.go` and API comments on `status.podName`:
+Documented in `internal/controller/agentsession/pod.go` and API comments on `status.podName`:
 
 - List Pods in the session namespace with `relay.secureai.dev/session=<session.name>`.
 - Keep only Pods whose `ownerReference` matches the **current** Job UID (`Kind=Job`).
@@ -379,6 +627,7 @@ Documented in `internal/policy/`, `README.md`, and API comments:
 |-----|--------------|----------------|
 | `promptConfigMapRef` | Same namespace as `AgentSession` | Optional explicit `namespace` field |
 | `policyRefs` (`AgentPolicy`, `ToolPolicy`) | Same namespace | Optional `namespace` on `PolicyRef` |
+| `runtimeProfileRef` | Same namespace | Optional `namespace` when added |
 | `CredentialProfile` / `SessionTemplate` (planned) | — | Same-namespace default; explicit namespace when added |
 
 Cross-namespace reads are **not** implemented in MVP.
@@ -400,11 +649,17 @@ Built in `internal/policy/decisions.go` via `BuildMergeDecisions`.
 
 ### Recent fixes
 
+- **Phase 2 closed** — reusable policy model + RuntimeProfile complete; verification: 47 envtest + 12 e2e + verify-samples (2026-06-03)
+- **RuntimeProfile docs/samples/e2e (Phase 2 · 5/6)** — README section, session sample, verify-samples, e2e runtime profile spec
+- **RuntimeProfile watch (Phase 2 · 4/6)** — `Watches(RuntimeProfile)`; pending Job replace on profile pod-template drift; envtest
+- **Apply RuntimeProfile to Job (Phase 2 · 3/6)** — merge container/pod security from profile; `status.matchedRuntimeProfile`; `RuntimeProfileResolved` + event; envtest
+- **runtimeProfileRef + validation (Phase 2 · 2/6)** — `RuntimeProfileRef` on AgentSession; `validateSpec` + `resolveRuntimeProfile`; `InvalidRuntimeProfile` denial; RBAC for `runtimeprofiles`; envtest
+- **RuntimeProfile CRD (Phase 2 · 1/6)** — `runtimeprofile_types.go`, container/pod hardening + declarative `sidecars[]`, CRD manifest, sample (`hardened-agent`); `make verify-samples`
 - **README policy docs** — `AgentPolicy`/`ToolPolicy`, merge semantics, scoping, policy change / Job env behavior, MVP table
 - **ToolPolicy CRD** — `toolpolicy_types.go`, merge via `LoadPolicyLayers`, watch, samples, envtest
 - **Job env sync** — `PolicyPropagated` condition; replace pending Job on drift; `PolicyEnvDrift` when Job active (`job_policy.go`)
 - **Policy decision records** — `PolicyDecision` API type, merge-time population, unit + envtest coverage
-- **AgentPolicy watch** — `Watches(AgentPolicy)` maps to sessions with matching `spec.policyRefs`; envtest verifies `status.effectivePolicy` updates on policy change (`internal/controller/policy_watch.go`)
+- **AgentPolicy watch** — `Watches(AgentPolicy)` maps to sessions with matching `spec.policyRefs`; envtest verifies `status.effectivePolicy` updates on policy change (`internal/controller/agentsession/policy_watch.go`)
 - **Phase 2 reusable policy (slice)** — `AgentPolicy` CRD, `PolicyRules` shared type, `policyRefs`, `internal/policy` merge/resolve, `PolicyResolved` condition, samples, envtest (38 specs)
 - **Rules compliance audit** — Job ownership denial (`JobConflict`), main `APIReader`, model/workspace validation, TimedOut sync without `Failed>0`, `ApprovalNotEnforced` warning event, terminal `Denied` preserves validation reason; envtest coverage (36 specs)
 - **validate sample manifests** — `make verify-samples` (server dry-run on `config/samples/relay_*.yaml`); prompt CM sample in kustomization; README sample list
@@ -453,7 +708,7 @@ Phases are ordered by product maturity. **Implement incrementally** — decompos
 
 Complete the vertical slice so the API and controller behavior match, and the project is safe to extend.
 
-- [x] **Envtest controller tests** — Reconciler unit tests in `internal/controller/` (validation, Job create, status transitions, condition stability)
+- [x] **Envtest controller tests** — Reconciler unit tests in `internal/controller/agentsession/` + Job helpers in `internal/controller/job/` (validation, Job create, status transitions, condition stability)
 - [x] **PromptConfigMapRef** — Load prompt from ConfigMap in reconciler; validate ref exists
 - [x] **Status patch strategy** — Live read + condition union + `Status().Update` (CRDs do not support strategic merge patch on status)
 - [x] **Populate `status.podName` reliably** — Newest Job-owned Pod by creation timestamp; envtest + e2e coverage
@@ -479,8 +734,8 @@ Extract inline policy into composable, versioned CRDs without breaking AgentSess
 - [x] **ToolPolicy CRD** — Tool/MCP allowlists + caps; `policyRefs` + watch + samples + README
 - [x] **Policy watches** — `AgentPolicy` + `ToolPolicy` changes re-reconcile referencing sessions
 - [x] **Job env sync (partial)** — Replace pending Job on policy drift; `PolicyPropagated` / `PolicyEnvDrift` when Job active
-- [x] **Operator docs** — README policy section, reference scoping, samples (`make verify-samples`)
-- [ ] **RuntimeProfile CRD** — Stricter security contexts, sandbox selection, sidecar profiles (**last Phase 2 item**)
+- [x] **Operator docs** — README policy + RuntimeProfile sections, reference scoping, samples (`make verify-samples`)
+- [x] **RuntimeProfile CRD** — Reusable hardening; `runtimeProfileRef`; Job pod template merge; watch; samples + e2e; `spec.sidecars` schema-only (Phase 3 injection)
 
 **Phase 2 deferred / follow-up (tracked, not blocking Phase 3 planning):**
 
@@ -493,7 +748,7 @@ Extract inline policy into composable, versioned CRDs without breaking AgentSess
 | Active Job env stale after policy change | `PolicyEnvDrift` condition | Documented; immutable Job template |
 | Mode **enforcement** (audit/dry-run/enforced behavior) | Phase 3 roadmap | Declared + propagated only |
 
-**Phase 2 is complete for control-plane policy** once `RuntimeProfile` ships (or is explicitly deferred to Phase 3). Everything else above is polish or Phase 3+.
+**Phase 2 is complete** for control-plane policy and runtime profiles. Optional polish (`maxCallsPerMinute`, argument constraints) stays in **Discovered Follow-Up Tasks**. Mode enforcement and sidecar injection are **Phase 3**.
 
 ---
 

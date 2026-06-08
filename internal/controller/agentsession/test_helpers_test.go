@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package agentsession
 
 import (
 	"time"
@@ -25,7 +25,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	relayjob "github.com/secureai/relay/internal/controller/job"
 )
+
+func jobNameFor(session *relayv1alpha1.AgentSession) string {
+	return relayjob.NameFor(session)
+}
 
 const (
 	controllerPollInterval = 250 * time.Millisecond
@@ -149,5 +154,9 @@ func setJobSucceeded(job *batchv1.Job) {
 }
 
 func envMap(vars []corev1.EnvVar) map[string]string {
-	return envVarsToMap(vars)
+	out := make(map[string]string, len(vars))
+	for _, e := range vars {
+		out[e.Name] = e.Value
+	}
+	return out
 }

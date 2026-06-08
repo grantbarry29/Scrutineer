@@ -26,7 +26,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller"
+	"github.com/secureai/relay/internal/controller/agentsession"
 )
 
 var (
@@ -68,7 +68,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.AgentSessionReconciler{
+	if err := (&agentsession.AgentSessionReconciler{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),

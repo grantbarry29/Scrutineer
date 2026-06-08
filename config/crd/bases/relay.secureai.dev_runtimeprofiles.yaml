@@ -1,0 +1,166 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: runtimeprofiles.relay.secureai.dev
+spec:
+  group: relay.secureai.dev
+  names:
+    kind: RuntimeProfile
+    listKind: RuntimeProfileList
+    plural: runtimeprofiles
+    shortNames:
+    - rp
+    - runtimeprof
+    singular: runtimeprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.pod.runtimeClassName
+      name: RuntimeClass
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: RuntimeProfile is a reusable runtime hardening profile that AgentSessions
+          can reference.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              RuntimeProfileSpec defines reusable runtime hardening for AgentSessions.
+              Fields are declarative in Phase 2; enforcement backends (sidecars, sandboxes) arrive in Phase 3.
+            properties:
+              container:
+                description: Container holds security settings applied to the agent
+                  container.
+                properties:
+                  allowPrivilegeEscalation:
+                    description: AllowPrivilegeEscalation controls whether a process
+                      can gain more privileges than its parent.
+                    type: boolean
+                  capabilities:
+                    description: Capabilities adjusts Linux capabilities for the agent
+                      container.
+                    properties:
+                      add:
+                        description: Added capabilities
+                        items:
+                          description: Capability represent POSIX capabilities type
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      drop:
+                        description: Removed capabilities
+                        items:
+                          description: Capability represent POSIX capabilities type
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: atomic
+                    type: object
+                  readOnlyRootFilesystem:
+                    description: ReadOnlyRootFilesystem mounts the container root
+                      filesystem read-only.
+                    type: boolean
+                  runAsNonRoot:
+                    description: RunAsNonRoot requires the container to run as a non-root
+                      UID.
+                    type: boolean
+                type: object
+              pod:
+                description: Pod holds pod-level runtime settings (sandbox class,
+                  seccomp).
+                properties:
+                  runtimeClassName:
+                    description: |-
+                      RuntimeClassName selects a RuntimeClass (e.g. gVisor/Kata) when the cluster provides one.
+                      Declarative only until sandbox runtimes are enforced in Phase 3.
+                    type: string
+                  seccompProfile:
+                    description: SeccompProfile applies a seccomp profile at the pod
+                      level.
+                    properties:
+                      localhostProfile:
+                        description: |-
+                          localhostProfile indicates a profile defined in a file on the node should be used.
+                          The profile must be preconfigured on the node to work.
+                          Must be a descending path, relative to the kubelet's configured seccomp profile location.
+                          Must be set if type is "Localhost". Must NOT be set for any other type.
+                        type: string
+                      type:
+                        description: |-
+                          type indicates which kind of seccomp profile will be applied.
+                          Valid options are:
+
+                          Localhost - a profile defined in a file on the node should be used.
+                          RuntimeDefault - the container runtime default profile should be used.
+                          Unconfined - no profile should be applied.
+                        type: string
+                    required:
+                    - type
+                    type: object
+                type: object
+              sidecars:
+                description: |-
+                  Sidecars lists optional data-plane sidecars to attach once injection exists (Phase 3).
+                  Schema only in Phase 2 — the controller does not inject these containers yet.
+                items:
+                  description: RuntimeProfileSidecar describes a future sidecar to
+                    inject alongside the agent (Phase 3).
+                  properties:
+                    enabled:
+                      description: Enabled gates whether the sidecar should be injected
+                        when injection is implemented.
+                      type: boolean
+                    name:
+                      description: Name is a unique identifier for this sidecar within
+                        the profile.
+                      minLength: 1
+                      type: string
+                    type:
+                      description: |-
+                        Type identifies the sidecar role. Known values: envoy, dns-proxy, tool-gateway.
+                        Additional types may be added when enforcement backends ship.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - type
+                  type: object
+                type: array
+            type: object
+          status:
+            description: RuntimeProfileStatus defines the observed state of a RuntimeProfile.
+            properties:
+              observedGeneration:
+                description: ObservedGeneration is reserved for a future RuntimeProfile
+                  controller.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

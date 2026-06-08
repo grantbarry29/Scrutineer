@@ -8,13 +8,12 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package agentsession
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -32,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/controller/job"
 	"github.com/secureai/relay/internal/policy"
 )
 
@@ -54,6 +54,7 @@ const deletionRequeueAfter = 2 * time.Second
 
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=toolpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=runtimeprofiles,verbs=get;list;watch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/finalizers,verbs=update
@@ -148,6 +149,21 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			fmt.Sprintf("Merged %d referenced policies (mode=%s)", len(resolvedPolicy.Matched), resolvedPolicy.Mode))
 	}
 
+	resolvedProfile, err := r.resolveRuntimeProfile(ctx, session)
+	if err != nil {
+		logger.Info("AgentSession runtime profile resolution failed", "reason", err.Error())
+		session.Status.Phase = relayv1alpha1.PhaseDenied
+		setCompletionTime(session)
+		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidRuntimeProfile", err.Error())
+		r.recordWarning(session, EventReasonValidationFailed, err.Error())
+		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid runtime profile")
+		return ctrl.Result{}, r.patchStatus(ctx, original, session)
+	}
+	if resolvedProfile != nil {
+		r.recordNormal(session, EventReasonRuntimeProfileResolved,
+			fmt.Sprintf("Applied RuntimeProfile %q to Job template", resolvedProfile.Name))
+	}
+
 	// Approval gate: surface declared approvals from effective policy. MVP does not block execution.
 	if len(resolvedPolicy.Rules.RequireHumanApproval) > 0 {
 		msg := fmt.Sprintf("requireHumanApproval is declared (%v) but not enforced in MVP",
@@ -171,7 +187,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, r.patchStatus(ctx, original, session)
 	}
 
-	job, err := r.ensureJob(ctx, session, resolvedTask, resolvedPolicy)
+	job, err := r.ensureJob(ctx, session, resolvedTask, resolvedPolicy, resolvedProfile)
 	if err != nil {
 		if errors.Is(err, ErrJobNotOwned) {
 			session.Status.Phase = relayv1alpha1.PhaseDenied
@@ -237,7 +253,7 @@ func (r *AgentSessionReconciler) handleDeletion(ctx context.Context, session *re
 		return ctrl.Result{}, fmt.Errorf("stop runtime Job: %w", err)
 	}
 
-	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
+	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 	var job batchv1.Job
 	if err := r.getJob(ctx, jobKey, &job); err == nil {
 		// Delete accepted but the Job object may linger (e.g. envtest without GC). Once
@@ -310,7 +326,7 @@ func (r *AgentSessionReconciler) removeFinalizer(ctx context.Context, session *r
 // treated as already stopped. Delete is issued without a prior Get so cleanup is not
 // skipped when the cache has not observed the Job yet.
 func (r *AgentSessionReconciler) stopRuntimeJob(ctx context.Context, session *relayv1alpha1.AgentSession) error {
-	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
+	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 
 	var existing batchv1.Job
 	if err := r.Get(ctx, jobKey, &existing); err != nil {
@@ -372,30 +388,39 @@ func (r *AgentSessionReconciler) applyCancellationStatus(session *relayv1alpha1.
 // a Create — a follow-up reconcile that reads a stale cached AgentSession would
 // otherwise issue a JSON-merge-patch that overwrites the conditions array and drops
 // RuntimeCreated. Re-asserting on each reconcile keeps the condition convergent.
-func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved) (*batchv1.Job, error) {
-	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: jobNameFor(session)}
+func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (*batchv1.Job, error) {
+	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 
-	desired := buildJob(session, task, pol)
+	desired := job.Build(session, toJobTask(task), pol, profile)
 
 	var existing batchv1.Job
 	if err := r.Get(ctx, jobKey, &existing); err == nil {
 		if !metav1.IsControlledBy(&existing, session) {
 			return nil, fmt.Errorf("%w: Job %q", ErrJobNotOwned, existing.Name)
 		}
-		if relayPolicyEnvDrift(&existing, desired) {
-			if jobReplaceableForPolicySync(&existing) {
+		if job.PolicyEnvDrift(&existing, desired) || job.RuntimeProfileDrift(&existing, desired) {
+			if job.ReplaceableForSync(&existing) {
 				policy := metav1.DeletePropagationBackground
 				if err := r.Delete(ctx, &existing, client.PropagationPolicy(policy)); err != nil && !apierrors.IsNotFound(err) {
-					return nil, fmt.Errorf("delete Job %s for policy env sync: %w", jobKey, err)
+					return nil, fmt.Errorf("delete Job %s for runtime sync: %w", jobKey, err)
 				}
-				r.recordNormal(session, EventReasonPolicyEnvSynced, "Replaced pending Job to sync policy env vars")
-			} else {
-				msg := policyEnvDriftMessage(session)
+				if job.PolicyEnvDrift(&existing, desired) {
+					r.recordNormal(session, EventReasonPolicyEnvSynced, "Replaced pending Job to sync policy env vars")
+				}
+			} else if job.PolicyEnvDrift(&existing, desired) {
+				msg := job.PolicyEnvDriftMessage()
 				session.Status.JobName = existing.Name
 				setCondition(session, ConditionPolicyPropagated, metav1.ConditionFalse, "PolicyEnvDrift", msg)
 				setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
 					fmt.Sprintf("Job %q exists", existing.Name))
 				r.recordWarning(session, EventReasonPolicyEnvDrift, msg)
+				return &existing, nil
+			} else {
+				session.Status.JobName = existing.Name
+				setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
+					"Job policy env vars match effective policy")
+				setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
+					fmt.Sprintf("Job %q exists", existing.Name))
 				return &existing, nil
 			}
 		} else {
@@ -447,17 +472,17 @@ func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1
 }
 
 // syncStatusFromJob maps the Job's status fields onto the AgentSession status.
-func (r *AgentSessionReconciler) syncStatusFromJob(ctx context.Context, session *relayv1alpha1.AgentSession, job *batchv1.Job) {
-	if job == nil {
+func (r *AgentSessionReconciler) syncStatusFromJob(ctx context.Context, session *relayv1alpha1.AgentSession, runtimeJob *batchv1.Job) {
+	if runtimeJob == nil {
 		return
 	}
-	session.Status.JobName = job.Name
+	session.Status.JobName = runtimeJob.Name
 	if isTerminal(session.Status.Phase) {
 		return
 	}
 
 	switch {
-	case job.Status.Succeeded > 0:
+	case runtimeJob.Status.Succeeded > 0:
 		if session.Status.Phase != relayv1alpha1.PhaseSucceeded {
 			r.recordNormal(session, EventReasonJobSucceeded, "Job completed successfully")
 		}
@@ -471,7 +496,7 @@ func (r *AgentSessionReconciler) syncStatusFromJob(ctx context.Context, session 
 			}
 		}
 
-	case jobTimedOut(job):
+	case job.TimedOut(runtimeJob):
 		msg := "Underlying Job exceeded its activeDeadlineSeconds"
 		if session.Status.Phase != relayv1alpha1.PhaseTimedOut {
 			r.recordWarning(session, EventReasonJobFailed, msg)
@@ -486,7 +511,7 @@ func (r *AgentSessionReconciler) syncStatusFromJob(ctx context.Context, session 
 			}
 		}
 
-	case job.Status.Failed > 0 && backoffExhausted(job):
+	case runtimeJob.Status.Failed > 0 && job.BackoffExhausted(runtimeJob):
 		msg := "Underlying Job failed"
 		if session.Status.Phase != relayv1alpha1.PhaseFailed {
 			r.recordWarning(session, EventReasonJobFailed, msg)
@@ -501,7 +526,7 @@ func (r *AgentSessionReconciler) syncStatusFromJob(ctx context.Context, session 
 			}
 		}
 
-	case job.Status.Active > 0:
+	case runtimeJob.Status.Active > 0:
 		if session.Status.Phase != relayv1alpha1.PhaseRunning {
 			r.recordNormal(session, EventReasonJobRunning, "Job is running")
 		}
@@ -514,30 +539,11 @@ func (r *AgentSessionReconciler) syncStatusFromJob(ctx context.Context, session 
 	}
 }
 
-// backoffExhausted returns true if the Job has hit its backoffLimit.
-//
-// For the MVP we set backoffLimit=0, so a single failed pod is terminal.
-func backoffExhausted(job *batchv1.Job) bool {
-	limit := int32(0)
-	if job.Spec.BackoffLimit != nil {
-		limit = *job.Spec.BackoffLimit
+func toJobTask(task *ResolvedTask) *job.Task {
+	if task == nil {
+		return nil
 	}
-	return job.Status.Failed > limit
-}
-
-// jobTimedOut returns true if the Job hit its activeDeadlineSeconds.
-// Kubernetes 1.31+ may set FailureTarget/DeadlineExceeded before JobFailed; older versions use JobFailed.
-func jobTimedOut(job *batchv1.Job) bool {
-	for _, c := range job.Status.Conditions {
-		if c.Status != corev1.ConditionTrue || !strings.EqualFold(c.Reason, "DeadlineExceeded") {
-			continue
-		}
-		switch c.Type {
-		case batchv1.JobFailed, batchv1.JobFailureTarget:
-			return true
-		}
-	}
-	return false
+	return &job.Task{Description: task.Description, Prompt: task.Prompt}
 }
 
 func (r *AgentSessionReconciler) recordNormal(session *relayv1alpha1.AgentSession, reason, msg string) {
@@ -566,6 +572,10 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&relayv1alpha1.ToolPolicy{},
 			handler.EnqueueRequestsFromMapFunc(r.mapToolPolicyToSessions),
+		).
+		Watches(
+			&relayv1alpha1.RuntimeProfile{},
+			handler.EnqueueRequestsFromMapFunc(r.mapRuntimeProfileToSessions),
 		).
 		Complete(r)
 }

@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package agentsession
 
 import (
 	"time"
@@ -55,6 +55,7 @@ var _ = Describe("status patch strategy", func() {
 			live.Status.Phase = relayv1alpha1.PhaseRunning
 			setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
 			setCondition(&live, ConditionPolicyResolved, metav1.ConditionTrue, "PoliciesMerged", "merged 0 referenced policies")
+			setCondition(&live, ConditionRuntimeProfileResolved, metav1.ConditionTrue, "NoProfileRef", "no runtime profile referenced")
 			setCondition(&live, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent", "env current")
 			setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
 			g.Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
@@ -87,6 +88,7 @@ var _ = Describe("status patch strategy", func() {
 		Expect(conditionTypes(after.Status.Conditions)).To(ConsistOf(
 			ConditionValidated,
 			ConditionPolicyResolved,
+			ConditionRuntimeProfileResolved,
 			ConditionPolicyPropagated,
 			ConditionRuntimeCreated,
 			ConditionCompleted,

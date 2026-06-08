@@ -8,10 +8,9 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package job
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -28,13 +27,12 @@ import (
 // Avoid an unused import lint when intstr is not needed.
 var _ = intstr.FromInt
 
-// jobNameFor returns the deterministic Job name for an AgentSession.
-func jobNameFor(session *relayv1alpha1.AgentSession) string {
-	return JobNamePrefix + session.Name
+// NameFor returns the deterministic Job name for an AgentSession.
+func NameFor(session *relayv1alpha1.AgentSession) string {
+	return NamePrefix + session.Name
 }
 
-// commonLabelsFor returns the standard labels applied to objects owned by an AgentSession.
-func commonLabelsFor(session *relayv1alpha1.AgentSession) map[string]string {
+func labelsFor(session *relayv1alpha1.AgentSession) map[string]string {
 	return map[string]string{
 		LabelAppName:      AppNameRelay,
 		LabelAppComponent: ComponentSession,
@@ -42,13 +40,9 @@ func commonLabelsFor(session *relayv1alpha1.AgentSession) map[string]string {
 	}
 }
 
-// buildJob renders the batch/v1 Job that should run the AgentSession.
-//
-// Future enforcement hooks (Envoy sidecar, DNS proxy, eBPF agents, Cilium policies, etc.)
-// should be added by composing additional containers/volumes/policies onto the spec
-// returned here, rather than by special-casing the controller.
-func buildJob(session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved) *batchv1.Job {
-	labels := commonLabelsFor(session)
+// Build renders the batch/v1 Job that should run the AgentSession.
+func Build(session *relayv1alpha1.AgentSession, task *Task, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) *batchv1.Job {
+	labels := labelsFor(session)
 	rt := session.Spec.Runtime
 
 	backoffLimit := int32(0)
@@ -62,7 +56,7 @@ func buildJob(session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *poli
 		Args:            rt.Args,
 		Resources:       rt.Resources,
 		Env:             buildEnv(session, task, pol),
-		SecurityContext: defaultContainerSecurityContext(),
+		SecurityContext: mergeContainerSecurityContext(defaultContainerSecurityContext(), profile),
 	}
 
 	volumes, mounts := buildWorkspaceVolumes(&session.Spec.Workspace)
@@ -76,10 +70,11 @@ func buildJob(session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *poli
 		NodeSelector:       rt.NodeSelector,
 		Tolerations:        rt.Tolerations,
 	}
+	applyRuntimeProfileToPodSpec(&podSpec, profile)
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobNameFor(session),
+			Name:      NameFor(session),
 			Namespace: session.Namespace,
 			Labels:    labels,
 		},
@@ -103,13 +98,6 @@ func buildJob(session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *poli
 	return job
 }
 
-// defaultContainerSecurityContext returns the baseline container hardening Relay applies.
-//
-// We deliberately do NOT set RunAsNonRoot here. Busybox-style sample images often run as
-// root, and forcing non-root in the MVP would break the "successful sample" acceptance
-// criterion. A future RuntimeProfile CRD will let operators opt into a stricter profile
-// (RunAsNonRoot, readOnlyRootFilesystem, seccomp, AppArmor, etc.) without changing user
-// AgentSession specs.
 func defaultContainerSecurityContext() *corev1.SecurityContext {
 	allowPrivilegeEscalation := false
 	return &corev1.SecurityContext{
@@ -120,10 +108,47 @@ func defaultContainerSecurityContext() *corev1.SecurityContext {
 	}
 }
 
-// buildWorkspaceVolumes returns the volume/mount pair backing the workspace.
-//
-// For MVP we only support an in-pod emptyDir. A future WorkspaceSpec field will switch on
-// type (emptyDir / PVC / projected) and provision a backing PVC when persistence is needed.
+func mergeContainerSecurityContext(base *corev1.SecurityContext, profile *relayv1alpha1.RuntimeProfile) *corev1.SecurityContext {
+	if base == nil {
+		base = defaultContainerSecurityContext()
+	}
+	out := base.DeepCopy()
+	if profile == nil || profile.Spec.Container == nil {
+		return out
+	}
+	c := profile.Spec.Container
+	if c.RunAsNonRoot != nil {
+		out.RunAsNonRoot = c.RunAsNonRoot
+	}
+	if c.ReadOnlyRootFilesystem != nil {
+		out.ReadOnlyRootFilesystem = c.ReadOnlyRootFilesystem
+	}
+	if c.AllowPrivilegeEscalation != nil {
+		out.AllowPrivilegeEscalation = c.AllowPrivilegeEscalation
+	}
+	if c.Capabilities != nil {
+		out.Capabilities = c.Capabilities.DeepCopy()
+	}
+	return out
+}
+
+func applyRuntimeProfileToPodSpec(spec *corev1.PodSpec, profile *relayv1alpha1.RuntimeProfile) {
+	if spec == nil || profile == nil || profile.Spec.Pod == nil {
+		return
+	}
+	p := profile.Spec.Pod
+	if p.RuntimeClassName != "" {
+		name := p.RuntimeClassName
+		spec.RuntimeClassName = &name
+	}
+	if p.SeccompProfile != nil {
+		if spec.SecurityContext == nil {
+			spec.SecurityContext = &corev1.PodSecurityContext{}
+		}
+		spec.SecurityContext.SeccompProfile = p.SeccompProfile.DeepCopy()
+	}
+}
+
 func buildWorkspaceVolumes(ws *relayv1alpha1.WorkspaceSpec) ([]corev1.Volume, []corev1.VolumeMount) {
 	if ws == nil || !ws.Ephemeral {
 		return nil, nil
@@ -152,15 +177,9 @@ func buildWorkspaceVolumes(ws *relayv1alpha1.WorkspaceSpec) ([]corev1.Volume, []
 	return []corev1.Volume{v}, []corev1.VolumeMount{m}
 }
 
-// buildEnv returns the Relay-managed environment variables for an AgentSession,
-// followed by any user-supplied envs from spec.runtime.env.
-//
-// Future enforcement (Envoy sidecar / DNS proxy / tool gateway) will read these env vars
-// or a sibling ConfigMap to apply policy at runtime. Until then they exist primarily so
-// the agent process inside the container can self-report what policy it believes is active.
-func buildEnv(session *relayv1alpha1.AgentSession, task *ResolvedTask, resolved *policy.Resolved) []corev1.EnvVar {
+func buildEnv(session *relayv1alpha1.AgentSession, task *Task, resolved *policy.Resolved) []corev1.EnvVar {
 	if task == nil {
-		task = &ResolvedTask{}
+		task = &Task{}
 	}
 	rules := session.Spec.Policy.PolicyRules
 	mode := relayv1alpha1.PolicyModeAuditOnly
@@ -201,36 +220,4 @@ func int32PtrToStr(p *int32) string {
 		return ""
 	}
 	return strconv.FormatInt(int64(*p), 10)
-}
-
-// jobsEqualIgnoringStatus returns true when two Jobs are equivalent for the purposes of
-// reconcile-driven drift detection. It is intentionally narrow for the MVP.
-func jobsEqualIgnoringStatus(a, b *batchv1.Job) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	if a.Name != b.Name || a.Namespace != b.Namespace {
-		return false
-	}
-	// We intentionally do not deep-diff the spec here; the MVP creates the Job once and
-	// treats it as immutable. Drift correction will arrive with RuntimeProfile.
-	return true
-}
-
-// describeJobPhase produces a short human-readable phase string from a Job's status,
-// for use in events and condition messages.
-func describeJobPhase(j *batchv1.Job) string {
-	if j == nil {
-		return "unknown"
-	}
-	switch {
-	case j.Status.Succeeded > 0:
-		return "succeeded"
-	case j.Status.Failed > 0:
-		return fmt.Sprintf("failed (%d retries)", j.Status.Failed)
-	case j.Status.Active > 0:
-		return "running"
-	default:
-		return "pending"
-	}
 }

@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package agentsession
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	relayjob "github.com/secureai/relay/internal/controller/job"
 )
 
 func testReconciler() *AgentSessionReconciler {
@@ -112,6 +113,26 @@ var _ = Describe("AgentSession reconciler", func() {
 			expectJobAbsent(ns, session)
 		})
 
+		It("denies when runtimeProfileRef points to a missing RuntimeProfile", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "denied-missing-runtimeprofile")
+			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{
+				Name: "does-not-exist",
+			}
+
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			waitForPhase(key, relayv1alpha1.PhaseDenied)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			validated := getCondition(&got, ConditionValidated)
+			Expect(validated).NotTo(BeNil())
+			Expect(validated.Reason).To(Equal("InvalidRuntimeProfile"))
+			Expect(validated.Message).To(ContainSubstring("RuntimeProfile"))
+			expectJobAbsent(ns, session)
+		})
+
 		It("denies when spec.workspace.size is invalid", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "denied-bad-workspace-size")
@@ -123,6 +144,124 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			waitForPhase(client.ObjectKeyFromObject(session), relayv1alpha1.PhaseDenied)
 			expectJobAbsent(ns, session)
+		})
+	})
+
+	Context("runtime profile resolution", func() {
+		It("applies RuntimeProfile fields to the Job pod template and status", func() {
+			ns := newTestNamespace()
+			runtimeClass := "gvisor"
+			rp := &relayv1alpha1.RuntimeProfile{
+				ObjectMeta: metav1.ObjectMeta{Name: "hardened", Namespace: ns},
+				Spec: relayv1alpha1.RuntimeProfileSpec{
+					Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+						RunAsNonRoot:             boolPtr(true),
+						ReadOnlyRootFilesystem:   boolPtr(true),
+						AllowPrivilegeEscalation: boolPtr(false),
+					},
+					Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+						RuntimeClassName: runtimeClass,
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, rp)).To(Succeed())
+
+			session := minimalAgentSession(ns, "runtimeprofile-ref")
+			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{
+				Name: "hardened",
+			}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			waitForJob(ns, session)
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			Expect(got.Status.MatchedRuntimeProfile).NotTo(BeNil())
+			Expect(got.Status.MatchedRuntimeProfile.Name).To(Equal("hardened"))
+			Expect(got.Status.MatchedRuntimeProfile.Kind).To(Equal("RuntimeProfile"))
+			Expect(got.Status.MatchedRuntimeProfile.ResourceVersion).NotTo(BeEmpty())
+
+			profileResolved := getCondition(&got, ConditionRuntimeProfileResolved)
+			Expect(profileResolved).NotTo(BeNil())
+			Expect(profileResolved.Status).To(Equal(metav1.ConditionTrue))
+			Expect(profileResolved.Reason).To(Equal("ProfileApplied"))
+
+			var job batchv1.Job
+			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+			agent := job.Spec.Template.Spec.Containers[0]
+			Expect(agent.SecurityContext).NotTo(BeNil())
+			Expect(agent.SecurityContext.RunAsNonRoot).NotTo(BeNil())
+			Expect(*agent.SecurityContext.RunAsNonRoot).To(BeTrue())
+			Expect(agent.SecurityContext.ReadOnlyRootFilesystem).NotTo(BeNil())
+			Expect(*agent.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
+			Expect(job.Spec.Template.Spec.RuntimeClassName).NotTo(BeNil())
+			Expect(*job.Spec.Template.Spec.RuntimeClassName).To(Equal(runtimeClass))
+			Expect(job.Spec.Template.Spec.SecurityContext).NotTo(BeNil())
+			Expect(job.Spec.Template.Spec.SecurityContext.SeccompProfile).NotTo(BeNil())
+			Expect(job.Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
+		})
+
+		It("keeps baseline Job security when no runtimeProfileRef is set", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "no-runtimeprofile")
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			waitForJob(ns, session)
+
+			var job batchv1.Job
+			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+			agent := job.Spec.Template.Spec.Containers[0]
+			Expect(agent.SecurityContext.RunAsNonRoot).To(BeNil())
+			Expect(job.Spec.Template.Spec.RuntimeClassName).To(BeNil())
+		})
+
+		It("reconciles when a referenced RuntimeProfile is updated and replaces a pending Job", func() {
+			ns := newTestNamespace()
+			rp := &relayv1alpha1.RuntimeProfile{
+				ObjectMeta: metav1.ObjectMeta{Name: "rolling-profile", Namespace: ns},
+				Spec: relayv1alpha1.RuntimeProfileSpec{
+					Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+						AllowPrivilegeEscalation: boolPtr(false),
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, rp)).To(Succeed())
+
+			session := minimalAgentSession(ns, "runtimeprofile-watch")
+			session.Spec.Runtime.Command = []string{"sleep", "300"}
+			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{
+				Name: "rolling-profile",
+			}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+			jobKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
+
+			Eventually(func(g Gomega) {
+				var job batchv1.Job
+				g.Expect(k8sClient.Get(testCtx, jobKey, &job)).To(Succeed())
+				agent := job.Spec.Template.Spec.Containers[0]
+				g.Expect(agent.SecurityContext.RunAsNonRoot).To(BeNil())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(rp), rp)).To(Succeed())
+			rp.Spec.Container.RunAsNonRoot = boolPtr(true)
+			Expect(k8sClient.Update(testCtx, rp)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				var job batchv1.Job
+				g.Expect(k8sClient.Get(testCtx, jobKey, &job)).To(Succeed())
+				agent := job.Spec.Template.Spec.Containers[0]
+				g.Expect(agent.SecurityContext.RunAsNonRoot).NotTo(BeNil())
+				g.Expect(*agent.SecurityContext.RunAsNonRoot).To(BeTrue())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			Expect(got.Status.MatchedRuntimeProfile).NotTo(BeNil())
+			Expect(got.Status.MatchedRuntimeProfile.Name).To(Equal("rolling-profile"))
 		})
 	})
 
@@ -194,11 +333,11 @@ var _ = Describe("AgentSession reconciler", func() {
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[EnvPolicyMode]).To(Equal("dry-run"))
-			Expect(env[EnvPolicyDeniedDomains]).To(Equal("dropbox.com"))
-			Expect(env[EnvPolicyAllowedDomains]).To(Equal("github.com"))
-			Expect(env[EnvPolicyDeniedTools]).To(ContainSubstring("kubectl-prod"))
-			Expect(env[EnvPolicyDeniedTools]).To(ContainSubstring("deploy"))
+			Expect(env[relayjob.EnvPolicyMode]).To(Equal("dry-run"))
+			Expect(env[relayjob.EnvPolicyDeniedDomains]).To(Equal("dropbox.com"))
+			Expect(env[relayjob.EnvPolicyAllowedDomains]).To(Equal("github.com"))
+			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl-prod"))
+			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("deploy"))
 		})
 
 		It("reconciles when a referenced AgentPolicy is updated", func() {
@@ -283,7 +422,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[EnvPolicyDeniedTools]).To(ContainSubstring("kubectl"))
+			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl"))
 		})
 
 		It("replaces a pending Job when policy env changes", func() {
@@ -318,8 +457,8 @@ var _ = Describe("AgentSession reconciler", func() {
 				var job batchv1.Job
 				g.Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 				env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-				g.Expect(env[EnvPolicyMode]).To(Equal("enforced"))
-				g.Expect(env[EnvPolicyDeniedTools]).To(Equal("blocked-tool"))
+				g.Expect(env[relayjob.EnvPolicyMode]).To(Equal("enforced"))
+				g.Expect(env[relayjob.EnvPolicyDeniedTools]).To(Equal("blocked-tool"))
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
 			var got relayv1alpha1.AgentSession
@@ -399,12 +538,12 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
-			Expect(job.Labels[LabelSessionRef]).To(Equal(session.Name))
+			Expect(job.Labels[relayjob.LabelSessionRef]).To(Equal(session.Name))
 			Expect(job.OwnerReferences[0].Kind).To(Equal("AgentSession"))
 
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[EnvTaskPrompt]).To(Equal("run the task"))
-			Expect(env[EnvRelaySessionName]).To(Equal(session.Name))
+			Expect(env[relayjob.EnvTaskPrompt]).To(Equal("run the task"))
+			Expect(env[relayjob.EnvRelaySessionName]).To(Equal(session.Name))
 
 			var got relayv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
@@ -452,7 +591,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				Name:       job.Name,
 				UID:        job.UID,
 			}
-			podLabels := map[string]string{LabelSessionRef: session.Name}
+			podLabels := map[string]string{relayjob.LabelSessionRef: session.Name}
 
 			podFirst := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -460,7 +599,7 @@ var _ = Describe("AgentSession reconciler", func() {
 					Labels: podLabels, OwnerReferences: []metav1.OwnerReference{ownerRef},
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: AgentContainerName, Image: "busybox:latest"}},
+					Containers: []corev1.Container{{Name: relayjob.AgentContainerName, Image: "busybox:latest"}},
 				},
 			}
 			Expect(k8sClient.Create(testCtx, podFirst)).To(Succeed())
@@ -473,7 +612,7 @@ var _ = Describe("AgentSession reconciler", func() {
 					Labels: podLabels, OwnerReferences: []metav1.OwnerReference{ownerRef},
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: AgentContainerName, Image: "busybox:latest"}},
+					Containers: []corev1.Container{{Name: relayjob.AgentContainerName, Image: "busybox:latest"}},
 				},
 			}
 			Expect(k8sClient.Create(testCtx, podChosen)).To(Succeed())
@@ -701,7 +840,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[EnvTaskPrompt]).To(Equal("prompt loaded from configmap"))
+			Expect(env[relayjob.EnvTaskPrompt]).To(Equal("prompt loaded from configmap"))
 		})
 
 		It("denies when the ConfigMap key is missing", func() {
@@ -726,3 +865,7 @@ var _ = Describe("AgentSession reconciler", func() {
 		})
 	})
 })
+
+func boolPtr(b bool) *bool {
+	return &b
+}

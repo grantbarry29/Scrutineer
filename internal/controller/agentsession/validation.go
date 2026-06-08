@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-package controller
+package agentsession
 
 import (
 	"fmt"
@@ -44,6 +44,9 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 		default:
 			return fmt.Errorf("spec.policyRefs[%d].kind %q is not supported (allowed: AgentPolicy, ToolPolicy)", i, ref.Kind)
 		}
+	}
+	if err := validateRuntimeProfileRef(spec.RuntimeProfileRef); err != nil {
+		return err
 	}
 
 	if strings.TrimSpace(spec.Runtime.Image) == "" {
@@ -97,6 +100,21 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 		return fmt.Errorf("spec.policy.maxToolCalls must be >= 0")
 	}
 
+	return nil
+}
+
+func validateRuntimeProfileRef(ref *relayv1alpha1.RuntimeProfileRef) error {
+	if ref == nil {
+		return nil
+	}
+	if strings.TrimSpace(ref.Name) == "" {
+		return fmt.Errorf("spec.runtimeProfileRef.name is required")
+	}
+	switch ref.Kind {
+	case "", "RuntimeProfile":
+	default:
+		return fmt.Errorf("spec.runtimeProfileRef.kind %q is not supported (allowed: RuntimeProfile)", ref.Kind)
+	}
 	return nil
 }
 

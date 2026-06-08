@@ -1,0 +1,20 @@
+apiVersion: relay.secureai.dev/v1alpha1
+kind: RuntimeProfile
+metadata:
+  name: hardened-agent
+  namespace: default
+spec:
+  container:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+  pod:
+    seccompProfile:
+      type: RuntimeDefault
+  sidecars:
+  - name: egress-envoy
+    type: envoy
+    enabled: false

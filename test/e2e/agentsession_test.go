@@ -21,7 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller"
+	"github.com/secureai/relay/internal/controller/agentsession"
+	relayjob "github.com/secureai/relay/internal/controller/job"
 )
 
 var _ = Describe("AgentSession e2e against kind", func() {
@@ -40,16 +41,16 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 			var pod corev1.Pod
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: ns, Name: got.Status.PodName}, &pod)).To(Succeed())
-			Expect(pod.Labels[controller.LabelSessionRef]).To(Equal(session.Name))
+			Expect(pod.Labels[relayjob.LabelSessionRef]).To(Equal(session.Name))
 
 			Expect(got.Status.StartTime).NotTo(BeNil())
 			Expect(got.Status.CompletionTime).NotTo(BeNil())
 			Expect(got.Status.Result).NotTo(BeNil())
 			Expect(got.Status.Result.Outcome).To(Equal("completed"))
 
-			expectCondition(&got, controller.ConditionValidated, metav1.ConditionTrue, "SpecValid")
-			expectCondition(&got, controller.ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated")
-			expectCondition(&got, controller.ConditionCompleted, metav1.ConditionTrue, "JobSucceeded")
+			expectCondition(&got, agentsession.ConditionValidated, metav1.ConditionTrue, "SpecValid")
+			expectCondition(&got, agentsession.ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated")
+			expectCondition(&got, agentsession.ConditionCompleted, metav1.ConditionTrue, "JobSucceeded")
 
 			job := expectJobForSession(ctx, ns, session)
 			Expect(job.OwnerReferences[0].UID).To(Equal(got.UID))
@@ -85,7 +86,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			got := getSession(ctx, key)
 			Expect(got.Status.Result.Outcome).To(Equal("failed"))
 			Expect(got.Status.PodName).NotTo(BeEmpty())
-			expectCondition(&got, controller.ConditionCompleted, metav1.ConditionFalse, "JobFailed")
+			expectCondition(&got, agentsession.ConditionCompleted, metav1.ConditionFalse, "JobFailed")
 		})
 	})
 
@@ -98,8 +99,8 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			waitForDeniedPhase(ctx, key)
 
 			got := getSession(ctx, key)
-			expectCondition(&got, controller.ConditionValidated, metav1.ConditionFalse, "InvalidSpec")
-			Expect(getCondition(&got, controller.ConditionValidated).Message).
+			expectCondition(&got, agentsession.ConditionValidated, metav1.ConditionFalse, "InvalidSpec")
+			Expect(getCondition(&got, agentsession.ConditionValidated).Message).
 				To(ContainSubstring("task.description or spec.task.prompt"))
 
 			expectNoJobForSession(ctx, ns, session)
@@ -165,7 +166,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseSucceeded)
 
 			job := expectJobForSession(ctx, ns, session)
-			Expect(containerEnvValue(job, controller.EnvTaskPrompt)).To(Equal("prompt from configmap"))
+			Expect(containerEnvValue(job, relayjob.EnvTaskPrompt)).To(Equal("prompt from configmap"))
 		})
 
 		It("accepts a valid string-encoded temperature", func(ctx SpecContext) {
@@ -207,6 +208,32 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 			got := getSession(ctx, key)
 			expectCancelledStatus(&got)
+		})
+	})
+
+	Context("runtime profile", func() {
+		It("applies a referenced RuntimeProfile to the Job pod template", func(ctx SpecContext) {
+			ns := newTestNamespace("relay-e2e-runtimeprofile")
+			const profileName = "e2e-hardened"
+			createRuntimeProfile(ctx, ns, profileName)
+
+			session := newAgentSession(ns, "with-profile",
+				withRuntimeProfileRef(profileName),
+				withCommand("sh", "-c", "echo ok; exit 0"),
+			)
+			key := createAgentSession(ctx, session)
+
+			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseSucceeded)
+
+			got := getSession(ctx, key)
+			Expect(got.Status.MatchedRuntimeProfile).NotTo(BeNil())
+			Expect(got.Status.MatchedRuntimeProfile.Name).To(Equal(profileName))
+			expectCondition(&got, agentsession.ConditionRuntimeProfileResolved, metav1.ConditionTrue, "ProfileApplied")
+
+			job := expectJobForSession(ctx, ns, session)
+			Expect(job.Spec.Template.Spec.SecurityContext).NotTo(BeNil())
+			Expect(job.Spec.Template.Spec.SecurityContext.SeccompProfile).NotTo(BeNil())
+			Expect(job.Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
 		})
 	})
 })

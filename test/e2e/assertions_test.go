@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller"
+	"github.com/secureai/relay/internal/controller/agentsession"
 )
 
 func waitForPhase(ctx context.Context, key client.ObjectKey, want []relayv1alpha1.AgentSessionPhase, timeout, poll time.Duration) {
@@ -117,7 +117,7 @@ func requestCancellation(ctx context.Context, key client.ObjectKey) {
 func expectTimedOutStatus(got *relayv1alpha1.AgentSession) {
 	Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseTimedOut))
 	Expect(got.Status.CompletionTime).NotTo(BeNil())
-	expectCondition(got, controller.ConditionCompleted, metav1.ConditionFalse, "JobTimedOut")
+	expectCondition(got, agentsession.ConditionCompleted, metav1.ConditionFalse, "JobTimedOut")
 	if got.Status.Result != nil {
 		Expect(got.Status.Result.Outcome).To(Equal("failed"))
 	}
@@ -128,7 +128,7 @@ func expectCancelledStatus(got *relayv1alpha1.AgentSession) {
 	Expect(got.Status.CompletionTime).NotTo(BeNil())
 	Expect(got.Status.Result).NotTo(BeNil())
 	Expect(got.Status.Result.Outcome).To(Equal("cancelled"))
-	expectCondition(got, controller.ConditionCompleted, metav1.ConditionTrue, "SessionCancelled")
+	expectCondition(got, agentsession.ConditionCompleted, metav1.ConditionTrue, "SessionCancelled")
 }
 
 func containerEnvValue(job *batchv1.Job, envName string) string {
@@ -141,9 +141,9 @@ func containerEnvValue(job *batchv1.Job, envName string) string {
 }
 
 func expectDeniedTask(got *relayv1alpha1.AgentSession, msgSubstring string) {
-	expectCondition(got, controller.ConditionValidated, metav1.ConditionFalse, "InvalidTask")
+	expectCondition(got, agentsession.ConditionValidated, metav1.ConditionFalse, "InvalidTask")
 	if msgSubstring != "" {
-		cond := getCondition(got, controller.ConditionValidated)
+		cond := getCondition(got, agentsession.ConditionValidated)
 		Expect(cond.Message).To(ContainSubstring(msgSubstring))
 	}
 }

@@ -52,7 +52,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller"
+	"github.com/secureai/relay/internal/controller/agentsession"
 )
 
 // Suite-wide handles set up in BeforeSuite and used by every It block.
@@ -149,7 +149,7 @@ func startControllerManager() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	Expect((&controller.AgentSessionReconciler{
+	Expect((&agentsession.AgentSessionReconciler{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),

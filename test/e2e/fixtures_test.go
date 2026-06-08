@@ -26,7 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller"
+	"github.com/secureai/relay/internal/controller/agentsession"
+	relayjob "github.com/secureai/relay/internal/controller/job"
 )
 
 // agentSessionOption mutates an AgentSession during construction.
@@ -63,6 +64,12 @@ func withCancelRequested() agentSessionOption {
 func withLongRunningCommand() agentSessionOption {
 	return func(s *relayv1alpha1.AgentSession) {
 		s.Spec.Runtime.Command = []string{"sh", "-c", "echo running; sleep 300"}
+	}
+}
+
+func withRuntimeProfileRef(name string) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		s.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{Name: name}
 	}
 }
 
@@ -115,7 +122,7 @@ func newAgentSession(namespace, name string, opts ...agentSessionOption) *relayv
 				Name:     "gpt-4.1",
 			},
 			Runtime: relayv1alpha1.RuntimeSpec{
-				Orchestrator: controller.OrchestratorKubernetesJob,
+				Orchestrator: agentsession.OrchestratorKubernetesJob,
 				Image:        "busybox:latest",
 				Command:      []string{"sh", "-c", "echo ok"},
 			},
@@ -136,7 +143,29 @@ func createAgentSession(ctx context.Context, session *relayv1alpha1.AgentSession
 
 // jobNameForSession returns the deterministic Job name the controller creates.
 func jobNameForSession(session *relayv1alpha1.AgentSession) string {
-	return controller.JobNamePrefix + session.Name
+	return relayjob.NameFor(session)
 }
 
 func strPtr(s string) *string { return &s }
+
+func boolPtr(b bool) *bool { return &b }
+
+// createRuntimeProfile creates a RuntimeProfile in the test namespace.
+// Uses pod seccomp only so busybox samples can still succeed in e2e.
+func createRuntimeProfile(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	rp := &relayv1alpha1.RuntimeProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
+			Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+				AllowPrivilegeEscalation: boolPtr(false),
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
+}
