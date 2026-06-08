@@ -255,7 +255,7 @@ type SessionUsage struct {
 }
 
 // PolicyViolation records a single policy violation observed during a session.
-// Reserved for Phase 3 enforcement backends; the MVP controller does not populate this field.
+// Phase 3 enforcement reporters populate this via runtime reports (deny and dry-run outcomes).
 type PolicyViolation struct {
 	// Time when the violation was observed.
 	Time metav1.Time `json:"time"`

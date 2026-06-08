@@ -291,7 +291,7 @@ spec:
 | `matchedRuntimeProfile` | Yes | Applied `RuntimeProfile` ref (when set) |
 | `result` | Yes | Terminal outcome / summary (on success, failure, timeout, cancel) |
 | `usage` | **No** (reserved) | Phase 4 — token/tool/network metrics from observability backends |
-| `violations` | **No** (reserved) | Phase 3 — real-time policy violations from enforcement backends |
+| `violations` | **Yes** (runtime reports) | Bounded list; `deny` and `dry-run` outcomes via `ApplyRuntimePolicyReport` |
 | `artifacts` | **No** (reserved) | Phase 4 — collected workspace artifacts (`spec.outputs`) |
 
 ### Environment variables injected into the agent container
@@ -716,7 +716,8 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | Finalizer + Job cleanup on delete | Yes | `relay.secureai.dev/finalizer` |
 | Session cancellation | Yes | `spec.cancelRequested` → Job delete + `Phase=Cancelled` |
 | Human approval gate | No | Declared only; does not block runs |
-| `status.usage` / `violations` / `artifacts` | No | Reserved — see [Status fields](#status-fields) |
+| `status.usage` / `artifacts` | No | Reserved — see [Status fields](#status-fields) |
+| `status.violations` | Yes (runtime) | Populated by enforcement reporters — see [Status fields](#status-fields) |
 
 Project tracking: [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).
 

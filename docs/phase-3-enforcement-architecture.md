@@ -89,9 +89,13 @@ Acceptance:
 - Runtime decision append strategy is documented or stubbed.
 - Unit tests cover mode action mapping.
 
-### Slice 2: Runtime Policy Decision Append
+### Slice 2: Runtime Policy Decision Append — done
 
-Implement bounded append of `status.policyDecisions` entries with `phase: runtime`.
+Implemented in `internal/controller/agentsession/policy_decisions.go`:
+
+- `ApplyPolicyStatus` — refresh merge-time decisions while re-appending prior `phase: runtime` entries
+- `AppendRuntimePolicyDecisions` / `ApplyRuntimePolicyReport` — reporter entry points
+- `patchStatus` — `mergeRuntimePolicyDecisionsInPlace` unions runtime evidence from stale/live snapshots
 
 Acceptance:
 
@@ -99,9 +103,15 @@ Acceptance:
 - Runtime entries are appended without exceeding max count.
 - Status patch path cannot wipe controller-owned fields.
 
-### Slice 3: NetworkPolicy Baseline
+### Slice 3: NetworkPolicy Baseline — done
 
-Generate namespace-scoped Kubernetes `NetworkPolicy` for coarse enforcement when policy contains CIDR/network hints.
+Implemented in `internal/enforcement/networkpolicy/` and `internal/controller/agentsession/networkpolicy.go`:
+
+- `Build` renders egress NetworkPolicy for `allowedCIDRs` (allowlist) or `deniedCIDRs` (0.0.0.0/0 with except)
+- DNS egress to all namespaces on port 53 (required for resolution; FQDN policy still needs slice 7)
+- Applied only when effective policy mode is **enforced** and CIDR rules are present
+- `allowedDomains` / `deniedDomains` are **not** enforced by NetworkPolicy
+- Reconciler creates/updates/deletes owned `relay-netpol-<session>` objects; removed on terminal phase
 
 Acceptance:
 
@@ -110,9 +120,14 @@ Acceptance:
 - Deleted by owner references/finalizer cleanup.
 - Clearly documents FQDN limitations.
 
-### Slice 4: Violation Reporting MVP
+### Slice 4: Violation Reporting MVP — done
 
-Populate `status.violations` from a minimal controller-owned path.
+Implemented in `internal/enforcement/violations.go` and `internal/controller/agentsession/violations.go`:
+
+- `AppendViolations` — bounded append (max 64) with truncation summary
+- `ViolationFromDecision` / `ViolationsFromDecisions` — `deny` and `dry-run` decisions become violations; `audit` skipped
+- `ApplyRuntimePolicyReport` — appends explicit violations and derives from runtime decisions (deduped)
+- `patchStatus` — `mergeViolationsInPlace` from stale/live snapshots
 
 Acceptance:
 

@@ -97,6 +97,103 @@ var _ = Describe("status patch strategy", func() {
 		Expect(after.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
 	})
 
+	It("patchStatus preserves violations missing from a stale reconcile snapshot", func() {
+		ns := newTestNamespace()
+		session := minimalAgentSession(ns, "violations-status-merge")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+
+		violationTS := metav1.Now()
+		Eventually(func(g Gomega) {
+			var live relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
+			live.Status.Phase = relayv1alpha1.PhaseRunning
+			AppendRuntimeViolations(&live, []relayv1alpha1.PolicyViolation{{
+				Time:    violationTS,
+				Type:    "network",
+				Message: "egress blocked",
+				Target:  "10.0.0.0/8",
+			}})
+			g.Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
+		Eventually(func(g Gomega) {
+			var current relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &current)).To(Succeed())
+			g.Expect(current.Status.Violations).NotTo(BeEmpty())
+
+			staleSnap := current.DeepCopy()
+			staleSnap.Status.Violations = nil
+
+			desired := current.DeepCopy()
+			desired.Status.Phase = relayv1alpha1.PhaseSucceeded
+			desired.Status.Violations = nil
+
+			g.Expect(reconciler.patchStatus(testCtx, staleSnap, desired)).To(Succeed())
+
+			var after relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+			g.Expect(after.Status.Violations).To(HaveLen(1))
+			g.Expect(after.Status.Violations[0].Target).To(Equal("10.0.0.0/8"))
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+	})
+
+	It("patchStatus preserves runtime policy decisions missing from a stale reconcile snapshot", func() {
+		ns := newTestNamespace()
+		session := minimalAgentSession(ns, "runtime-status-merge")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+
+		runtimeTS := metav1.Now()
+		Eventually(func(g Gomega) {
+			var live relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
+			live.Status.Phase = relayv1alpha1.PhaseRunning
+			setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
+			AppendRuntimePolicyDecisions(&live, []relayv1alpha1.PolicyDecision{{
+				Time:   runtimeTS,
+				Type:   "network",
+				Action: relayv1alpha1.PolicyDecisionDeny,
+				Reason: "DeniedDomains",
+				Target: "evil.example",
+			}})
+			g.Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
+		Eventually(func(g Gomega) {
+			var current relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &current)).To(Succeed())
+
+			staleSnap := current.DeepCopy()
+			staleSnap.Status.PolicyDecisions = nil
+
+			desired := current.DeepCopy()
+			desired.Status.Phase = relayv1alpha1.PhaseSucceeded
+			desired.Status.PolicyDecisions = []relayv1alpha1.PolicyDecision{{
+				Time:   runtimeTS,
+				Phase:  relayv1alpha1.PolicyDecisionPhaseMerge,
+				Type:   "mode",
+				Action: relayv1alpha1.PolicyDecisionAudit,
+				Reason: "StrictestMode",
+			}}
+
+			g.Expect(reconciler.patchStatus(testCtx, staleSnap, desired)).To(Succeed())
+
+			var after relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+			var runtimeDecision *relayv1alpha1.PolicyDecision
+			for i := range after.Status.PolicyDecisions {
+				d := &after.Status.PolicyDecisions[i]
+				if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == "evil.example" {
+					runtimeDecision = d
+				}
+			}
+			g.Expect(runtimeDecision).NotTo(BeNil())
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+	})
+
 	It("documents that JSON merge patch replaces the entire conditions array on CRDs", func() {
 		ns := newTestNamespace()
 		session := minimalAgentSession(ns, "status-json-merge")

@@ -21,13 +21,13 @@ import (
 )
 
 // resolvePolicy loads referenced policies, merges them with inline overrides, and writes status.
-func (r *AgentSessionReconciler) resolvePolicy(ctx context.Context, session *relayv1alpha1.AgentSession) (*policy.Resolved, error) {
+func (r *AgentSessionReconciler) resolvePolicy(ctx context.Context, session *relayv1alpha1.AgentSession, priorDecisions []relayv1alpha1.PolicyDecision) (*policy.Resolved, error) {
 	layers, err := policy.LoadPolicyLayers(ctx, r, session)
 	if err != nil {
 		return nil, err
 	}
 	resolved := policy.Resolve(layers, session.Spec.Policy.PolicyRules)
-	policy.ApplyStatus(session, resolved)
+	ApplyPolicyStatus(session, resolved, priorDecisions)
 	if !isTerminal(session.Status.Phase) {
 		msg := fmt.Sprintf("merged %d referenced policies with inline overrides (mode=%s)",
 			len(resolved.Matched), resolved.Mode)

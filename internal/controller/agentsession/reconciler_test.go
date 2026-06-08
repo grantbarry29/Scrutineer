@@ -19,6 +19,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -341,6 +342,137 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(env[relayjob.EnvPolicyAllowedDomains]).To(Equal("github.com"))
 			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl-prod"))
 			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("deploy"))
+		})
+
+		It("creates a NetworkPolicy when enforced CIDR policy is present", func() {
+			ns := newTestNamespace()
+			ap := &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "cidr-enforced", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					Mode: relayv1alpha1.PolicyModeEnforced,
+					PolicyRules: relayv1alpha1.PolicyRules{
+						AllowedCIDRs: []string{"203.0.113.0/24"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
+
+			session := minimalAgentSession(ns, "netpol-cidr")
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+				Kind: "AgentPolicy",
+				Name: "cidr-enforced",
+			}}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			waitForJob(ns, session)
+
+			var np networkingv1.NetworkPolicy
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: netpolNameFor(session)}, &np)).To(Succeed())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			Expect(np.Spec.PodSelector.MatchLabels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
+			Expect(len(np.Spec.Egress)).To(BeNumerically(">=", 2))
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			owner := metav1.GetControllerOf(&np)
+			Expect(owner).NotTo(BeNil())
+			Expect(owner.Kind).To(Equal("AgentSession"))
+			Expect(owner.Name).To(Equal(session.Name))
+		})
+
+		It("does not create a NetworkPolicy for audit-only CIDR policy", func() {
+			ns := newTestNamespace()
+			ap := &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "cidr-audit", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					Mode: relayv1alpha1.PolicyModeAuditOnly,
+					PolicyRules: relayv1alpha1.PolicyRules{
+						AllowedCIDRs: []string{"203.0.113.0/24"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
+
+			session := minimalAgentSession(ns, "netpol-audit")
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+				Kind: "AgentPolicy",
+				Name: "cidr-audit",
+			}}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+
+			waitForJob(ns, session)
+
+			npKey := types.NamespacedName{Namespace: ns, Name: netpolNameFor(session)}
+			Consistently(func(g Gomega) {
+				err := k8sClient.Get(testCtx, npKey, &networkingv1.NetworkPolicy{})
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}, 2*time.Second, 200*time.Millisecond).Should(Succeed())
+		})
+
+		It("preserves runtime policy decisions across policy re-resolve", func() {
+			ns := newTestNamespace()
+			ap := &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "runtime-preserve", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					Mode: relayv1alpha1.PolicyModeAuditOnly,
+					PolicyRules: relayv1alpha1.PolicyRules{
+						DeniedDomains: []string{"dropbox.com"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
+
+			session := minimalAgentSession(ns, "runtime-decisions")
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+				Kind: "AgentPolicy",
+				Name: "runtime-preserve",
+			}}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			Eventually(func(g Gomega) {
+				var got relayv1alpha1.AgentSession
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				g.Expect(got.Status.EffectivePolicy).NotTo(BeNil())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			var withRuntime relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &withRuntime)).To(Succeed())
+			runtimeTS := metav1.Now()
+			AppendRuntimePolicyDecisions(&withRuntime, []relayv1alpha1.PolicyDecision{{
+				Time:    runtimeTS,
+				Type:    "network",
+				Action:  relayv1alpha1.PolicyDecisionDeny,
+				Actor:   "relay-enforcement",
+				Reason:  "DeniedDomains",
+				Target:  "evil.example",
+				Message: "would deny egress to evil.example",
+			}})
+			Expect(k8sClient.Status().Update(testCtx, &withRuntime)).To(Succeed())
+
+			Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(ap), ap)).To(Succeed())
+			ap.Spec.Mode = relayv1alpha1.PolicyModeEnforced
+			Expect(k8sClient.Update(testCtx, ap)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				var got relayv1alpha1.AgentSession
+				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeEnforced))
+
+				var runtimeDecision *relayv1alpha1.PolicyDecision
+				for i := range got.Status.PolicyDecisions {
+					d := &got.Status.PolicyDecisions[i]
+					if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == "evil.example" {
+						runtimeDecision = d
+					}
+				}
+				g.Expect(runtimeDecision).NotTo(BeNil())
+				g.Expect(runtimeDecision.Reason).To(Equal("DeniedDomains"))
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 		})
 
 		It("reconciles when a referenced AgentPolicy is updated", func() {

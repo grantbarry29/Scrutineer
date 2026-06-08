@@ -47,6 +47,8 @@ const (
 	EventReasonRuntimeProfileResolved = "RuntimeProfileResolved"
 	EventReasonPolicyEnvDrift         = "PolicyEnvDrift"
 	EventReasonPolicyEnvSynced        = "PolicyEnvSynced"
+	// EventReasonNetworkPolicySynced — owned NetworkPolicy was created or updated for CIDR enforcement.
+	EventReasonNetworkPolicySynced = "NetworkPolicySynced"
 )
 
 // Orchestrator values supported by Relay.

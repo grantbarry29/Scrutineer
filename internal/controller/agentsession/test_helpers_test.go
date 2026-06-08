@@ -26,10 +26,15 @@ import (
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	relayjob "github.com/secureai/relay/internal/controller/job"
+	"github.com/secureai/relay/internal/enforcement/networkpolicy"
 )
 
 func jobNameFor(session *relayv1alpha1.AgentSession) string {
 	return relayjob.NameFor(session)
+}
+
+func netpolNameFor(session *relayv1alpha1.AgentSession) string {
+	return networkpolicy.NameFor(session.Namespace, session.Name)
 }
 
 const (

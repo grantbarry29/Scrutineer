@@ -18,6 +18,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -59,6 +60,7 @@ const deletionRequeueAfter = 2 * time.Second
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
@@ -102,6 +104,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Take a working copy so we can compute a single status patch at the end.
 	original := session.DeepCopy()
+	var resolvedProfile *relayv1alpha1.RuntimeProfile
 
 	if session.Status.Phase == "" {
 		session.Status.Phase = relayv1alpha1.PhasePending
@@ -116,7 +119,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		setReadyCondition(session)
 		r.recordWarning(session, EventReasonValidationFailed, verr.Error())
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid spec")
-		return ctrl.Result{}, r.patchStatus(ctx, original, session)
+		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	}
 	// Do not re-assert SpecValid on terminal sessions; a prior reconcile may have set JobConflict
 	// or InvalidSpec and those reasons must survive status merges on requeue.
@@ -133,10 +136,10 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		setReadyCondition(session)
 		r.recordWarning(session, EventReasonValidationFailed, err.Error())
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid task")
-		return ctrl.Result{}, r.patchStatus(ctx, original, session)
+		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	}
 
-	resolvedPolicy, err := r.resolvePolicy(ctx, session)
+	resolvedPolicy, err := r.resolvePolicy(ctx, session, original.Status.PolicyDecisions)
 	if err != nil {
 		logger.Info("AgentSession policy resolution failed", "reason", err.Error())
 		session.Status.Phase = relayv1alpha1.PhaseDenied
@@ -145,14 +148,14 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		setReadyCondition(session)
 		r.recordWarning(session, EventReasonValidationFailed, err.Error())
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid policy")
-		return ctrl.Result{}, r.patchStatus(ctx, original, session)
+		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	}
 	if len(resolvedPolicy.Matched) > 0 {
 		r.recordNormal(session, EventReasonPolicyResolved,
 			fmt.Sprintf("Merged %d referenced policies (mode=%s)", len(resolvedPolicy.Matched), resolvedPolicy.Mode))
 	}
 
-	resolvedProfile, err := r.resolveRuntimeProfile(ctx, session)
+	resolvedProfile, err = r.resolveRuntimeProfile(ctx, session)
 	if err != nil {
 		logger.Info("AgentSession runtime profile resolution failed", "reason", err.Error())
 		session.Status.Phase = relayv1alpha1.PhaseDenied
@@ -161,7 +164,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		setReadyCondition(session)
 		r.recordWarning(session, EventReasonValidationFailed, err.Error())
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid runtime profile")
-		return ctrl.Result{}, r.patchStatus(ctx, original, session)
+		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	}
 	if resolvedProfile != nil {
 		r.recordNormal(session, EventReasonRuntimeProfileResolved,
@@ -183,13 +186,13 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		r.applyCancellationStatus(session)
 		setReadyCondition(session)
-		return ctrl.Result{}, r.patchStatus(ctx, original, session)
+		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	}
 
 	// Terminal sessions must not get a new Job (e.g. after TTL/manual delete). Cancellation
 	// is handled above even when phase is already Cancelled.
 	if isTerminal(session.Status.Phase) {
-		return ctrl.Result{}, r.patchStatus(ctx, original, session)
+		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	}
 
 	job, err := r.ensureJob(ctx, session, resolvedTask, resolvedPolicy, resolvedProfile)
@@ -199,7 +202,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			setCondition(session, ConditionValidated, metav1.ConditionFalse, "JobConflict", err.Error())
 			setReadyCondition(session)
 			r.recordWarning(session, EventReasonSessionDenied, err.Error())
-			return ctrl.Result{}, r.patchStatus(ctx, original, session)
+			return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 		}
 		return ctrl.Result{}, err
 	}
@@ -214,7 +217,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	setReadyCondition(session)
-	if err := r.patchStatus(ctx, original, session); err != nil {
+	if err := r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -572,6 +575,7 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&relayv1alpha1.AgentSession{}).
 		Owns(&batchv1.Job{}).
+		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.mapPodToSessions),

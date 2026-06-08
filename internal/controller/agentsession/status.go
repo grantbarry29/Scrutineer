@@ -38,6 +38,8 @@ import (
 func (r *AgentSessionReconciler) patchStatus(ctx context.Context, original, updated *relayv1alpha1.AgentSession) error {
 	desired := updated.Status.DeepCopy()
 	mergeStatusConditionsInPlace(&desired.Conditions, original.Status.Conditions)
+	mergeRuntimePolicyDecisionsInPlace(&desired.PolicyDecisions, original.Status.PolicyDecisions)
+	mergeViolationsInPlace(&desired.Violations, original.Status.Violations)
 
 	var live relayv1alpha1.AgentSession
 	key := client.ObjectKeyFromObject(updated)
@@ -45,6 +47,8 @@ func (r *AgentSessionReconciler) patchStatus(ctx context.Context, original, upda
 		return fmt.Errorf("get AgentSession before status update: %w", err)
 	}
 	mergeStatusConditionsInPlace(&desired.Conditions, live.Status.Conditions)
+	mergeRuntimePolicyDecisionsInPlace(&desired.PolicyDecisions, live.Status.PolicyDecisions)
+	mergeViolationsInPlace(&desired.Violations, live.Status.Violations)
 
 	if equalStatus(&live.Status, desired) {
 		return nil

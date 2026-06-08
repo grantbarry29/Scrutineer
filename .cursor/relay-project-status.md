@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (Phase 3 slice 1: enforcement backend contract)
+> **Last updated:** 2026-06-08 (Phase 3 slice 4: violation reporting MVP)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,40 +13,38 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-### Task: Runtime policy decision append
+### Task: RuntimeProfile sidecar injection
 
 **Goal:**  
-Wire bounded append of `status.policyDecisions` entries with `phase: runtime` into the AgentSession reconciler without wiping merge-time decisions.
+Inject enabled sidecars from `RuntimeProfile.spec.sidecars[]` into AgentSession Job pod templates.
 
 **Why it matters:**  
-Phase 3 backends and reporters need a safe status update path. Slice 1 defined `internal/enforcement` types and `AppendRuntimeDecisions`; this slice connects that helper to controller status patches.
+RuntimeProfile already declares sidecar intent (dns-proxy, tool-gateway, envoy); Phase 3 needs the controller to materialize known types into pod specs before data-plane images ship.
 
 **Scope:**
-- Add reconciler helper(s) to merge runtime reports into `status.policyDecisions` using `enforcement.AppendRuntimeDecisions`.
-- Preserve merge-time entries and controller-owned status fields on patch.
-- Envtest coverage for append + truncation behavior.
+- Map enabled `RuntimeProfileSidecar` entries to container definitions in Job build path.
+- Start with a minimal known-type registry (image/config placeholders acceptable if documented).
+- Envtest for injection when profile references enabled sidecars.
 
 **Non-goals:**
-- Do not implement NetworkPolicy, sidecars, or real runtime reporters yet.
-- Do not populate `status.violations` (slice 4).
-- Do not add new CRDs.
+- Do not ship production dns-proxy, tool-gateway, or Envoy images.
+- Do not implement real enforcement in sidecars yet.
 
 **Acceptance criteria:**
-- Runtime decisions append with `phase: runtime` under the shared cap (`enforcement.MaxPolicyDecisions`).
-- Merge-time decisions are never dropped when appending a bounded runtime batch.
+- Enabled sidecars appear in Job pod template when RuntimeProfile ref is set.
+- Disabled or unknown types are skipped safely.
 - `make test` passes.
 
 **Expected files:**
-- `internal/controller/agentsession/` (status patch helper)
-- `internal/enforcement/` (reuse existing append helper)
+- `internal/controller/job/` and/or `internal/controller/agentsession/`
 - `.cursor/relay-project-status.md`
 
 **Verification command:**  
 `make test`
 
-**Next suggested picks:** NetworkPolicy baseline · Violation reporting MVP.
+**Next suggested picks:** Tool gateway contract · DNS/egress proxy prototype.
 
-**Recently completed** (do not re-implement unless regressions): **Phase 3 enforcement backend contract** (`internal/enforcement/` — `SessionContext`, `Backend`, mode semantics, `AppendRuntimeDecisions` stub); **Phase 3 enforcement plan** (`docs/phase-3-enforcement-architecture.md` + task decomposition); **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+**Recently completed** (do not re-implement unless regressions): **Violation reporting MVP** (`enforcement.AppendViolations`, `ApplyRuntimePolicyReport`, `patchStatus` violation merge); **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Phase 3 enforcement plan**; **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
 
 ---
 
@@ -366,21 +364,15 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-08)
 
-### Task: Append runtime policy decisions from enforcement backends
+### Task: Runtime policy decision append — **done (2026-06-08)**
 
-**Why it matters:**  
-`status.policyDecisions` is merge-time only today; Phase 3 sidecars/gateways need to append `phase: runtime` entries without wiping merge decisions. **Append helper exists in `internal/enforcement`** — next slice wires it into the reconciler (promoted to **Ready for Cursor Queue**).
+**Shipped:** `ApplyPolicyStatus` preserves runtime decisions on policy re-resolve; `AppendRuntimePolicyDecisions` / `ApplyRuntimePolicyReport` for reporters; `patchStatus` merges runtime decisions from stale/live snapshots; unit + envtest coverage.
 
-**Scope:**
-- Wire `enforcement.AppendRuntimeDecisions` into AgentSession status patches.
-- Envtest for bounded append preserving merge-time entries.
+**Verification:** `make test` (pass 2026-06-08)
 
-**Non-goals:**
-- Do not implement Envoy/tool gateway or real runtime reporters in this task.
+### Task: Append runtime policy decisions from enforcement backends — **done (2026-06-08)**
 
-**Acceptance criteria:**
-- Reconciler status path supports bounded runtime append.
-- Merge-time decisions preserved under cap.
+Merged into slice 2 above. Reporters should call `AppendRuntimePolicyDecisions` or `ApplyRuntimePolicyReport`; reconciler preserves runtime via `ApplyPolicyStatus` + `patchStatus`.
 
 **Expected files:**
 - `api/v1alpha1/policy_types.go`
@@ -490,7 +482,7 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | `task.promptConfigMapRef` | Yes | Done — loads key from same-namespace ConfigMap |
 | `status.usage` | Yes | No — reserved for future sidecar/audit |
 | `status.podName` | Yes | Done — labeled session Pods, current Job UID, newest `CreationTimestamp` (name tie-break); see `internal/controller/agentsession/pod.go` |
-| `status.violations` | Yes | No — no enforcement backend yet |
+| `status.violations` | Yes | Yes — via `ApplyRuntimePolicyReport` (`deny` / `dry-run` outcomes) |
 | `status.artifacts` | Yes | No — `outputs.collectArtifacts` not implemented |
 | `spec.policyRefs` / `AgentPolicy` / `ToolPolicy` | Yes | Done — same-namespace refs; merge order refs → inline; missing ref → `InvalidPolicy` |
 | `spec.runtimeProfileRef` | Yes | Done — profile merges into Job container/pod spec; `matchedRuntimeProfile`; `RuntimeProfileResolved` |
@@ -676,7 +668,7 @@ Extract inline policy into composable, versioned CRDs without breaking AgentSess
 |------|---------------|-------|
 | ToolPolicy MCP **argument constraints** | Discovered: *ToolPolicy MCP argument constraints* | Roadmap mentioned; out of initial ToolPolicy slice |
 | Inline `spec.policy.mode` override | Not planned | Only CRD modes merge today |
-| Runtime `policyDecisions` append | Discovered: *Append runtime policy decisions* | Phase 3 enforcement |
+| Runtime `policyDecisions` append | **done** — slice 2 (`policy_decisions.go`) | Reporters use `AppendRuntimePolicyDecisions` |
 | Active Job env stale after policy change | `PolicyEnvDrift` condition | Documented; immutable Job template |
 | Mode **enforcement** (audit/dry-run/enforced behavior) | Phase 3 roadmap | Declared + propagated only |
 
@@ -695,9 +687,9 @@ Real governance beyond env var propagation. Start narrow, prove value, then expa
 **Ordered implementation slices:**
 
 1. [x] **Enforcement backend contract** — `internal/enforcement/` (`SessionContext`, `Backend`, mode semantics, `AppendRuntimeDecisions`); unit tests; aligns with architecture doc.
-2. [ ] **Runtime policy decision append** — Preserve merge-time decisions while appending bounded `phase: runtime` decisions.
-3. [ ] **NetworkPolicy baseline** — Generate owned namespace-scoped NetworkPolicies for coarse CIDR/network enforcement and document FQDN limits.
-4. [ ] **Violation reporting MVP** — Populate bounded `status.violations` from runtime decision reports.
+2. [x] **Runtime policy decision append** — `ApplyPolicyStatus`, `AppendRuntimePolicyDecisions`, `patchStatus` runtime merge; envtest preserve on policy re-resolve.
+3. [x] **NetworkPolicy baseline** — `internal/enforcement/networkpolicy/` + reconciler; enforced CIDR egress; FQDN not covered.
+4. [x] **Violation reporting MVP** — `AppendViolations`, `ApplyRuntimePolicyReport` derives `deny`/`dry-run` violations; `patchStatus` merge; README updated.
 5. [ ] **RuntimeProfile sidecar injection** — Inject known enabled sidecar types from `RuntimeProfile.spec.sidecars[]` into pending Job pod templates.
 6. [ ] **Tool gateway contract** — Define request/response/reporting contract for MCP/tool authorization; no production gateway yet.
 7. [ ] **DNS / egress proxy prototype** — First richer network backend for FQDN/CIDR policy, honoring `audit-only` / `dry-run` / `enforced`.
