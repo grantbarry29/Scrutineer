@@ -188,16 +188,23 @@ Design only. See [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-pol
 - **Stubs:** `internal/enforcement/workspace/types.go` for future backend kinds.
 - **Deferred:** FS proxy sidecar, `allowedPaths`/`deniedPaths` CRD fields, real file enforcement.
 
-## Phase 3 follow-up hardening (post–slice 8)
+## Phase 3b — Runtime evidence loop (critical path)
 
-Tracked in **Discovered Follow-Up Tasks** — not blocking Phase 4:
+Slices 1–8 shipped contracts, design docs, and in-process merge helpers, but **nothing running in-cluster produces or reports runtime evidence**. `status.policyDecisions`, `status.violations`, and `status.usage` are empty at runtime. Phase 3b closes that gap and is a prerequisite for Phase 4 observability — it is the critical path, not optional hardening.
 
-- First-party **dns-proxy** and **tool-gateway** images (replace busybox placeholders)
-- **Runtime reporter loop** — sidecar → controller status PATCH or event aggregation for live violations
+Ordered slices (full cards in `.cursor/relay-project-status.md`):
+
+1. **Runtime reporter mechanism design** — `docs/design/phase-3-runtime-reporter-contract.md`.
+2. **Runtime reporter loop (impl)** — controller-owned PATCH callback populates status.
+3. **Structured session events API** — durable, ordered `status.events[]` (the reporter's sink).
+4. **First-party dns-proxy image MVP** — first real producer.
+5. **First-party tool-gateway image MVP** — second real producer.
+6. **Live network violation population** — enforced NetworkPolicy blocks → violations.
+7. **File/workspace policy implementation** — deferred from slice 8.
 
 ## Open Questions
 
-- Should runtime reporters patch `AgentSession.status` directly or write separate evidence CRDs?
+- ~~Should runtime reporters patch `AgentSession.status` directly or write separate evidence CRDs?~~ **Decided:** controller-owned **PATCH callback** — sidecars report to a controller endpoint that PATCHes `AgentSession.status`; no new evidence CRD. Keeps status the single source of truth. Detailed contract: [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) (Phase 3b slice 1).
 - Should `RuntimeProfile.spec.sidecars[]` be enough for backend selection, or should Phase 3 introduce an `EnforcementProfile` / `ToolGateway` CRD first?
 - What is the minimal production-safe status cap for runtime decisions and violations?
 - How should active Job drift be handled for enforcement backend changes: deny mutation, set drift condition, or require session restart?

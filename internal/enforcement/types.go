@@ -12,7 +12,7 @@ You may obtain a copy of the License at
 // replaceable data-plane enforcement backends (NetworkPolicy, egress proxy, tool gateway).
 //
 // Phase 3 slice 1: types, mode semantics, and reporting helpers only. Concrete backends
-// and reconciler wiring arrive in later slices. See docs/phase-3-enforcement-architecture.md.
+// and reconciler wiring arrive in later slices. See docs/design/phase-3-enforcement-architecture.md.
 package enforcement
 
 import relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"

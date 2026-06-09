@@ -19,6 +19,8 @@ introduces a single CRD — `AgentSession` — and reconciles it onto a Kubernet
 
 ---
 
+> **Design docs:** architecture and per-phase design live in [`docs/design/`](docs/design/) — start with [`architecture.md`](docs/design/architecture.md). Project tracking is in [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).
+
 ## Long-term product vision
 
 Relay aims to become the runtime control plane for safely running autonomous AI
@@ -82,6 +84,8 @@ See [AgentSession controller reference](#agentsession-controller-reference) for 
 ├── internal/controller/
 │   ├── agentsession/             # AgentSession reconciler + policy/runtime watches
 │   └── job/                      # Kubernetes Job build, drift detection, status helpers
+├── internal/enforcement/         # backend-neutral enforcement contract + backends
+├── docs/design/                  # architecture & per-phase design docs (start: architecture.md)
 ├── config/
 │   ├── crd/bases/                # CRD YAML
 │   ├── default/                  # top-level kustomization

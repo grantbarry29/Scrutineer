@@ -31,6 +31,7 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 ## Policy And Enforcement Model
 
 - Distinguish declared policy, propagated policy, observed behavior, and enforced behavior. Environment variables are propagation hooks, not real enforcement.
+- **Near-term focus (Phase 3b):** close the gap between *propagated* and *observed* by building the **runtime evidence loop** — a controller-owned reporter that lets data-plane backends populate `status.policyDecisions`, `status.violations`, and structured events. Observed governance (what actually happened) is the prerequisite for the observability, audit, and UI surfaces; build the evidence pipeline before the surfaces that consume it. See `.cursor/relay-project-status.md` Phase 3b.
 - Policies should eventually be reusable, versioned, composable, explainable, and support modes such as dry-run, audit-only, and enforced.
 - Human approval should become scoped and auditable: approve one tool call, domain, file write, deployment, credential use, or bounded time window rather than a broad boolean.
 - Audit and evidence are first-class outputs. Relay should explain who authorized a run, what identity acted, what policy matched, what was allowed or denied, what changed, and what runtime evidence was observed.

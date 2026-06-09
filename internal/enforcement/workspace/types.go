@@ -10,7 +10,7 @@ You may obtain a copy of the License at
 
 // Package workspace holds design stubs for future file/workspace governance backends.
 //
-// Phase 3 slice 8 is design-only. See docs/phase-3-file-workspace-policy.md.
+// Phase 3 slice 8 is design-only. See docs/design/phase-3-file-workspace-policy.md.
 // Evaluation, sidecar injection, and PolicyRules fields are intentionally deferred.
 package workspace
 

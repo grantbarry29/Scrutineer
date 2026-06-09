@@ -14,6 +14,7 @@ Also loaded via [`.cursor/rules/relay-project-status.mdc`](rules/relay-project-s
 | **`relay-project-status.md`** | Humans + agents | Operational state, queue, roadmap, gaps, recent fixes |
 | **`relay-cursor-workflow.md`** (this file) | Primarily agents | Implementation contract, scope rules, task templates, how to update status |
 | **`rules/relay-product-vision.mdc`** | Agents | Product vision, MVP boundaries, long-term direction |
+| **`docs/design/`** | Humans + agents | Canonical architecture & per-phase design docs (read during planning; see `rules/relay-design-docs.mdc`) |
 
 ---
 
@@ -23,7 +24,7 @@ When asked to implement a Relay task, Cursor must:
 
 1. Read `relay-product-vision.mdc`, `relay-project-status.mdc`, **`relay-project-status.md`**, and this file when implementing or updating tracking.
 2. Identify the **exact selected task** from **Ready for Cursor Queue** (or user prompt). If unclear, ask or propose a short list. Do not pick multiple roadmap phases automatically.
-3. Before editing code, provide a short plan: selected task, acceptance criterion, expected files, verification command, non-goals.
+3. Before editing code, provide a short plan: selected task, acceptance criterion, expected files, verification command, non-goals. **During planning, read the relevant design doc(s) in [`docs/design/`](../docs/design/)** — start with `architecture.md`, then the phase/area doc that matches the task (see `relay-design-docs.mdc`). Follow their invariants and non-goals. Do not load all design docs at once; read the one(s) you need.
 4. Implement **only** that task. Do not add adjacent roadmap items unless explicitly requested.
 5. Keep changes reviewable. Prefer **1–4 non-generated files**; if more are needed, stop and explain.
 6. **Explain as you go** (see below).
@@ -151,6 +152,7 @@ Promote items from **Discovered Follow-Up Tasks** into **Ready for Cursor Queue*
 - Avoid spanning multiple roadmap phases in one task.
 - Avoid new architecture (CRDs, sidecars, enforcement) unless the user asks for design first.
 - Multi-subsystem work: propose a plan and wait for confirmation.
+- **Runtime-evidence slices** (anything that populates `status.policyDecisions`, `status.violations`, `status.usage`, or `status.events`): must include a test that drives the path with a **simulated/fake report** — do not require a real sidecar image to prove the behavior. Reporter input must be idempotent and capped.
 
 ---
 
