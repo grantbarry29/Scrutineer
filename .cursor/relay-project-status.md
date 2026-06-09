@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (Evidence loop #1 done: runtime reporter contract + whole-project architecture design docs under `docs/design/`; queue advanced to reporter loop impl)
+> **Last updated:** 2026-06-08 (Evidence loop #2 done: runtime reporter HTTP endpoint `POST /v1/report`; queue advanced to structured session events API)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,13 +13,13 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3 shipped contracts, design docs, and in-process merge helpers, but **nothing running in-cluster produces or reports runtime evidence** — `status.policyDecisions`, `status.violations`, and `status.usage` are empty at runtime. The next block of work is the **runtime evidence loop**, which turns declared governance into observed governance. Build the pipeline before the surfaces (metrics, traces, UI) that consume it.
+> **Critical path:** The **runtime reporter endpoint** (`POST /v1/report` on `:8088`) can now merge sidecar reports into `status.policyDecisions` / `status.violations`. Sidecars still need **pod wiring** (projected token + reporter URL) and real images before evidence flows end-to-end in-cluster. Next: **structured session events API**, then dns-proxy/tool-gateway producers.
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
-1. ~~Runtime reporter mechanism design~~ — **done** (`docs/design/phase-3-runtime-reporter-contract.md`)
-2. **Runtime reporter loop (impl)** *(this card — start here)* — chosen mechanism: **controller-owned PATCH callback, no new CRD**
-3. Structured session events API
+1. ~~Runtime reporter mechanism design~~ — **done**
+2. ~~Runtime reporter loop (impl)~~ — **done** (`internal/reporter/`)
+3. **Structured session events API** *(this card — start here)*
 4. First-party dns-proxy image MVP
 5. First-party tool-gateway image MVP
 6. Live network violation population
@@ -27,42 +27,38 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 
 Then Phase 4 observability surfaces (usage metrics → timeline model → Prometheus → OTel → audit sink → log/artifact collection).
 
-### Task: Runtime reporter loop (impl)
+### Task: Structured session events API
 
 **Goal:**  
-Implement the controller-owned reporter endpoint so a (simulated) data-plane sidecar report populates `status.policyDecisions` (`phase=runtime`) and `status.violations` in-cluster.
+Add a durable, ordered, capped event stream the reporter writes into — `status.events[]` (tool call, network attempt, policy decision) — beyond ephemeral Kubernetes Events.
 
 **Why it matters:**  
-Closes the propagated→observed gap: today evidence helpers exist but nothing in-cluster calls them. Unblocks real sidecar images, live violations, and Phase 4 observability. **Implement to the contract:** [`docs/design/phase-3-runtime-reporter-contract.md`](../docs/design/phase-3-runtime-reporter-contract.md).
+Phase 4 observability (timeline, audit, usage) needs a normalized, UI-consumable event model. Designed **after** the reporter contract so the schema matches what backends emit. **Depends on:** *Runtime reporter loop (impl)* — done.
 
 **Scope:**
-- `internal/reporter/`: `manager.Runnable` HTTP server; `POST /v1/report` handler decoding JSON into `enforcement.RuntimeReport` + session ref.
-- Identity verification: `TokenReview` (audience `relay-reporter`) + pod→Job→session ownership check; reject cross-session (`403`).
-- Merge via `agentsession.ApplyRuntimePolicyReport`; status update via `APIReader` read + optimistic concurrency + conflict retry (mirror `patchStatus`).
-- Wire into `cmd/main.go` (`mgr.Add`) + `--reporter-bind-address` flag (default `:8088`).
-- RBAC: add `tokenreviews: create`; no new sidecar RBAC.
+- API shape for `status.events[]` with merge/append semantics, size caps, ordering.
+- Controller helpers for reporters (`dnsproxy`, `toolgateway`, future FS gateway) to append without clobbering prior events.
+- Optional: extend `POST /v1/report` payload with `events[]` once schema is stable.
+- README + architecture note.
 
 **Non-goals:**
-- No real dns-proxy/tool-gateway image calling the endpoint (evidence loop #4/#5).
-- No projected-token injection / reporter `Service` wiring into the pod template (sidecar-injection follow-up).
-- No `status.events[]` schema (evidence loop #3) — keep payload forward-compatible.
-- No mTLS / signed reports / replay protection (reporter-contract §5.3 hardening).
+- Full operational UI.
+- OTLP/SIEM export (separate Phase 4 slice).
+- Replacing Kubernetes Events.
 
 **Acceptance criteria:**
-- Simulated `POST /v1/report` with a `deny` runtime decision → one `phase=runtime` decision **and** one derived violation (handler/envtest).
-- Unauthorized/cross-session report rejected (`401`/`403`), writes nothing.
-- Idempotent re-delivery (no duplicates); decisions truncated at `MaxPolicyDecisions`; `phase != runtime` rejected (`400`).
-- `make test` passes.
+- Documented event schema with at least one populated event type via a simulated report in envtest/unit test.
+- Reporters can append without clobbering prior events.
 
 **Expected files:**
-- `internal/reporter/` (new), `cmd/main.go`, `config/rbac/`, `.cursor/relay-project-status.md`
+- `api/v1alpha1/agentsession_types.go`, `internal/controller/agentsession/`, `internal/reporter/` (optional payload extension), docs/README, `.cursor/relay-project-status.md`
 
 **Verification command:**  
-`make test`
+`make manifests && make test`
 
-**Next suggested picks:** Structured session events API · First-party dns-proxy image MVP.
+**Next suggested picks:** First-party dns-proxy image MVP · Reporter pod wiring (projected token + Service).
 
-**Recently completed** (do not re-implement unless regressions): **Runtime reporter mechanism design** (`docs/design/phase-3-runtime-reporter-contract.md`); **Whole-project architecture design doc** (`docs/design/architecture.md`); **File/workspace policy design**; **DNS/egress proxy prototype**; **RuntimeProfile sidecar injection**; **Tool gateway contract**; **Violation reporting MVP**; **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Add AgentSession Ready condition**; **Watch owned Pods**; Phase 2 reusable policy model; Phase 1 hardening.
+**Recently completed** (do not re-implement unless regressions): **Runtime reporter loop (impl)** (`internal/reporter/`, `PatchRuntimePolicyReport`, `--reporter-bind-address`); **Runtime reporter mechanism design**; **Whole-project architecture design doc**; **File/workspace policy design**; **DNS/egress proxy prototype**; **RuntimeProfile sidecar injection**; Phase 2 reusable policy model; Phase 1 hardening.
 
 ---
 
@@ -320,8 +316,8 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 **Runtime evidence loop — promote in this order** (rationale in *Ready for Cursor Queue*):
 
 1. ~~Runtime reporter mechanism design~~ — **done** (`docs/design/phase-3-runtime-reporter-contract.md`).
-2. **Runtime reporter loop (impl)** — controller-owned PATCH callback. **In Ready for Cursor Queue now.**
-3. **Structured session events API** — durable event store the reporter writes into.
+2. ~~Runtime reporter loop (impl)~~ — **done** (`internal/reporter/`).
+3. **Structured session events API** — **In Ready for Cursor Queue now.**
 4. **First-party dns-proxy image MVP** — first real producer.
 5. **First-party tool-gateway image MVP** — second real producer.
 6. **Live network violation population** — once the reporter exists.
@@ -430,31 +426,32 @@ RuntimeProfile sidecar injection uses `busybox:latest` placeholders for `dns-pro
 **Verification command:**  
 `make test` + image build smoke (document command)
 
-### Task: Runtime reporter loop (impl) — evidence loop #2 — **promoted to Ready for Cursor Queue**
+### Task: Runtime reporter loop (impl) — evidence loop #2 — **done (2026-06-08)**
 
-> Full card is in **Ready for Cursor Queue**. Implement to [`docs/design/phase-3-runtime-reporter-contract.md`](../docs/design/phase-3-runtime-reporter-contract.md). Summary retained below for backlog context.
+**Shipped:** `internal/reporter/` (`POST /v1/report`, `TokenReview` + pod→Job→session auth, rate limit); `agentsession.PatchRuntimePolicyReport`; idempotent decision/violation append; `--reporter-bind-address` (`:8088`); RBAC `tokenreviews: create`; handler unit tests.
+
+**Verification:** `make test` (pass 2026-06-08)
+
+### Task: Reporter pod wiring (projected token + Service)
 
 **Why it matters:**  
-`ApplyEgressProxyRuntimeEvent` and `ApplyRuntimePolicyReport` exist as in-process helpers, but nothing automatically PATCHes `AgentSession` status from running sidecars. Violations and runtime decisions stay empty until a reporter path exists. **Depends on:** *Runtime reporter mechanism design*.
-
-**Mechanism (decided):** controller-owned PATCH callback — no new CRD; `AgentSession.status` remains the single source of truth.
+The reporter endpoint exists but sidecars cannot reach or authenticate to it without a cluster `Service`, `RELAY_REPORTER_URL` env, and projected SA token (`audience: relay-reporter`) mounted into sidecar containers.
 
 **Scope:**
-- Implement the callback path from the reporter-contract design doc.
-- Wire dns-proxy (and optionally tool-gateway) prototype to populate `status.policyDecisions` and `status.violations`.
-- Idempotent merge; respect decision/violation caps; per-session scoping so a sidecar can only report for its own session.
+- Reporter `Service` targeting controller `:8088` (or configurable port).
+- Inject projected token volume + `RELAY_REPORTER_URL` when RuntimeProfile enables enforcement sidecars.
+- Document in README + sample RuntimeProfile.
 
 **Non-goals:**
-- Full Phase 4 event timeline API (may reuse append helpers).
-- SIEM export.
-- New CRD.
+- Real dns-proxy/tool-gateway image (separate card).
+- mTLS.
 
 **Acceptance criteria:**
-- envtest or integration test shows decisions/violations appended after a **simulated** sidecar report (no real image required).
-- Reports are idempotent and capped.
+- Sample RuntimeProfile + docs show sidecar can obtain token and discover reporter URL.
+- Envtest or integration test for injected env/volume fields on Job template.
 
 **Expected files:**
-- `internal/controller/agentsession/` (reporter entry), `docs/design/phase-3-runtime-reporter-contract.md`, `.cursor/relay-project-status.md`
+- `internal/controller/job/sidecars.go`, `config/samples/`, `README.md`, `.cursor/relay-project-status.md`
 
 **Verification command:**  
 `make test`
@@ -886,8 +883,8 @@ Turn declared/propagated governance into **observed** governance. Until this shi
 **Ordered slices:**
 
 1. [x] **Runtime reporter mechanism design** — `docs/design/phase-3-runtime-reporter-contract.md`; decided: **controller-owned PATCH callback, no new CRD**.
-2. [ ] **Runtime reporter loop (impl)** — PATCH callback populates `status.policyDecisions` / `status.violations`; testable with simulated reports. *(in queue)*
-3. [ ] **Structured session events API** — durable, ordered, capped `status.events[]` the reporter writes into. *(was Phase 4; pulled forward — it is the reporter's sink)*
+2. [x] **Runtime reporter loop (impl)** — `internal/reporter/`; `POST /v1/report`; `PatchRuntimePolicyReport`; simulated-report handler tests.
+3. [ ] **Structured session events API** — durable, ordered, capped `status.events[]` the reporter writes into. *(in queue)*
 4. [ ] **First-party dns-proxy image MVP** — first real producer; replaces busybox; reports via the loop.
 5. [ ] **First-party tool-gateway image MVP** — second real producer.
 6. [ ] **Live network violation population** — enforced NetworkPolicy blocks → `PolicyViolation` entries.

@@ -32,14 +32,33 @@ func ApplyPolicyStatus(session *relayv1alpha1.AgentSession, resolved policy.Reso
 }
 
 // AppendRuntimePolicyDecisions appends new runtime-phase decisions onto session status
-// without dropping existing merge-time entries.
+// without dropping existing merge-time entries. Duplicate decisions (same policyDecisionKey)
+// are skipped so reporter re-delivery is idempotent.
 func AppendRuntimePolicyDecisions(session *relayv1alpha1.AgentSession, incoming []relayv1alpha1.PolicyDecision) {
 	if session == nil || len(incoming) == 0 {
 		return
 	}
+	keys := make(map[string]struct{}, len(session.Status.PolicyDecisions))
+	for _, d := range session.Status.PolicyDecisions {
+		keys[policyDecisionKey(d)] = struct{}{}
+	}
+	var novel []relayv1alpha1.PolicyDecision
+	for _, d := range incoming {
+		if d.Phase == "" {
+			d.Phase = relayv1alpha1.PolicyDecisionPhaseRuntime
+		}
+		if _, ok := keys[policyDecisionKey(d)]; ok {
+			continue
+		}
+		novel = append(novel, d)
+		keys[policyDecisionKey(d)] = struct{}{}
+	}
+	if len(novel) == 0 {
+		return
+	}
 	session.Status.PolicyDecisions = enforcement.AppendRuntimeDecisions(
 		session.Status.PolicyDecisions,
-		incoming,
+		novel,
 		enforcement.MaxPolicyDecisions,
 	)
 }

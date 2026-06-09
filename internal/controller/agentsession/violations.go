@@ -16,14 +16,29 @@ import (
 )
 
 // AppendRuntimeViolations appends policy violations onto session status without
-// exceeding the shared cap.
+// exceeding the shared cap. Duplicate violations (same violationKey) are skipped.
 func AppendRuntimeViolations(session *relayv1alpha1.AgentSession, incoming []relayv1alpha1.PolicyViolation) {
 	if session == nil || len(incoming) == 0 {
 		return
 	}
+	keys := make(map[string]struct{}, len(session.Status.Violations))
+	for _, v := range session.Status.Violations {
+		keys[violationKey(v)] = struct{}{}
+	}
+	var novel []relayv1alpha1.PolicyViolation
+	for _, v := range incoming {
+		if _, ok := keys[violationKey(v)]; ok {
+			continue
+		}
+		novel = append(novel, v)
+		keys[violationKey(v)] = struct{}{}
+	}
+	if len(novel) == 0 {
+		return
+	}
 	session.Status.Violations = enforcement.AppendViolations(
 		session.Status.Violations,
-		incoming,
+		novel,
 		enforcement.MaxViolations,
 	)
 }

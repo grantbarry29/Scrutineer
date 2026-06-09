@@ -27,6 +27,7 @@ import (
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/controller/agentsession"
+	"github.com/secureai/relay/internal/reporter"
 )
 
 var (
@@ -43,10 +44,13 @@ func main() {
 	var (
 		metricsAddr          string
 		probeAddr            string
+		reporterAddr         string
 		enableLeaderElection bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "Address the metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "Address the probe endpoint binds to.")
+	flag.StringVar(&reporterAddr, "reporter-bind-address", reporter.DefaultBindAddress,
+		"Address the runtime evidence reporter endpoint binds to (POST /v1/report).")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. Ensures only one active controller.")
 
@@ -84,6 +88,16 @@ func main() {
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	if err := mgr.Add(reporter.NewRunnable(reporter.Options{
+		BindAddress: reporterAddr,
+		Client:      mgr.GetClient(),
+		APIReader:   mgr.GetAPIReader(),
+		Recorder:    mgr.GetEventRecorderFor("relay-runtime-reporter"),
+	})); err != nil {
+		setupLog.Error(err, "unable to set up runtime reporter")
 		os.Exit(1)
 	}
 

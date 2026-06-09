@@ -1,6 +1,6 @@
 # Phase 3b Slice 1 — Runtime Reporter Contract (Design)
 
-> **Status:** Design (this is the slice 1 deliverable). Implementation is **slice 2** (*Runtime reporter loop (impl)*).
+> **Status:** Implemented (slice 2 — `internal/reporter/`, `agentsession.PatchRuntimePolicyReport`, `--reporter-bind-address`). Pod wiring (projected token + Service) is a follow-up task.
 > **Audience:** the engineer/agent implementing slice 2 and the data-plane sidecars.
 > **Read first:** [`architecture.md`](architecture.md) · [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md)
 
