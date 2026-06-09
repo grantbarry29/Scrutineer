@@ -28,6 +28,7 @@ import (
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/controller/agentsession"
 	relayjob "github.com/secureai/relay/internal/controller/job"
+	"github.com/secureai/relay/internal/enforcement/networkpolicy"
 )
 
 // agentSessionOption mutates an AgentSession during construction.
@@ -70,6 +71,12 @@ func withLongRunningCommand() agentSessionOption {
 func withRuntimeProfileRef(name string) agentSessionOption {
 	return func(s *relayv1alpha1.AgentSession) {
 		s.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{Name: name}
+	}
+}
+
+func withPolicyRef(kind, name string) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		s.Spec.PolicyRefs = append(s.Spec.PolicyRefs, relayv1alpha1.PolicyRef{Kind: kind, Name: name})
 	}
 }
 
@@ -144,6 +151,26 @@ func createAgentSession(ctx context.Context, session *relayv1alpha1.AgentSession
 // jobNameForSession returns the deterministic Job name the controller creates.
 func jobNameForSession(session *relayv1alpha1.AgentSession) string {
 	return relayjob.NameFor(session)
+}
+
+// netpolNameForSession returns the deterministic NetworkPolicy name the controller creates.
+func netpolNameForSession(session *relayv1alpha1.AgentSession) string {
+	return networkpolicy.NameFor(session.Namespace, session.Name)
+}
+
+// createEnforcedCIDRPolicy creates an AgentPolicy with enforced mode and an allowed CIDR.
+func createEnforcedCIDRPolicy(ctx context.Context, namespace, name, cidr string) {
+	GinkgoHelper()
+	ap := &relayv1alpha1.AgentPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: relayv1alpha1.AgentPolicySpec{
+			Mode: relayv1alpha1.PolicyModeEnforced,
+			PolicyRules: relayv1alpha1.PolicyRules{
+				AllowedCIDRs: []string{cidr},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
 }
 
 func strPtr(s string) *string { return &s }

@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (Evidence loop #3 done: structured session events API `status.events[]`; queue advanced to reporter pod wiring)
+> **Last updated:** 2026-06-09 (Test hardening pass: reporter unit coverage 43%→79%, new e2e specs for NetworkPolicy lifecycle + reporter→status; fixed a runtime-report idempotency bug found by e2e. Queue: reporter pod wiring)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -57,7 +57,7 @@ The reporter endpoint and `status.events[]` exist, but sidecars cannot reach or 
 
 **Next suggested picks:** First-party dns-proxy image MVP · Live network violation population.
 
-**Recently completed** (do not re-implement unless regressions): **Structured session events API** (`status.events[]`, reporter `events[]`, `docs/design/phase-4-session-events.md`); **Runtime reporter loop (impl)**; **Runtime reporter mechanism design**; Phase 2 reusable policy model.
+**Recently completed** (do not re-implement unless regressions): **Test hardening pass** (reporter unit coverage 43%→79%; new e2e specs: NetworkPolicy enforced lifecycle + audit-only no-op, runtime reporter `POST /v1/report`→`status` for decisions/violations/events incl. 404 + idempotent re-delivery; fixed runtime-report **idempotency bug** — sub-second timestamps now pinned to RFC3339 second precision in `reporter/normalize.go` so apiserver round-trips don't defeat dedup); **Structured session events API** (`status.events[]`, reporter `events[]`, `docs/design/phase-4-session-events.md`); **Runtime reporter loop (impl)**; **Runtime reporter mechanism design**; Phase 2 reusable policy model.
 
 ---
 
@@ -324,6 +324,32 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 8. **File/workspace policy implementation** — separate domain; after network/tool proven.
 
 Cards below are grouped: evidence-loop cards first, then unrelated backlog.
+
+### Task: Investigate AgentSession reconcile churn (repeated PolicyResolved events + status conflicts)
+
+**Discovered:** 2026-06-09 during the test-hardening e2e run. Controller logs show the same `PolicyResolved` / "Merged N referenced policies" event re-emitted many times on the *same* resourceVersion for a single session, plus occasional `update AgentSession status: conflict (will requeue)` errors. Suggests the reconciler re-records events and/or re-writes status when nothing changed, causing avoidable requeues.
+
+**Why it matters:** Event spam and status write churn hurt observability signal, add apiserver load, and can mask real changes in the UI/timeline surfaces. Not a correctness bug (tests pass) but a reconcile-discipline gap.
+
+**Scope (proposed):**
+- Make policy-resolution event emission idempotent (only record on actual change / transition, e.g. dedupe by resolved hash or guard with a condition).
+- Confirm status writes are no-ops when desired == observed (avoid spurious `Status().Update`).
+
+**Non-goals:** New CRDs, changing the policy model, or reworking the reconcile architecture.
+
+**Verification:** `make test`; manually confirm event count per session drops to ~1 per real transition (e2e log inspection).
+
+**Files (likely):** `internal/controller/agentsession/reconciler.go`, `policy_decisions.go`, event-recording helpers.
+
+### Task: Raise unit coverage on data-plane producer packages
+
+**Discovered:** 2026-06-09 test-hardening pass. Coverage is uneven: `internal/enforcement/dnsproxy` ~57.8%, `internal/policy` ~59.8%, `internal/controller/job` ~67.5%, `internal/enforcement/toolgateway` ~67.9% (vs reporter 79%, networkpolicy 92%, enforcement 91%). These are existing packages, out of scope for the reporter/events test pass, but worth lifting before the dns-proxy/tool-gateway producer slices build on them.
+
+**Scope (proposed):** Add table-driven unit tests for the lowest-covered branches (sidecar/config rendering edge cases, policy merge precedence, job builder env propagation). Target ~80%+ on each.
+
+**Non-goals:** Behavior changes; e2e additions.
+
+**Verification:** `make test` (per-package coverage).
 
 ### Task: Watch owned Pods for reconcile triggers — **done (2026-06-08)**
 

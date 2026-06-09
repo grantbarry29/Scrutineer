@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/enforcement"
 )
 
 var _ = Describe("status patch strategy", func() {
@@ -230,6 +231,66 @@ var _ = Describe("status patch strategy", func() {
 		}, 2*time.Second, 20*time.Millisecond).Should(Succeed())
 	})
 })
+
+var _ = Describe("PatchRuntimePolicyReport", func() {
+	It("merges runtime decisions, violations, and events onto live status", func() {
+		ns := newTestNamespace()
+		session := minimalAgentSession(ns, "reporter-patch")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+
+		ts := metav1.NewTime(time.Unix(4242, 0))
+		report := enforcement.RuntimeReport{
+			Decisions: []relayv1alpha1.PolicyDecision{{
+				Time:    ts,
+				Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+				Type:    "network",
+				Action:  relayv1alpha1.PolicyDecisionDeny,
+				Reason:  "DeniedDomain",
+				Target:  "evil.example.com",
+				Message: "egress blocked",
+			}},
+			Events: []relayv1alpha1.SessionEvent{{
+				Time:    ts,
+				Type:    relayv1alpha1.SessionEventTypeNetwork,
+				Source:  "egress-proxy",
+				Action:  "deny",
+				Target:  "evil.example.com",
+				Message: "egress blocked",
+				EventID: "evt-1",
+			}},
+		}
+
+		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report)).To(Succeed())
+
+		var after relayv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+		// The reconciler may also write merge-time decisions; assert on the
+		// runtime-phase evidence specifically rather than total counts.
+		Expect(runtimeDecisionsWithTarget(after.Status.PolicyDecisions, "evil.example.com")).To(HaveLen(1))
+		Expect(after.Status.Violations).To(HaveLen(1))
+		Expect(after.Status.Violations[0].Target).To(Equal("evil.example.com"))
+		Expect(after.Status.Events).To(HaveLen(1))
+		Expect(after.Status.Events[0].EventID).To(Equal("evt-1"))
+
+		By("re-delivering the same report is idempotent")
+		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report)).To(Succeed())
+		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+		Expect(runtimeDecisionsWithTarget(after.Status.PolicyDecisions, "evil.example.com")).To(HaveLen(1))
+		Expect(after.Status.Violations).To(HaveLen(1))
+		Expect(after.Status.Events).To(HaveLen(1))
+	})
+})
+
+func runtimeDecisionsWithTarget(decisions []relayv1alpha1.PolicyDecision, target string) []relayv1alpha1.PolicyDecision {
+	var out []relayv1alpha1.PolicyDecision
+	for _, d := range decisions {
+		if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == target {
+			out = append(out, d)
+		}
+	}
+	return out
+}
 
 func conditionTypes(conds []metav1.Condition) []string {
 	out := make([]string, 0, len(conds))

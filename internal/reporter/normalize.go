@@ -41,7 +41,11 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		return enforcement.RuntimeReport{}, fmt.Errorf("%w: decisions, violations, or events required", ErrBadRequest)
 	}
 
-	now := metav1.NewTime(receivedAt)
+	// Pin every timestamp to RFC3339 (second) precision. The apiserver persists
+	// metav1.Time at second precision, so retaining sub-second precision in memory
+	// would make re-delivered reports look novel (key mismatch) and break the
+	// idempotent dedup in AppendRuntime* helpers.
+	now := metav1.NewTime(receivedAt).Rfc3339Copy()
 	maxFuture := receivedAt.Add(maxFutureSkew)
 	decisions := make([]relayv1alpha1.PolicyDecision, 0, len(req.Decisions))
 	for i, d := range req.Decisions {
@@ -49,10 +53,10 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 			return enforcement.RuntimeReport{}, fmt.Errorf("%w: decisions[%d].phase must be runtime", ErrBadRequest, i)
 		}
 		d.Phase = relayv1alpha1.PolicyDecisionPhaseRuntime
-		if d.Time.IsZero() {
+		if d.Time.IsZero() || d.Time.Time.After(maxFuture) {
 			d.Time = now
-		} else if d.Time.Time.After(maxFuture) {
-			d.Time = now
+		} else {
+			d.Time = d.Time.Rfc3339Copy()
 		}
 		if strings.TrimSpace(d.Actor) == "" {
 			d.Actor = req.Backend
@@ -65,10 +69,10 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 
 	violations := append([]relayv1alpha1.PolicyViolation(nil), req.Violations...)
 	for i := range violations {
-		if violations[i].Time.IsZero() {
+		if violations[i].Time.IsZero() || violations[i].Time.Time.After(maxFuture) {
 			violations[i].Time = now
-		} else if violations[i].Time.Time.After(maxFuture) {
-			violations[i].Time = now
+		} else {
+			violations[i].Time = violations[i].Time.Rfc3339Copy()
 		}
 	}
 
@@ -77,10 +81,10 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		if strings.TrimSpace(string(e.Type)) == "" {
 			return enforcement.RuntimeReport{}, fmt.Errorf("%w: event type is required", ErrBadRequest)
 		}
-		if e.Time.IsZero() {
+		if e.Time.IsZero() || e.Time.Time.After(maxFuture) {
 			e.Time = now
-		} else if e.Time.Time.After(maxFuture) {
-			e.Time = now
+		} else {
+			e.Time = e.Time.Rfc3339Copy()
 		}
 		if strings.TrimSpace(e.Source) == "" {
 			e.Source = req.Backend

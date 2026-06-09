@@ -61,6 +61,31 @@ func TestApplyRuntimePolicyReport_appendsEvents(t *testing.T) {
 	}
 }
 
+func TestAppendSessionEvents_truncatesWithSummary(t *testing.T) {
+	session := &relayv1alpha1.AgentSession{}
+	incoming := make([]relayv1alpha1.SessionEvent, MaxSessionEvents+10)
+	for i := range incoming {
+		incoming[i] = relayv1alpha1.SessionEvent{
+			Time:    metav1.NewTime(time.Unix(int64(i), 0)),
+			Type:    relayv1alpha1.SessionEventTypeNetwork,
+			Source:  "egress-proxy",
+			Action:  "deny",
+			Target:  "host",
+			Message: "blocked",
+			EventID: "evt-" + itoaEvents(i),
+		}
+	}
+	AppendSessionEvents(session, incoming)
+
+	if len(session.Status.Events) != MaxSessionEvents {
+		t.Fatalf("events = %d, want %d", len(session.Status.Events), MaxSessionEvents)
+	}
+	last := session.Status.Events[len(session.Status.Events)-1]
+	if last.Type != relayv1alpha1.SessionEventTypeSystem || last.Action != "truncate" {
+		t.Fatalf("expected truncation summary, got %+v", last)
+	}
+}
+
 func TestMergeEventsInPlace_preservesReporterEvents(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(3, 0))
 	dst := []relayv1alpha1.SessionEvent{}

@@ -13,10 +13,14 @@ You may obtain a copy of the License at
 package e2e
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -208,6 +212,69 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 			got := getSession(ctx, key)
 			expectCancelledStatus(&got)
+		})
+	})
+
+	Context("network policy enforcement", func() {
+		It("creates an owned NetworkPolicy for an enforced CIDR policy and removes it on terminal", func(ctx SpecContext) {
+			ns := newTestNamespace("relay-e2e-netpol")
+			createEnforcedCIDRPolicy(ctx, ns, "egress-allow", "203.0.113.0/24")
+
+			session := newAgentSession(ns, "netpol",
+				withPolicyRef("AgentPolicy", "egress-allow"),
+				withLongRunningCommand(),
+			)
+			key := createAgentSession(ctx, session)
+
+			expectJobForSession(ctx, ns, session)
+
+			By("the controller renders a NetworkPolicy owned by the session")
+			var np networkingv1.NetworkPolicy
+			npKey := client.ObjectKey{Namespace: ns, Name: netpolNameForSession(session)}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, npKey, &np)
+			}, 30*time.Second, 500*time.Millisecond).Should(Succeed(), "NetworkPolicy never appeared")
+
+			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
+			Expect(np.Spec.PodSelector.MatchLabels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+			owner := metav1.GetControllerOf(&np)
+			Expect(owner).NotTo(BeNil())
+			Expect(owner.Kind).To(Equal("AgentSession"))
+
+			By("cancelling the session removes the NetworkPolicy at terminal phase")
+			requestCancellation(ctx, key)
+			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, npKey, &networkingv1.NetworkPolicy{})
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}, 30*time.Second, 500*time.Millisecond).Should(Succeed(), "NetworkPolicy should be deleted on terminal phase")
+		})
+
+		It("does not create a NetworkPolicy for an audit-only policy", func(ctx SpecContext) {
+			ns := newTestNamespace("relay-e2e-netpol-audit")
+			ap := &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "egress-audit", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					Mode:        relayv1alpha1.PolicyModeAuditOnly,
+					PolicyRules: relayv1alpha1.PolicyRules{AllowedCIDRs: []string{"203.0.113.0/24"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ap)).To(Succeed())
+
+			session := newAgentSession(ns, "netpol-audit",
+				withPolicyRef("AgentPolicy", "egress-audit"),
+				withExitCommand(0),
+			)
+			createAgentSession(ctx, session)
+			expectJobForSession(ctx, ns, session)
+
+			npKey := client.ObjectKey{Namespace: ns, Name: netpolNameForSession(session)}
+			Consistently(func() bool {
+				err := k8sClient.Get(ctx, npKey, &networkingv1.NetworkPolicy{})
+				return apierrors.IsNotFound(err)
+			}, 5*time.Second, 500*time.Millisecond).Should(BeTrue(),
+				"audit-only policy must not produce a NetworkPolicy")
 		})
 	})
 
