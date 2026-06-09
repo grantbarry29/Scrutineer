@@ -254,6 +254,49 @@ type SessionUsage struct {
 	NetworkRequests int64 `json:"networkRequests,omitempty"`
 }
 
+// SessionEventType categorizes structured timeline events for observability surfaces.
+//
+// +kubebuilder:validation:Enum=policy;network;tool;lifecycle;system
+type SessionEventType string
+
+const (
+	SessionEventTypePolicy    SessionEventType = "policy"
+	SessionEventTypeNetwork   SessionEventType = "network"
+	SessionEventTypeTool      SessionEventType = "tool"
+	SessionEventTypeLifecycle SessionEventType = "lifecycle"
+	SessionEventTypeSystem    SessionEventType = "system"
+)
+
+// SessionEvent is a durable, timestamped runtime observation for UI timelines and audit.
+// Phase 3b reporters append via POST /v1/report; the reconciler preserves existing entries.
+type SessionEvent struct {
+	// Time when the event was observed at runtime.
+	Time metav1.Time `json:"time"`
+
+	// Type categorizes the event for filtering (policy, network, tool, lifecycle, system).
+	Type SessionEventType `json:"type"`
+
+	// Source is the reporting component (e.g. egress-proxy, tool-gateway).
+	// +optional
+	Source string `json:"source,omitempty"`
+
+	// Action is a short verb: allow, deny, call, block, start, complete.
+	// +optional
+	Action string `json:"action,omitempty"`
+
+	// Target is the entity involved (domain, tool name, path).
+	// +optional
+	Target string `json:"target,omitempty"`
+
+	// Message is human-readable detail for operators.
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// EventID is an optional client idempotency key unique within the session.
+	// +optional
+	EventID string `json:"eventId,omitempty"`
+}
+
 // PolicyViolation records a single policy violation observed during a session.
 // Phase 3 enforcement reporters populate this via runtime reports (deny and dry-run outcomes).
 type PolicyViolation struct {
@@ -355,9 +398,16 @@ type AgentSessionStatus struct {
 	Usage *SessionUsage `json:"usage,omitempty"`
 
 	// Violations records policy violations observed during this session.
-	// Not populated in the MVP; reserved for Phase 3 enforcement backends.
+	// Populated by Phase 3 enforcement reporters (deny and dry-run outcomes).
 	// +optional
 	Violations []PolicyViolation `json:"violations,omitempty"`
+
+	// Events is an ordered, bounded stream of structured runtime observations (timeline/audit).
+	// Appended by data-plane reporters; preserved across reconciler status patches.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=256
+	Events []SessionEvent `json:"events,omitempty"`
 
 	// Artifacts references artifacts collected from this session.
 	// Not populated in the MVP; reserved for Phase 4 log/artifact collection.

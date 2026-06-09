@@ -724,6 +724,55 @@ spec:
                       type: string
                     type: array
                 type: object
+              events:
+                description: |-
+                  Events is an ordered, bounded stream of structured runtime observations (timeline/audit).
+                  Appended by data-plane reporters; preserved across reconciler status patches.
+                items:
+                  description: |-
+                    SessionEvent is a durable, timestamped runtime observation for UI timelines and audit.
+                    Phase 3b reporters append via POST /v1/report; the reconciler preserves existing entries.
+                  properties:
+                    action:
+                      description: 'Action is a short verb: allow, deny, call, block,
+                        start, complete.'
+                      type: string
+                    eventId:
+                      description: EventID is an optional client idempotency key unique
+                        within the session.
+                      type: string
+                    message:
+                      description: Message is human-readable detail for operators.
+                      type: string
+                    source:
+                      description: Source is the reporting component (e.g. egress-proxy,
+                        tool-gateway).
+                      type: string
+                    target:
+                      description: Target is the entity involved (domain, tool name,
+                        path).
+                      type: string
+                    time:
+                      description: Time when the event was observed at runtime.
+                      format: date-time
+                      type: string
+                    type:
+                      description: Type categorizes the event for filtering (policy,
+                        network, tool, lifecycle, system).
+                      enum:
+                      - policy
+                      - network
+                      - tool
+                      - lifecycle
+                      - system
+                      type: string
+                  required:
+                  - time
+                  - type
+                  type: object
+                maxItems: 256
+                type: array
+                x-kubernetes-list-type: atomic
               jobName:
                 description: JobName is the name of the underlying batch/v1 Job, when
                   one has been created.
@@ -964,7 +1013,7 @@ spec:
               violations:
                 description: |-
                   Violations records policy violations observed during this session.
-                  Not populated in the MVP; reserved for Phase 3 enforcement backends.
+                  Populated by Phase 3 enforcement reporters (deny and dry-run outcomes).
                 items:
                   description: |-
                     PolicyViolation records a single policy violation observed during a session.

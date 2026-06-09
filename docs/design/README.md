@@ -14,6 +14,7 @@ For *current state, queue, and roadmap*, see [`.cursor/relay-project-status.md`]
 | [`phase-3-dns-proxy-prototype.md`](phase-3-dns-proxy-prototype.md) | Working on egress/DNS governance or the dns-proxy sidecar. |
 | [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md) | Working on tool/MCP governance or the tool-gateway sidecar. |
 | [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-policy.md) | Working on file/workspace governance (mount strategy, FS gateway, path rules). |
+| [`phase-4-session-events.md`](phase-4-session-events.md) | Working on `status.events[]`, timeline ingestion, or reporter event payloads. |
 
 ## Conventions
 

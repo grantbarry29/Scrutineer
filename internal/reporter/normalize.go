@@ -34,8 +34,11 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 	if len(req.Decisions) > MaxDecisionsPerReport {
 		return enforcement.RuntimeReport{}, fmt.Errorf("%w: decisions exceed max %d", ErrBadRequest, MaxDecisionsPerReport)
 	}
-	if len(req.Decisions) == 0 && len(req.Violations) == 0 {
-		return enforcement.RuntimeReport{}, fmt.Errorf("%w: decisions or violations required", ErrBadRequest)
+	if len(req.Events) > MaxEventsPerReport {
+		return enforcement.RuntimeReport{}, fmt.Errorf("%w: events exceed max %d", ErrBadRequest, MaxEventsPerReport)
+	}
+	if len(req.Decisions) == 0 && len(req.Violations) == 0 && len(req.Events) == 0 {
+		return enforcement.RuntimeReport{}, fmt.Errorf("%w: decisions, violations, or events required", ErrBadRequest)
 	}
 
 	now := metav1.NewTime(receivedAt)
@@ -69,8 +72,25 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		}
 	}
 
+	events := make([]relayv1alpha1.SessionEvent, 0, len(req.Events))
+	for _, e := range req.Events {
+		if strings.TrimSpace(string(e.Type)) == "" {
+			return enforcement.RuntimeReport{}, fmt.Errorf("%w: event type is required", ErrBadRequest)
+		}
+		if e.Time.IsZero() {
+			e.Time = now
+		} else if e.Time.Time.After(maxFuture) {
+			e.Time = now
+		}
+		if strings.TrimSpace(e.Source) == "" {
+			e.Source = req.Backend
+		}
+		events = append(events, e)
+	}
+
 	return enforcement.RuntimeReport{
 		Decisions:  decisions,
 		Violations: violations,
+		Events:     events,
 	}, nil
 }

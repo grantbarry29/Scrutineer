@@ -50,4 +50,5 @@ type SessionContext struct {
 type RuntimeReport struct {
 	Decisions  []relayv1alpha1.PolicyDecision
 	Violations []relayv1alpha1.PolicyViolation
+	Events     []relayv1alpha1.SessionEvent
 }

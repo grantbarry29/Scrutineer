@@ -81,6 +81,7 @@ func ApplyRuntimePolicyReport(session *relayv1alpha1.AgentSession, report enforc
 		}
 	}
 	AppendRuntimeViolations(session, violations)
+	AppendSessionEvents(session, report.Events)
 }
 
 // RuntimePolicyDecisions returns only phase=runtime entries from a decision list.

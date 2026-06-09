@@ -25,6 +25,8 @@ const (
 	MaxReportBytes = 64 * 1024
 	// MaxDecisionsPerReport caps decisions in a single report payload.
 	MaxDecisionsPerReport = 128
+	// MaxEventsPerReport caps events in a single report payload.
+	MaxEventsPerReport = 64
 )
 
 // SessionRef identifies the AgentSession a report targets.
@@ -40,6 +42,7 @@ type ReportRequest struct {
 	ReportID   string                          `json:"reportId,omitempty"`
 	Decisions  []relayv1alpha1.PolicyDecision  `json:"decisions"`
 	Violations []relayv1alpha1.PolicyViolation `json:"violations,omitempty"`
+	Events     []relayv1alpha1.SessionEvent    `json:"events,omitempty"`
 }
 
 // CallerIdentity is an authenticated sidecar pod authorized to report evidence.

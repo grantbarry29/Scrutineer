@@ -82,6 +82,7 @@ func patchRuntimePolicyReportOnce(
 	mergeStatusConditionsInPlace(&desired.Conditions, original.Status.Conditions)
 	mergeRuntimePolicyDecisionsInPlace(&desired.PolicyDecisions, original.Status.PolicyDecisions)
 	mergeViolationsInPlace(&desired.Violations, original.Status.Violations)
+	mergeEventsInPlace(&desired.Events, original.Status.Events)
 
 	var liveAgain relayv1alpha1.AgentSession
 	if err := reader.Get(ctx, sessionKey, &liveAgain); err != nil {
@@ -90,6 +91,7 @@ func patchRuntimePolicyReportOnce(
 	mergeStatusConditionsInPlace(&desired.Conditions, liveAgain.Status.Conditions)
 	mergeRuntimePolicyDecisionsInPlace(&desired.PolicyDecisions, liveAgain.Status.PolicyDecisions)
 	mergeViolationsInPlace(&desired.Violations, liveAgain.Status.Violations)
+	mergeEventsInPlace(&desired.Events, liveAgain.Status.Events)
 
 	if equalStatus(&liveAgain.Status, desired) {
 		return false, nil

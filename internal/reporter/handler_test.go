@@ -96,6 +96,45 @@ func TestHandler_acceptsDenyReport(t *testing.T) {
 	}
 }
 
+func TestHandler_acceptsNetworkEvent(t *testing.T) {
+	ts := metav1.NewTime(time.Unix(150, 0))
+	session := &relayv1alpha1.AgentSession{
+		ObjectMeta: metav1.ObjectMeta{Name: "sess-ev", Namespace: "ns1"},
+	}
+	cl := newFakeClient(session)
+	h := &Handler{
+		Writer:   cl.Status(),
+		Reader:   cl,
+		Verifier: stubVerifier{identity: CallerIdentity{Namespace: "ns1", PodName: "pod-a"}},
+		Now:      func() time.Time { return ts.Time },
+	}
+	rec := postReport(t, h, ReportRequest{
+		Session: SessionRef{Namespace: "ns1", Name: "sess-ev"},
+		Backend: "egress-proxy",
+		Events: []relayv1alpha1.SessionEvent{{
+			Time:    ts,
+			Type:    relayv1alpha1.SessionEventTypeNetwork,
+			Action:  "deny",
+			Target:  "evil.example.com",
+			Message: "egress blocked",
+			EventID: "evt-net-1",
+		}},
+	}, "Bearer test-token")
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d body=%q", rec.Code, rec.Body.String())
+	}
+	var updated relayv1alpha1.AgentSession
+	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: "ns1", Name: "sess-ev"}, &updated); err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Status.Events) != 1 {
+		t.Fatalf("events = %d", len(updated.Status.Events))
+	}
+	if updated.Status.Events[0].EventID != "evt-net-1" {
+		t.Fatalf("event = %+v", updated.Status.Events[0])
+	}
+}
+
 func TestHandler_rejectsUnauthorized(t *testing.T) {
 	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
 	cl := newFakeClient(session)

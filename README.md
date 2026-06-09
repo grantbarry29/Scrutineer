@@ -296,6 +296,7 @@ spec:
 | `result` | Yes | Terminal outcome / summary (on success, failure, timeout, cancel) |
 | `usage` | **No** (reserved) | Phase 4 — token/tool/network metrics from observability backends |
 | `violations` | **Yes** (runtime reports) | Bounded list; `deny` and `dry-run` outcomes via `ApplyRuntimePolicyReport` |
+| `events` | **Yes** (runtime reports) | Structured timeline stream (max 256); appended via `POST /v1/report` `events[]` |
 | `artifacts` | **No** (reserved) | Phase 4 — collected workspace artifacts (`spec.outputs`) |
 
 ### Environment variables injected into the agent container

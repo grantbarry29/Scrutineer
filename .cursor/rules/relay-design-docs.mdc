@@ -30,5 +30,6 @@ Relay keeps canonical architecture/design docs in [`docs/design/`](../../docs/de
 | Egress / DNS governance, dns-proxy sidecar | [`docs/design/phase-3-dns-proxy-prototype.md`](../../docs/design/phase-3-dns-proxy-prototype.md) |
 | Tool / MCP governance, tool-gateway sidecar | [`docs/design/phase-3-tool-gateway-contract.md`](../../docs/design/phase-3-tool-gateway-contract.md) |
 | File / workspace governance | [`docs/design/phase-3-file-workspace-policy.md`](../../docs/design/phase-3-file-workspace-policy.md) |
+| Structured session events / timeline | [`docs/design/phase-4-session-events.md`](../../docs/design/phase-4-session-events.md) |
 
 The folder index is [`docs/design/README.md`](../../docs/design/README.md). For current state/queue use `.cursor/relay-project-status.md`; for how to implement use `.cursor/relay-cursor-workflow.md`.

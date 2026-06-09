@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (Evidence loop #2 done: runtime reporter HTTP endpoint `POST /v1/report`; queue advanced to structured session events API)
+> **Last updated:** 2026-06-08 (Evidence loop #3 done: structured session events API `status.events[]`; queue advanced to reporter pod wiring)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,52 +13,51 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** The **runtime reporter endpoint** (`POST /v1/report` on `:8088`) can now merge sidecar reports into `status.policyDecisions` / `status.violations`. Sidecars still need **pod wiring** (projected token + reporter URL) and real images before evidence flows end-to-end in-cluster. Next: **structured session events API**, then dns-proxy/tool-gateway producers.
+> **Critical path:** Reporter endpoint + `status.events[]` ship. Sidecars still need **pod wiring** (projected token + reporter URL) and real images before evidence flows end-to-end in-cluster. Next: **reporter pod wiring**, then dns-proxy/tool-gateway producers.
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
 1. ~~Runtime reporter mechanism design~~ — **done**
 2. ~~Runtime reporter loop (impl)~~ — **done** (`internal/reporter/`)
-3. **Structured session events API** *(this card — start here)*
-4. First-party dns-proxy image MVP
-5. First-party tool-gateway image MVP
-6. Live network violation population
-7. File/workspace policy implementation *(separate domain; after network/tool proven)*
+3. ~~Structured session events API~~ — **done** (`status.events[]`, reporter `events[]` payload)
+4. **Reporter pod wiring** *(this card — start here)* — projected token + Service + `RELAY_REPORTER_URL`
+5. First-party dns-proxy image MVP
+6. First-party tool-gateway image MVP
+7. Live network violation population
+8. File/workspace policy implementation *(separate domain; after network/tool proven)*
 
 Then Phase 4 observability surfaces (usage metrics → timeline model → Prometheus → OTel → audit sink → log/artifact collection).
 
-### Task: Structured session events API
+### Task: Reporter pod wiring (projected token + Service)
 
 **Goal:**  
-Add a durable, ordered, capped event stream the reporter writes into — `status.events[]` (tool call, network attempt, policy decision) — beyond ephemeral Kubernetes Events.
+Wire session pods so enforcement sidecars can discover and authenticate to the runtime reporter (`POST /v1/report`).
 
 **Why it matters:**  
-Phase 4 observability (timeline, audit, usage) needs a normalized, UI-consumable event model. Designed **after** the reporter contract so the schema matches what backends emit. **Depends on:** *Runtime reporter loop (impl)* — done.
+The reporter endpoint and `status.events[]` exist, but sidecars cannot reach or auth to the controller without a `Service`, `RELAY_REPORTER_URL`, and projected SA token (`audience: relay-reporter`). Unblocks end-to-end in-cluster evidence flow before real dns-proxy images.
 
 **Scope:**
-- API shape for `status.events[]` with merge/append semantics, size caps, ordering.
-- Controller helpers for reporters (`dnsproxy`, `toolgateway`, future FS gateway) to append without clobbering prior events.
-- Optional: extend `POST /v1/report` payload with `events[]` once schema is stable.
-- README + architecture note.
+- Reporter `Service` targeting controller `:8088` (or configurable).
+- Inject projected token volume + `RELAY_REPORTER_URL` when RuntimeProfile enables enforcement sidecars (`internal/controller/job/sidecars.go`).
+- Sample RuntimeProfile + README.
 
 **Non-goals:**
-- Full operational UI.
-- OTLP/SIEM export (separate Phase 4 slice).
-- Replacing Kubernetes Events.
+- Real dns-proxy/tool-gateway image (evidence loop #5).
+- mTLS.
 
 **Acceptance criteria:**
-- Documented event schema with at least one populated event type via a simulated report in envtest/unit test.
-- Reporters can append without clobbering prior events.
+- Job template includes reporter URL env and projected token mount for enabled sidecars (envtest).
+- README documents discovery and token audience.
 
 **Expected files:**
-- `api/v1alpha1/agentsession_types.go`, `internal/controller/agentsession/`, `internal/reporter/` (optional payload extension), docs/README, `.cursor/relay-project-status.md`
+- `internal/controller/job/sidecars.go`, `config/samples/`, `config/default/` or manager Service manifest, `README.md`, `.cursor/relay-project-status.md`
 
 **Verification command:**  
-`make manifests && make test`
+`make test`
 
-**Next suggested picks:** First-party dns-proxy image MVP · Reporter pod wiring (projected token + Service).
+**Next suggested picks:** First-party dns-proxy image MVP · Live network violation population.
 
-**Recently completed** (do not re-implement unless regressions): **Runtime reporter loop (impl)** (`internal/reporter/`, `PatchRuntimePolicyReport`, `--reporter-bind-address`); **Runtime reporter mechanism design**; **Whole-project architecture design doc**; **File/workspace policy design**; **DNS/egress proxy prototype**; **RuntimeProfile sidecar injection**; Phase 2 reusable policy model; Phase 1 hardening.
+**Recently completed** (do not re-implement unless regressions): **Structured session events API** (`status.events[]`, reporter `events[]`, `docs/design/phase-4-session-events.md`); **Runtime reporter loop (impl)**; **Runtime reporter mechanism design**; Phase 2 reusable policy model.
 
 ---
 
@@ -317,11 +316,12 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 1. ~~Runtime reporter mechanism design~~ — **done** (`docs/design/phase-3-runtime-reporter-contract.md`).
 2. ~~Runtime reporter loop (impl)~~ — **done** (`internal/reporter/`).
-3. **Structured session events API** — **In Ready for Cursor Queue now.**
-4. **First-party dns-proxy image MVP** — first real producer.
-5. **First-party tool-gateway image MVP** — second real producer.
-6. **Live network violation population** — once the reporter exists.
-7. **File/workspace policy implementation** — separate domain; after network/tool proven.
+3. ~~Structured session events API~~ — **done** (`docs/design/phase-4-session-events.md`).
+4. **Reporter pod wiring** — **In Ready for Cursor Queue now.**
+5. **First-party dns-proxy image MVP** — first real producer.
+6. **First-party tool-gateway image MVP** — second real producer.
+7. **Live network violation population** — once the reporter exists.
+8. **File/workspace policy implementation** — separate domain; after network/tool proven.
 
 Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
@@ -432,59 +432,17 @@ RuntimeProfile sidecar injection uses `busybox:latest` placeholders for `dns-pro
 
 **Verification:** `make test` (pass 2026-06-08)
 
-### Task: Reporter pod wiring (projected token + Service)
+### Task: Structured session events API — evidence loop #3 — **done (2026-06-08)**
 
-**Why it matters:**  
-The reporter endpoint exists but sidecars cannot reach or authenticate to it without a cluster `Service`, `RELAY_REPORTER_URL` env, and projected SA token (`audience: relay-reporter`) mounted into sidecar containers.
+**Shipped:** `SessionEvent` API type; `status.events[]` (max 256); `AppendSessionEvents` + `patchStatus`/`PatchRuntimePolicyReport` merge; reporter `events[]` payload; `docs/design/phase-4-session-events.md`; unit + handler tests.
 
-**Scope:**
-- Reporter `Service` targeting controller `:8088` (or configurable port).
-- Inject projected token volume + `RELAY_REPORTER_URL` when RuntimeProfile enables enforcement sidecars.
-- Document in README + sample RuntimeProfile.
+**Verification:** `make manifests && make test` (pass 2026-06-08)
 
-**Non-goals:**
-- Real dns-proxy/tool-gateway image (separate card).
-- mTLS.
+### Task: Reporter pod wiring (projected token + Service) — **promoted to Ready for Cursor Queue**
 
-**Acceptance criteria:**
-- Sample RuntimeProfile + docs show sidecar can obtain token and discover reporter URL.
-- Envtest or integration test for injected env/volume fields on Job template.
+> Full card is in **Ready for Cursor Queue**.
 
-**Expected files:**
-- `internal/controller/job/sidecars.go`, `config/samples/`, `README.md`, `.cursor/relay-project-status.md`
-
-**Verification command:**  
-`make test`
-
-### Task: Structured session events API — evidence loop #3
-
-**Goal:**  
-Add a durable, ordered, capped event stream the reporter writes into — `status.events[]` (tool call, network attempt, policy decision) — beyond ephemeral Kubernetes Events.
-
-**Why it matters:**  
-Phase 4 observability (timeline, audit, usage) needs a normalized, UI-consumable event model. Designed **after** the reporter contract so the schema matches what backends actually emit. **Depends on:** *Runtime reporter loop (impl)*.
-
-**Scope:**
-- API shape for `status.events[]` with merge/append semantics, size caps, ordering.
-- Controller helpers for reporters (`dnsproxy`, `toolgateway`, future FS gateway) to append without clobbering prior events.
-- README + architecture note.
-
-**Non-goals:**
-- Full operational UI.
-- OTLP/SIEM export (separate Phase 4 slice).
-- Replacing Kubernetes Events.
-
-**Acceptance criteria:**
-- Documented event schema with at least one populated event type via a simulated report in envtest/unit test.
-- Reporters can append without clobbering prior events.
-
-**Expected files:**
-- `api/v1alpha1/agentsession_types.go`, `internal/controller/agentsession/`, docs/README, `.cursor/relay-project-status.md`
-
-**Verification command:**  
-`make manifests && make test`
-
-### Task: Live violation population from network enforcement — evidence loop #6
+### Task: Live violation population from network enforcement — evidence loop #7
 
 **Why it matters:**  
 NetworkPolicy blocks CIDR egress in enforced mode, but Relay does not observe kernel drops — `status.violations` remains empty unless a reporter translates blocks into `PolicyViolation` entries. Partly covered once dns-proxy reports denies via the reporter loop; full kernel visibility may defer to eBPF later.
@@ -884,11 +842,12 @@ Turn declared/propagated governance into **observed** governance. Until this shi
 
 1. [x] **Runtime reporter mechanism design** — `docs/design/phase-3-runtime-reporter-contract.md`; decided: **controller-owned PATCH callback, no new CRD**.
 2. [x] **Runtime reporter loop (impl)** — `internal/reporter/`; `POST /v1/report`; `PatchRuntimePolicyReport`; simulated-report handler tests.
-3. [ ] **Structured session events API** — durable, ordered, capped `status.events[]` the reporter writes into. *(in queue)*
-4. [ ] **First-party dns-proxy image MVP** — first real producer; replaces busybox; reports via the loop.
-5. [ ] **First-party tool-gateway image MVP** — second real producer.
-6. [ ] **Live network violation population** — enforced NetworkPolicy blocks → `PolicyViolation` entries.
-7. [ ] **File/workspace policy implementation** — path rules / FS gateway deferred from slice 8 (separate domain).
+3. [x] **Structured session events API** — `status.events[]`; reporter `events[]`; merge/idempotent append; design doc.
+4. [ ] **Reporter pod wiring** — projected token + Service + `RELAY_REPORTER_URL` for sidecars. *(in queue)*
+5. [ ] **First-party dns-proxy image MVP** — first real producer; replaces busybox; reports via the loop.
+6. [ ] **First-party tool-gateway image MVP** — second real producer.
+7. [ ] **Live network violation population** — enforced NetworkPolicy blocks → `PolicyViolation` entries.
+8. [ ] **File/workspace policy implementation** — path rules / FS gateway deferred from slice 8 (separate domain).
 
 ---
 
@@ -897,7 +856,7 @@ Turn declared/propagated governance into **observed** governance. Until this shi
 Backend surfaces for the future operational UI and enterprise audit requirements. **Depends on Phase 3b** — these consume the runtime evidence the reporter loop and events API produce.
 
 - [ ] **Usage metrics** — Populate `status.usage` (tokens, tool calls, network requests) from sidecar/agent reports *(first, once reports flow)*
-- [ ] **Session timeline model** — Normalized events suitable for UI timeline view *(builds on structured events API in Phase 3b)*
+- [ ] **Session timeline model** — UI projection/normalization over `status.events[]` *(schema ships in Phase 3b)*
 - [ ] **Prometheus metrics** — Sessions by phase, violations, approval queue depth, reconcile latency
 - [ ] **OpenTelemetry** — Traces for reconcile loop + optional agent runtime traces
 - [ ] **Audit log sink** — Export to OTLP, S3, or SIEM-compatible format
