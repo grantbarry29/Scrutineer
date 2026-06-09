@@ -63,7 +63,6 @@ var _ = Describe("status patch strategy", func() {
 		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
 
 		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
-		// The suite manager may reconcile the same AgentSession concurrently; retry on conflict.
 		Eventually(func(g Gomega) {
 			var current relayv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &current)).To(Succeed())
@@ -81,20 +80,20 @@ var _ = Describe("status patch strategy", func() {
 			setCondition(desired, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "done")
 
 			g.Expect(reconciler.patchStatus(testCtx, staleSnap, desired)).To(Succeed())
-		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 
-		var after relayv1alpha1.AgentSession
-		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
-		Expect(conditionTypes(after.Status.Conditions)).To(ConsistOf(
-			ConditionValidated,
-			ConditionPolicyResolved,
-			ConditionRuntimeProfileResolved,
-			ConditionPolicyPropagated,
-			ConditionRuntimeCreated,
-			ConditionCompleted,
-			ConditionReady,
-		))
-		Expect(after.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
+			var after relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+			g.Expect(conditionTypes(after.Status.Conditions)).To(ConsistOf(
+				ConditionValidated,
+				ConditionPolicyResolved,
+				ConditionRuntimeProfileResolved,
+				ConditionPolicyPropagated,
+				ConditionRuntimeCreated,
+				ConditionCompleted,
+				ConditionReady,
+			))
+			g.Expect(after.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 	})
 
 	It("patchStatus preserves violations missing from a stale reconcile snapshot", func() {
@@ -223,10 +222,12 @@ var _ = Describe("status patch strategy", func() {
 		patch := client.MergeFrom(stale.DeepCopy())
 		Expect(k8sClient.Status().Patch(testCtx, updated, patch)).To(Succeed())
 
-		var after relayv1alpha1.AgentSession
-		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
-		Expect(findConditionByType(after.Status.Conditions, ConditionRuntimeCreated)).To(BeNil(),
-			"JSON merge patch replaces the whole conditions array and drops RuntimeCreated")
+		Eventually(func(g Gomega) {
+			var after relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+			g.Expect(findConditionByType(after.Status.Conditions, ConditionRuntimeCreated)).To(BeNil(),
+				"JSON merge patch replaces the whole conditions array and drops RuntimeCreated")
+		}, 2*time.Second, 20*time.Millisecond).Should(Succeed())
 	})
 })
 

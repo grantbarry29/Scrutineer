@@ -164,9 +164,15 @@ Acceptance:
 - Document tool identity, request metadata, allow/deny result, and decision reporting.
 - Do not require a production gateway implementation in this slice.
 
-### Slice 7: DNS/Egress Proxy Prototype
+### Slice 7: DNS/Egress Proxy Prototype — done
 
-Add the first richer network backend after sidecar injection exists.
+Implemented in `internal/enforcement/dnsproxy/`; see [`phase-3-dns-proxy-prototype.md`](phase-3-dns-proxy-prototype.md).
+
+- `EvaluateEgress` — domain + CIDR policy with mode semantics
+- `BuildConfig` / `EnvForConfig` — sidecar env propagation from effective policy
+- `RuntimeReportFromEvent` — decisions + violations via `ApplyRuntimePolicyReport`
+- `ApplyEgressProxyRuntimeEvent` — controller entry point for sidecar reports
+- Job builder sets `HTTP_PROXY` on agent when dns-proxy enabled
 
 Acceptance:
 

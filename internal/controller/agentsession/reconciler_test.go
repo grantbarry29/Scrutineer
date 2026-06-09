@@ -28,6 +28,7 @@ import (
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	relayjob "github.com/secureai/relay/internal/controller/job"
+	"github.com/secureai/relay/internal/enforcement/dnsproxy"
 )
 
 func testReconciler() *AgentSessionReconciler {
@@ -248,6 +249,49 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			agentEnv := envMap(byName[relayjob.AgentContainerName].Env)
 			Expect(agentEnv[relayjob.EnvRelayToolGatewayURL]).To(Equal("http://127.0.0.1:19090"))
+		})
+
+		It("propagates egress policy env to dns-proxy sidecars", func() {
+			ns := newTestNamespace()
+			enabled := true
+			Expect(k8sClient.Create(testCtx, &relayv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "egress-policy", Namespace: ns},
+				Spec: relayv1alpha1.AgentPolicySpec{
+					Mode: relayv1alpha1.PolicyModeEnforced,
+					PolicyRules: relayv1alpha1.PolicyRules{
+						DeniedDomains: []string{"evil.example"},
+					},
+				},
+			})).To(Succeed())
+			Expect(k8sClient.Create(testCtx, &relayv1alpha1.RuntimeProfile{
+				ObjectMeta: metav1.ObjectMeta{Name: "egress-profile", Namespace: ns},
+				Spec: relayv1alpha1.RuntimeProfileSpec{
+					Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+						Name: "egress-dns", Type: relayjob.SidecarTypeDNSProxy, Enabled: &enabled,
+					}},
+				},
+			})).To(Succeed())
+
+			session := minimalAgentSession(ns, "dns-proxy-env")
+			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "egress-policy"}}
+			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{Name: "egress-profile"}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+
+			waitForJob(ns, session)
+
+			var job batchv1.Job
+			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+			byName := map[string]corev1.Container{}
+			for _, c := range job.Spec.Template.Spec.Containers {
+				byName[c.Name] = c
+			}
+			Expect(byName).To(HaveKey("egress-dns"))
+			proxyEnv := envMap(byName["egress-dns"].Env)
+			Expect(proxyEnv[dnsproxy.EnvPolicyDeniedDomains]).To(Equal("evil.example"))
+			Expect(proxyEnv[dnsproxy.EnvPolicyMode]).To(Equal("enforced"))
+
+			agentEnv := envMap(byName[relayjob.AgentContainerName].Env)
+			Expect(agentEnv[relayjob.EnvHTTPProxy]).To(Equal(dnsproxy.DefaultHTTPProxyURL))
 		})
 
 		It("keeps baseline Job security when no runtimeProfileRef is set", func() {

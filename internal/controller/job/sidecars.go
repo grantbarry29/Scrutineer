@@ -17,6 +17,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/enforcement"
+	"github.com/secureai/relay/internal/enforcement/dnsproxy"
 	"github.com/secureai/relay/internal/enforcement/toolgateway"
 	"github.com/secureai/relay/internal/policy"
 )
@@ -39,6 +41,9 @@ const (
 const (
 	EnvRelaySidecarType     = "RELAY_SIDECAR_TYPE"
 	EnvRelayToolGatewayURL  = "RELAY_TOOL_GATEWAY_URL"
+	EnvHTTPProxy            = "HTTP_PROXY"
+	EnvHTTPSProxy           = "HTTPS_PROXY"
+	EnvNoProxy              = "NO_PROXY"
 	placeholderSidecarSleep = "infinity"
 )
 
@@ -61,7 +66,7 @@ func injectSidecars(spec *corev1.PodSpec, session *relayv1alpha1.AgentSession, p
 		if _, ok := knownSidecarTypes[sc.Type]; !ok {
 			continue
 		}
-		spec.Containers = append(spec.Containers, buildSidecarContainer(sc, session, pol))
+		spec.Containers = append(spec.Containers, buildSidecarContainer(sc, session, pol, profile))
 	}
 }
 
@@ -69,13 +74,13 @@ func sidecarEnabled(sc relayv1alpha1.RuntimeProfileSidecar) bool {
 	return sc.Enabled == nil || *sc.Enabled
 }
 
-func buildSidecarContainer(sc relayv1alpha1.RuntimeProfileSidecar, session *relayv1alpha1.AgentSession, pol *policy.Resolved) corev1.Container {
+func buildSidecarContainer(sc relayv1alpha1.RuntimeProfileSidecar, session *relayv1alpha1.AgentSession, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) corev1.Container {
 	name := strings.TrimSpace(sc.Name)
 	if name == "" {
 		name = sc.Type
 	}
 
-	env := sidecarBaseEnv(sc.Type, session, pol)
+	env := sidecarBaseEnv(sc.Type, session, pol, profile)
 	image := placeholderImageForType(sc.Type)
 
 	return corev1.Container{
@@ -101,10 +106,12 @@ func placeholderImageForType(sidecarType string) string {
 	}
 }
 
-func sidecarBaseEnv(sidecarType string, session *relayv1alpha1.AgentSession, pol *policy.Resolved) []corev1.EnvVar {
+func sidecarBaseEnv(sidecarType string, session *relayv1alpha1.AgentSession, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) []corev1.EnvVar {
 	mode := relayv1alpha1.PolicyModeAuditOnly
+	rules := session.Spec.Policy.PolicyRules
 	if pol != nil {
 		mode = pol.Mode
+		rules = pol.Rules
 	}
 	env := []corev1.EnvVar{
 		{Name: EnvRelaySessionName, Value: session.Name},
@@ -114,6 +121,12 @@ func sidecarBaseEnv(sidecarType string, session *relayv1alpha1.AgentSession, pol
 	}
 	if sidecarType == SidecarTypeToolGateway {
 		env = append(env, corev1.EnvVar{Name: EnvRelayToolGatewayURL, Value: toolgateway.DefaultListenAddr})
+	}
+	if sidecarType == SidecarTypeDNSProxy {
+		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))
+		ctx.Mode = mode
+		ctx.Policy = rules
+		env = append(env, dnsproxy.EnvForConfig(dnsproxy.BuildConfig(ctx))...)
 	}
 	return env
 }
@@ -125,6 +138,13 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, profile *relayv1alpha1.RuntimePro
 	}
 	if hasEnabledSidecar(profile, SidecarTypeToolGateway) {
 		env = append(env, corev1.EnvVar{Name: EnvRelayToolGatewayURL, Value: toolgateway.DefaultListenAddr})
+	}
+	if hasEnabledSidecar(profile, SidecarTypeDNSProxy) {
+		env = append(env,
+			corev1.EnvVar{Name: EnvHTTPProxy, Value: dnsproxy.DefaultHTTPProxyURL},
+			corev1.EnvVar{Name: EnvHTTPSProxy, Value: dnsproxy.DefaultHTTPProxyURL},
+			corev1.EnvVar{Name: EnvNoProxy, Value: "localhost,127.0.0.1"},
+		)
 	}
 	return env
 }

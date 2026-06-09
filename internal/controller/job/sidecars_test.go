@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/enforcement/dnsproxy"
 	"github.com/secureai/relay/internal/enforcement/toolgateway"
 	"github.com/secureai/relay/internal/policy"
 )
@@ -50,6 +51,37 @@ func TestInjectSidecars_enabledKnownTypes(t *testing.T) {
 	}
 	if spec.Containers[2].Name != "tools" {
 		t.Fatalf("tool sidecar = %+v", spec.Containers[2])
+	}
+}
+
+func TestBuild_agentDNSProxyEnv(t *testing.T) {
+	enabled := true
+	session := minimalSession()
+	profile := &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
+			}},
+		},
+	}
+	pol := &policy.Resolved{
+		Mode:  relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
+	}
+	job := Build(session, &Task{}, pol, profile)
+
+	byName := map[string]corev1.Container{}
+	for _, c := range job.Spec.Template.Spec.Containers {
+		byName[c.Name] = c
+	}
+	agentEnv := envVarsToMap(byName[AgentContainerName].Env)
+	if agentEnv[EnvHTTPProxy] != dnsproxy.DefaultHTTPProxyURL {
+		t.Fatalf("HTTP_PROXY = %q", agentEnv[EnvHTTPProxy])
+	}
+
+	proxyEnv := envVarsToMap(byName["egress"].Env)
+	if proxyEnv[dnsproxy.EnvPolicyDeniedDomains] != "evil.example" {
+		t.Fatalf("sidecar denied domains = %q", proxyEnv[dnsproxy.EnvPolicyDeniedDomains])
 	}
 }
 

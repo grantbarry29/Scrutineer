@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (Phase 3 slice 5: RuntimeProfile sidecar injection)
+> **Last updated:** 2026-06-08 (Phase 3 slice 7: DNS/egress proxy prototype)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,39 +13,37 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-### Task: DNS / egress proxy prototype
+### Task: File/workspace policy design
 
 **Goal:**  
-First richer network enforcement backend after sidecar injection — FQDN/CIDR policy with mode semantics and runtime reporting.
+Define a feasible read/write restriction model for agent workspaces (mount strategy, FS proxy, sandbox, or explicit deferral).
 
 **Why it matters:**  
-NetworkPolicy covers CIDR only; injected `dns-proxy` sidecars need a real control-plane contract and reporter path (slice 7).
+Phase 3 network and tool paths are largely defined; file governance is the remaining Phase 3 design gap before Phase 4 observability.
 
 **Scope:**
-- Prototype dns-proxy backend using `internal/enforcement` contracts.
-- Honor `audit-only` / `dry-run` / `enforced` via sidecar config from effective policy.
-- Call `ApplyRuntimePolicyReport` for runtime decisions/violations (or document sidecar → controller handshake).
+- Design doc only (or minimal types in `internal/enforcement/` if needed).
+- Compare mount-only, sidecar FS proxy, and sandbox options.
+- Document deferral vs MVP recommendation.
 
 **Non-goals:**
-- Do not ship production-grade Envoy/Cilium.
-- Do not implement file/workspace policy (slice 8).
+- Do not implement real file enforcement.
+- Do not add new CRDs unless design proves necessary.
 
 **Acceptance criteria:**
-- Domain/CIDR policy rendered into sidecar config for enabled `dns-proxy` sidecars.
-- Runtime report path demonstrated (unit or envtest).
-- `make test` passes.
+- Design doc with recommended approach and non-goals.
+- Status tracker updated; Phase 3 slice 8 marked done or deferred with rationale.
 
 **Expected files:**
-- `internal/enforcement/` (dns-proxy package)
-- `internal/controller/job/` (config wiring if needed)
+- `docs/phase-3-file-workspace-policy.md` (or similar)
 - `.cursor/relay-project-status.md`
 
 **Verification command:**  
-`make test`
+Review + `make test` (no code change required if doc-only)
 
-**Next suggested picks:** File/workspace policy design · Phase 4 observability.
+**Next suggested picks:** Phase 4 structured session events · Usage metrics population.
 
-**Recently completed** (do not re-implement unless regressions): **RuntimeProfile sidecar injection** (`internal/controller/job/sidecars.go`, placeholder images, drift detection); **Tool gateway contract**; **Violation reporting MVP**; **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+**Recently completed** (do not re-implement unless regressions): **DNS/egress proxy prototype** (`internal/enforcement/dnsproxy/`, sidecar env + `ApplyEgressProxyRuntimeEvent`); **RuntimeProfile sidecar injection**; **Tool gateway contract**; **Violation reporting MVP**; **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
 
 ---
 
@@ -364,6 +362,12 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 **Shipped:** `internal/enforcement/` — `SessionContext`, `Backend`, `Capabilities`, `RuntimeReport`, `EvaluateRestrictive`, `ActionForMode`, `AppendRuntimeDecisions`; unit tests for mode mapping, context build, and truncation.
 
 **Verification:** `make test` (pass 2026-06-08)
+
+### Task: DNS / egress proxy prototype — **done (2026-06-09)**
+
+**Shipped:** `internal/enforcement/dnsproxy/`; sidecar policy env + agent `HTTP_PROXY`; `ApplyEgressProxyRuntimeEvent`; `docs/phase-3-dns-proxy-prototype.md`.
+
+**Verification:** `make test` (pass 2026-06-09)
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
@@ -705,7 +709,7 @@ Real governance beyond env var propagation. Start narrow, prove value, then expa
 4. [x] **Violation reporting MVP** — `AppendViolations`, `ApplyRuntimePolicyReport` derives `deny`/`dry-run` violations; `patchStatus` merge; README updated.
 5. [x] **RuntimeProfile sidecar injection** — `job/sidecars.go`; enabled `dns-proxy`/`tool-gateway`/`envoy`; placeholder images; drift detection.
 6. [x] **Tool gateway contract** — `internal/enforcement/toolgateway/` + `docs/phase-3-tool-gateway-contract.md`; evaluate + report; no production gateway.
-7. [ ] **DNS / egress proxy prototype** — First richer network backend for FQDN/CIDR policy, honoring `audit-only` / `dry-run` / `enforced`.
+7. [x] **DNS / egress proxy prototype** — `internal/enforcement/dnsproxy/`; sidecar env; `ApplyEgressProxyRuntimeEvent`; docs.
 8. [ ] **File/workspace policy design** — Define feasible read/write restriction model (mount strategy, FS proxy, sandbox, or explicit deferral).
 
 **Tracked but intentionally later:** Envoy, Cilium/eBPF, gVisor/Kata/Firecracker, multi-backend orchestration, approval gates, and UI timelines.
