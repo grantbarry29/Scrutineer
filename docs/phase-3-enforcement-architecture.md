@@ -180,6 +180,21 @@ Acceptance:
 - Honors policy modes.
 - Reports runtime decisions and violations.
 
+### Slice 8: File/Workspace Policy Design — done
+
+Design only. See [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-policy.md).
+
+- **Recommendation:** mount strategy + RuntimeProfile hardening as MVP; defer path-level `PolicyRules` and FS gateway.
+- **Stubs:** `internal/enforcement/workspace/types.go` for future backend kinds.
+- **Deferred:** FS proxy sidecar, `allowedPaths`/`deniedPaths` CRD fields, real file enforcement.
+
+## Phase 3 follow-up hardening (post–slice 8)
+
+Tracked in **Discovered Follow-Up Tasks** — not blocking Phase 4:
+
+- First-party **dns-proxy** and **tool-gateway** images (replace busybox placeholders)
+- **Runtime reporter loop** — sidecar → controller status PATCH or event aggregation for live violations
+
 ## Open Questions
 
 - Should runtime reporters patch `AgentSession.status` directly or write separate evidence CRDs?
@@ -188,6 +203,6 @@ Acceptance:
 - How should active Job drift be handled for enforcement backend changes: deny mutation, set drift condition, or require session restart?
 - How much can NetworkPolicy cover before DNS/proxy enforcement is needed?
 
-## Recommended First Task
+## Recommended Next Work
 
-Start with **Enforcement Backend Contract**. It creates the narrow internal abstraction and mode semantics needed by every later backend, without committing to Envoy, Cilium, DNS proxy, or a tool gateway too early.
+Phase 3 slices 1–8 are complete. Pick **Phase 4 structured session events** or optional **Phase 3 hardening** (first-party sidecar images, runtime reporter loop) from `.cursor/relay-project-status.md`.

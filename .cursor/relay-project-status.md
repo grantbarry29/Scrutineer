@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (Phase 3 slice 7: DNS/egress proxy prototype)
+> **Last updated:** 2026-06-08 (Phase 3 slice 8: file/workspace policy design; Phase 3 complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,37 +13,41 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-### Task: File/workspace policy design
+### Task: Structured session events API
 
 **Goal:**  
-Define a feasible read/write restriction model for agent workspaces (mount strategy, FS proxy, sandbox, or explicit deferral).
+Define and implement a timestamped, structured event stream on `AgentSession` status (or a companion store) beyond Kubernetes Events — tool calls, network attempts, policy decisions.
 
 **Why it matters:**  
-Phase 3 network and tool paths are largely defined; file governance is the remaining Phase 3 design gap before Phase 4 observability.
+Phase 3 enforcement backends report decisions/violations via in-process helpers; Phase 4 needs a durable, UI-consumable event model for timelines and audit.
 
 **Scope:**
-- Design doc only (or minimal types in `internal/enforcement/` if needed).
-- Compare mount-only, sidecar FS proxy, and sandbox options.
-- Document deferral vs MVP recommendation.
+- API shape for `status.events[]` (or documented deferral to separate CRD).
+- Merge/append semantics, size caps, ordering.
+- Controller helpers for reporters (`dnsproxy`, `toolgateway`, future FS gateway).
+- README + architecture note.
 
 **Non-goals:**
-- Do not implement real file enforcement.
-- Do not add new CRDs unless design proves necessary.
+- Full operational UI.
+- OTLP/SIEM export (separate Phase 4 slice).
+- Replacing Kubernetes Events.
 
 **Acceptance criteria:**
-- Design doc with recommended approach and non-goals.
-- Status tracker updated; Phase 3 slice 8 marked done or deferred with rationale.
+- Documented event schema with at least one populated event type in envtest or unit test.
+- Reporters can append without clobbering prior events.
 
 **Expected files:**
-- `docs/phase-3-file-workspace-policy.md` (or similar)
+- `api/v1alpha1/agentsession_types.go` (if extending status)
+- `internal/controller/agentsession/` (append/merge helpers)
+- `docs/` or README
 - `.cursor/relay-project-status.md`
 
 **Verification command:**  
-Review + `make test` (no code change required if doc-only)
+`make manifests && make test`
 
-**Next suggested picks:** Phase 4 structured session events · Usage metrics population.
+**Next suggested picks:** Usage metrics population · Session timeline model.
 
-**Recently completed** (do not re-implement unless regressions): **DNS/egress proxy prototype** (`internal/enforcement/dnsproxy/`, sidecar env + `ApplyEgressProxyRuntimeEvent`); **RuntimeProfile sidecar injection**; **Tool gateway contract**; **Violation reporting MVP**; **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+**Recently completed** (do not re-implement unless regressions): **File/workspace policy design** (`docs/phase-3-file-workspace-policy.md`); **DNS/egress proxy prototype**; **RuntimeProfile sidecar injection**; **Tool gateway contract**; **Violation reporting MVP**; **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Add AgentSession Ready condition**; **Watch owned Pods**; Phase 2 reusable policy model; Phase 1 hardening.
 
 ---
 
@@ -368,6 +372,102 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 **Shipped:** `internal/enforcement/dnsproxy/`; sidecar policy env + agent `HTTP_PROXY`; `ApplyEgressProxyRuntimeEvent`; `docs/phase-3-dns-proxy-prototype.md`.
 
 **Verification:** `make test` (pass 2026-06-09)
+
+### Task: File/workspace policy design — **done (2026-06-08)**
+
+**Shipped:** `docs/phase-3-file-workspace-policy.md` — mount + RuntimeProfile MVP; defer path rules and FS gateway; `internal/enforcement/workspace/types.go` stubs.
+
+**Verification:** `make test` (pass 2026-06-08)
+
+### Task: First-party data-plane sidecar images
+
+**Why it matters:**  
+RuntimeProfile sidecar injection uses `busybox:latest` placeholders for `dns-proxy`, `tool-gateway`, and `envoy`. Real enforcement requires first-party images that implement the contracts in `internal/enforcement/dnsproxy/` and `toolgateway/`.
+
+**Scope:**
+- Container images (or documented build targets) for dns-proxy and tool-gateway MVP.
+- Wire image refs via RuntimeProfile samples or controller defaults (configurable).
+- Smoke test that sidecars start and expose expected ports/env.
+
+**Non-goals:**
+- Production-grade Envoy/Cilium integration in one slice.
+- FS gateway image (see file policy implementation task).
+
+**Acceptance criteria:**
+- At least dns-proxy and tool-gateway images replace busybox for enabled sidecars in samples/e2e.
+- README documents image build and RuntimeProfile usage.
+
+**Expected files:**
+- `Dockerfile` or `images/` tree, samples, `README.md`, `.cursor/relay-project-status.md`
+
+**Verification command:**  
+`make test` + image build smoke (document command)
+
+### Task: Runtime reporter loop (sidecar → controller status)
+
+**Why it matters:**  
+`ApplyEgressProxyRuntimeEvent` and `ApplyRuntimePolicyReport` exist as in-process helpers, but nothing automatically PATCHes `AgentSession` status from running sidecars. Violations and runtime decisions stay empty until a reporter path exists.
+
+**Scope:**
+- Design and implement one reporter mechanism: in-cluster PATCH subresource, Kubernetes Event watcher, or gRPC/HTTP callback from sidecar.
+- Wire dns-proxy (and optionally tool-gateway) prototype to populate `status.policyDecisions` and `status.violations`.
+- Idempotent merge; respect decision/violation caps.
+
+**Non-goals:**
+- Full Phase 4 event timeline API (may reuse append helpers).
+- SIEM export.
+
+**Acceptance criteria:**
+- Documented reporter flow; envtest or integration test shows decisions/violations appended after simulated sidecar report.
+
+**Expected files:**
+- `internal/controller/agentsession/` (reporter entry), optional sidecar contract doc, `.cursor/relay-project-status.md`
+
+**Verification command:**  
+`make test`
+
+### Task: Live violation population from network enforcement
+
+**Why it matters:**  
+NetworkPolicy blocks CIDR egress in enforced mode, but Relay does not observe kernel drops — `status.violations` remains empty unless a reporter translates blocks into `PolicyViolation` entries.
+
+**Scope:**
+- Document gap; implement minimal path (e.g. sidecar/CNI event → `AppendViolations`) or explicit audit-only note in README until observability exists.
+- Align with runtime reporter loop where possible.
+
+**Non-goals:**
+- Cilium/eBPF agent in this task.
+
+**Acceptance criteria:**
+- Either violations populated from a documented probe path, or deferral recorded with link to reporter task.
+
+**Expected files:**
+- `internal/enforcement/networkpolicy/` or controller, docs, `.cursor/relay-project-status.md`
+
+**Verification command:**  
+`make test`
+
+### Task: File/workspace policy implementation (post–design)
+
+**Why it matters:**  
+Slice 8 deferred path-level rules and FS gateway; mount-only hardening is insufficient for path governance.
+
+**Scope:**
+- `PolicyRules.allowedPaths` / `deniedPaths` (or `FilePolicy` CRD) per `docs/phase-3-file-workspace-policy.md`.
+- Merge semantics + env/sidecar propagation.
+- Optional FS gateway backend implementing `internal/enforcement/workspace/`.
+
+**Non-goals:**
+- gVisor/Kata enforcement (platform concern).
+
+**Acceptance criteria:**
+- API fields or explicit CRD; at least mount-strategy enforcement or FS gateway evaluate stub with tests.
+
+**Expected files:**
+- `api/v1alpha1/`, `internal/policy/`, `internal/enforcement/workspace/`, docs
+
+**Verification command:**  
+`make manifests && make test`
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
@@ -710,9 +810,13 @@ Real governance beyond env var propagation. Start narrow, prove value, then expa
 5. [x] **RuntimeProfile sidecar injection** — `job/sidecars.go`; enabled `dns-proxy`/`tool-gateway`/`envoy`; placeholder images; drift detection.
 6. [x] **Tool gateway contract** — `internal/enforcement/toolgateway/` + `docs/phase-3-tool-gateway-contract.md`; evaluate + report; no production gateway.
 7. [x] **DNS / egress proxy prototype** — `internal/enforcement/dnsproxy/`; sidecar env; `ApplyEgressProxyRuntimeEvent`; docs.
-8. [ ] **File/workspace policy design** — Define feasible read/write restriction model (mount strategy, FS proxy, sandbox, or explicit deferral).
+8. [x] **File/workspace policy design** — `docs/phase-3-file-workspace-policy.md`; mount + RuntimeProfile MVP; defer FS gateway and path CRD fields.
+
+**Phase 3 optional hardening (tracked in Discovered Follow-Up Tasks):** first-party dns-proxy/tool-gateway images; runtime reporter loop; live NetworkPolicy violation population; file policy implementation.
 
 **Tracked but intentionally later:** Envoy, Cilium/eBPF, gVisor/Kata/Firecracker, multi-backend orchestration, approval gates, and UI timelines.
+
+**Phase 3 control-plane + design slices are complete.** Next work is Phase 4 observability or optional Phase 3 hardening tasks above.
 
 ---
 
