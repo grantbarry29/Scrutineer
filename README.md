@@ -170,7 +170,7 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 | `status.matchedRuntimeProfile` | Which `RuntimeProfile` was applied (name, UID, resourceVersion) |
 | `RuntimeProfileResolved` condition | `ProfileApplied` when a ref resolves; `NoProfileRef` when unset |
 
-**Schema-only in Phase 2 (not injected yet):** `spec.sidecars[]` (`envoy`, `dns-proxy`, `tool-gateway`) — declared for Phase 3 data-plane injection. Sandbox `runtimeClassName` is written to the pod template but not enforced by Relay until sandbox runtimes are integrated.
+**Sidecars (Phase 3):** enabled `spec.sidecars[]` entries (`envoy`, `dns-proxy`, `tool-gateway`) are injected into the Job pod template with placeholder images until first-party data-plane images ship. Sandbox `runtimeClassName` is written to the pod template but not enforced by Relay until sandbox runtimes are integrated.
 
 **Profile change behavior:**
 
@@ -422,7 +422,7 @@ When a referenced policy changes:
 
 ### Runtime profile resolution
 
-When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` (same namespace) and merges container/pod security fields into the Job template. `spec.sidecars` is schema-only until Phase 3. Profile drift follows the same pending-Job-replace rules as policy env drift.
+When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` (same namespace) and merges container/pod security fields plus enabled `spec.sidecars[]` into the Job template. Profile drift (including sidecar changes) follows the same pending-Job-replace rules as policy env drift.
 
 ### Job lifecycle (`internal/controller/job`)
 
@@ -710,7 +710,7 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | `status.policyDecisions` | Yes | Merge-time audit entries only (max 64) |
 | Policy change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
-| `RuntimeProfile.spec.sidecars` | Schema only | Declared; not injected until Phase 3 |
+| `RuntimeProfile.spec.sidecars` | Injected when enabled | `dns-proxy`, `tool-gateway`, `envoy`; placeholder images until data-plane ships |
 | Pod watch for reconcile | Yes | Faster `podName` / Running updates |
 | `Ready` condition | Yes | Aggregate readiness from `status.phase` |
 | Finalizer + Job cleanup on delete | Yes | `relay.secureai.dev/finalizer` |
@@ -766,7 +766,7 @@ are explicit hook points in the current code:
 - **`ToolPolicy`** — **shipped** (namespace-scoped). Tool/MCP allowlists and caps via `spec.policyRefs`.
 - **`ApprovalPolicy`** + `ApprovalRequest`/`Approval` — block-and-wait
   semantics for `requireHumanApproval` actions.
-- **`RuntimeProfile`** — **shipped** (namespace-scoped). Referenced from `spec.runtimeProfileRef`; merges container/pod security into the Job. `spec.sidecars` and sandbox enforcement are Phase 3.
+- **`RuntimeProfile`** — **shipped** (namespace-scoped). Referenced from `spec.runtimeProfileRef`; merges container/pod security and enabled sidecars into the Job. Sandbox runtime enforcement remains future work.
 - **`ToolGateway`** — Relay-managed proxy endpoint that brokers MCP/tool API
   calls, attributes them to the session, and enforces `ToolPolicy`.
 

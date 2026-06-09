@@ -209,6 +209,47 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(job.Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
 		})
 
+		It("injects enabled RuntimeProfile sidecars into the Job pod template", func() {
+			ns := newTestNamespace()
+			enabled := true
+			disabled := false
+			rp := &relayv1alpha1.RuntimeProfile{
+				ObjectMeta: metav1.ObjectMeta{Name: "with-sidecars", Namespace: ns},
+				Spec: relayv1alpha1.RuntimeProfileSpec{
+					Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+						{Name: "egress-dns", Type: relayjob.SidecarTypeDNSProxy, Enabled: &enabled},
+						{Name: "tool-gw", Type: relayjob.SidecarTypeToolGateway, Enabled: &enabled},
+						{Name: "envoy-off", Type: relayjob.SidecarTypeEnvoy, Enabled: &disabled},
+						{Name: "custom", Type: "unknown-sidecar", Enabled: &enabled},
+					},
+				},
+			}
+			Expect(k8sClient.Create(testCtx, rp)).To(Succeed())
+
+			session := minimalAgentSession(ns, "sidecar-inject")
+			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{Name: "with-sidecars"}
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+
+			waitForJob(ns, session)
+
+			var job batchv1.Job
+			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(3))
+
+			byName := map[string]corev1.Container{}
+			for _, c := range job.Spec.Template.Spec.Containers {
+				byName[c.Name] = c
+			}
+			Expect(byName).To(HaveKey(relayjob.AgentContainerName))
+			Expect(byName).To(HaveKey("egress-dns"))
+			Expect(byName).To(HaveKey("tool-gw"))
+			Expect(byName).NotTo(HaveKey("envoy-off"))
+			Expect(byName).NotTo(HaveKey("custom"))
+
+			agentEnv := envMap(byName[relayjob.AgentContainerName].Env)
+			Expect(agentEnv[relayjob.EnvRelayToolGatewayURL]).To(Equal("http://127.0.0.1:19090"))
+		})
+
 		It("keeps baseline Job security when no runtimeProfileRef is set", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "no-runtimeprofile")

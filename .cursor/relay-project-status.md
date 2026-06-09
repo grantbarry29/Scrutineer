@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-08 (Phase 3 slice 6: tool gateway contract)
+> **Last updated:** 2026-06-08 (Phase 3 slice 5: RuntimeProfile sidecar injection)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,38 +13,39 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-### Task: RuntimeProfile sidecar injection
+### Task: DNS / egress proxy prototype
 
 **Goal:**  
-Inject enabled sidecars from `RuntimeProfile.spec.sidecars[]` into AgentSession Job pod templates.
+First richer network enforcement backend after sidecar injection — FQDN/CIDR policy with mode semantics and runtime reporting.
 
 **Why it matters:**  
-RuntimeProfile already declares sidecar intent (`dns-proxy`, `tool-gateway`, `envoy`). Slice 6 defined gateway contracts; slice 5 materializes sidecar containers so slice 7 can ship working proxies.
+NetworkPolicy covers CIDR only; injected `dns-proxy` sidecars need a real control-plane contract and reporter path (slice 7).
 
 **Scope:**
-- Map enabled `RuntimeProfileSidecar` entries to container definitions in Job build path.
-- Start with a minimal known-type registry (image/config placeholders acceptable if documented).
-- Envtest for injection when profile references enabled sidecars.
+- Prototype dns-proxy backend using `internal/enforcement` contracts.
+- Honor `audit-only` / `dry-run` / `enforced` via sidecar config from effective policy.
+- Call `ApplyRuntimePolicyReport` for runtime decisions/violations (or document sidecar → controller handshake).
 
 **Non-goals:**
-- Do not ship production dns-proxy, tool-gateway, or Envoy images.
-- Do not implement real enforcement in sidecars yet.
+- Do not ship production-grade Envoy/Cilium.
+- Do not implement file/workspace policy (slice 8).
 
 **Acceptance criteria:**
-- Enabled sidecars appear in Job pod template when RuntimeProfile ref is set.
-- Disabled or unknown types are skipped safely.
+- Domain/CIDR policy rendered into sidecar config for enabled `dns-proxy` sidecars.
+- Runtime report path demonstrated (unit or envtest).
 - `make test` passes.
 
 **Expected files:**
-- `internal/controller/job/` and/or `internal/controller/agentsession/`
+- `internal/enforcement/` (dns-proxy package)
+- `internal/controller/job/` (config wiring if needed)
 - `.cursor/relay-project-status.md`
 
 **Verification command:**  
 `make test`
 
-**Next suggested picks:** DNS/egress proxy prototype · File/workspace policy design.
+**Next suggested picks:** File/workspace policy design · Phase 4 observability.
 
-**Recently completed** (do not re-implement unless regressions): **Tool gateway contract** (`internal/enforcement/toolgateway/`, `docs/phase-3-tool-gateway-contract.md`); **Violation reporting MVP**; **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
+**Recently completed** (do not re-implement unless regressions): **RuntimeProfile sidecar injection** (`internal/controller/job/sidecars.go`, placeholder images, drift detection); **Tool gateway contract**; **Violation reporting MVP**; **NetworkPolicy baseline**; **Runtime policy decision append**; **Phase 3 enforcement backend contract**; **Controller documentation**; **Add AgentSession Ready condition**; **Watch owned Pods**; **Propagate `ToolPolicy.maxCallsPerMinute`**; **Controller package split**; **Phase 2 reusable policy model**; Phase 1 hardening; verify-samples; CI; cancellation; finalizers.
 
 ---
 
@@ -361,6 +362,12 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 ### Task: Phase 3 enforcement backend contract — **done (2026-06-08)**
 
 **Shipped:** `internal/enforcement/` — `SessionContext`, `Backend`, `Capabilities`, `RuntimeReport`, `EvaluateRestrictive`, `ActionForMode`, `AppendRuntimeDecisions`; unit tests for mode mapping, context build, and truncation.
+
+**Verification:** `make test` (pass 2026-06-08)
+
+### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
+
+**Shipped:** `internal/controller/job/sidecars.go` — inject enabled known sidecars; `RELAY_TOOL_GATEWAY_URL` on agent; `RuntimeProfileDrift` includes sidecars; envtest coverage.
 
 **Verification:** `make test` (pass 2026-06-08)
 
@@ -696,7 +703,7 @@ Real governance beyond env var propagation. Start narrow, prove value, then expa
 2. [x] **Runtime policy decision append** — `ApplyPolicyStatus`, `AppendRuntimePolicyDecisions`, `patchStatus` runtime merge; envtest preserve on policy re-resolve.
 3. [x] **NetworkPolicy baseline** — `internal/enforcement/networkpolicy/` + reconciler; enforced CIDR egress; FQDN not covered.
 4. [x] **Violation reporting MVP** — `AppendViolations`, `ApplyRuntimePolicyReport` derives `deny`/`dry-run` violations; `patchStatus` merge; README updated.
-5. [ ] **RuntimeProfile sidecar injection** — Inject known enabled sidecar types from `RuntimeProfile.spec.sidecars[]` into pending Job pod templates.
+5. [x] **RuntimeProfile sidecar injection** — `job/sidecars.go`; enabled `dns-proxy`/`tool-gateway`/`envoy`; placeholder images; drift detection.
 6. [x] **Tool gateway contract** — `internal/enforcement/toolgateway/` + `docs/phase-3-tool-gateway-contract.md`; evaluate + report; no production gateway.
 7. [ ] **DNS / egress proxy prototype** — First richer network backend for FQDN/CIDR policy, honoring `audit-only` / `dry-run` / `enforced`.
 8. [ ] **File/workspace policy design** — Define feasible read/write restriction model (mount strategy, FS proxy, sandbox, or explicit deferral).

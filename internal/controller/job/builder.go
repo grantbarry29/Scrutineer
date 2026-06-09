@@ -55,7 +55,7 @@ func Build(session *relayv1alpha1.AgentSession, task *Task, pol *policy.Resolved
 		Command:         rt.Command,
 		Args:            rt.Args,
 		Resources:       rt.Resources,
-		Env:             buildEnv(session, task, pol),
+		Env:             applyAgentSidecarEnv(buildEnv(session, task, pol), profile),
 		SecurityContext: mergeContainerSecurityContext(defaultContainerSecurityContext(), profile),
 	}
 
@@ -71,6 +71,7 @@ func Build(session *relayv1alpha1.AgentSession, task *Task, pol *policy.Resolved
 		Tolerations:        rt.Tolerations,
 	}
 	applyRuntimeProfileToPodSpec(&podSpec, profile)
+	injectSidecars(&podSpec, session, pol, profile)
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

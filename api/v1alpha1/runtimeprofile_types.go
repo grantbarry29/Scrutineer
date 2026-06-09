@@ -39,7 +39,7 @@ type RuntimeProfileSpec struct {
 	// +optional
 	Pod *RuntimeProfilePodSpec `json:"pod,omitempty"`
 
-	// Sidecars lists optional data-plane sidecars to attach once injection exists (Phase 3).
+	// Sidecars lists optional data-plane sidecars injected when enabled (dns-proxy, tool-gateway, envoy).
 	// Schema only in Phase 2 — the controller does not inject these containers yet.
 	// +optional
 	Sidecars []RuntimeProfileSidecar `json:"sidecars,omitempty"`
@@ -76,7 +76,7 @@ type RuntimeProfilePodSpec struct {
 	SeccompProfile *corev1.SeccompProfile `json:"seccompProfile,omitempty"`
 }
 
-// RuntimeProfileSidecar describes a future sidecar to inject alongside the agent (Phase 3).
+// RuntimeProfileSidecar describes a sidecar to inject alongside the agent when enabled.
 type RuntimeProfileSidecar struct {
 	// Name is a unique identifier for this sidecar within the profile.
 	// +kubebuilder:validation:MinLength=1

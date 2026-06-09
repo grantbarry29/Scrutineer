@@ -82,7 +82,10 @@ func RuntimeProfileDrift(existing, desired *batchv1.Job) bool {
 	if exAgent == nil || wantAgent == nil {
 		return exAgent != wantAgent
 	}
-	return !securityContextsEqual(exAgent.SecurityContext, wantAgent.SecurityContext)
+	if !securityContextsEqual(exAgent.SecurityContext, wantAgent.SecurityContext) {
+		return true
+	}
+	return !sidecarContainersEqual(sidecarContainers(&ex), sidecarContainers(&want))
 }
 
 func agentContainerEnv(j *batchv1.Job) map[string]string {

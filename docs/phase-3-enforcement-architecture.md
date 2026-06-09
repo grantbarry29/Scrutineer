@@ -135,9 +135,14 @@ Acceptance:
 - Status list is bounded.
 - README documents what is and is not populated.
 
-### Slice 5: RuntimeProfile Sidecar Injection
+### Slice 5: RuntimeProfile Sidecar Injection — done
 
-Turn selected `RuntimeProfile.spec.sidecars[]` entries into pod template sidecars.
+Implemented in `internal/controller/job/sidecars.go`:
+
+- Injects enabled `dns-proxy`, `tool-gateway`, and `envoy` sidecars from `RuntimeProfile.spec.sidecars[]`
+- Skips disabled and unknown types; placeholder `busybox` images until data-plane images ship
+- Sets `RELAY_TOOL_GATEWAY_URL` on the agent when tool-gateway is enabled
+- `RuntimeProfileDrift` detects sidecar template changes
 
 Acceptance:
 

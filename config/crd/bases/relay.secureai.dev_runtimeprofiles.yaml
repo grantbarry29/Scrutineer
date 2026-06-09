@@ -123,11 +123,11 @@ spec:
                 type: object
               sidecars:
                 description: |-
-                  Sidecars lists optional data-plane sidecars to attach once injection exists (Phase 3).
+                  Sidecars lists optional data-plane sidecars injected when enabled (dns-proxy, tool-gateway, envoy).
                   Schema only in Phase 2 — the controller does not inject these containers yet.
                 items:
-                  description: RuntimeProfileSidecar describes a future sidecar to
-                    inject alongside the agent (Phase 3).
+                  description: RuntimeProfileSidecar describes a sidecar to inject
+                    alongside the agent when enabled.
                   properties:
                     enabled:
                       description: Enabled gates whether the sidecar should be injected
