@@ -33,10 +33,23 @@ func ApplyPolicyStatus(session *relayv1alpha1.AgentSession, resolved policy.Reso
 
 // AppendRuntimePolicyDecisions appends new runtime-phase decisions onto session status
 // without dropping existing merge-time entries. Duplicate decisions (same policyDecisionKey)
-// are skipped so reporter re-delivery is idempotent.
-func AppendRuntimePolicyDecisions(session *relayv1alpha1.AgentSession, incoming []relayv1alpha1.PolicyDecision) {
+// are skipped so reporter re-delivery is idempotent. Returns the novel decisions appended.
+func AppendRuntimePolicyDecisions(session *relayv1alpha1.AgentSession, incoming []relayv1alpha1.PolicyDecision) []relayv1alpha1.PolicyDecision {
+	novel := novelRuntimePolicyDecisions(session, incoming)
+	if session == nil || len(novel) == 0 {
+		return novel
+	}
+	session.Status.PolicyDecisions = enforcement.AppendRuntimeDecisions(
+		session.Status.PolicyDecisions,
+		novel,
+		enforcement.MaxPolicyDecisions,
+	)
+	return novel
+}
+
+func novelRuntimePolicyDecisions(session *relayv1alpha1.AgentSession, incoming []relayv1alpha1.PolicyDecision) []relayv1alpha1.PolicyDecision {
 	if session == nil || len(incoming) == 0 {
-		return
+		return nil
 	}
 	keys := make(map[string]struct{}, len(session.Status.PolicyDecisions))
 	for _, d := range session.Status.PolicyDecisions {
@@ -53,19 +66,12 @@ func AppendRuntimePolicyDecisions(session *relayv1alpha1.AgentSession, incoming 
 		novel = append(novel, d)
 		keys[policyDecisionKey(d)] = struct{}{}
 	}
-	if len(novel) == 0 {
-		return
-	}
-	session.Status.PolicyDecisions = enforcement.AppendRuntimeDecisions(
-		session.Status.PolicyDecisions,
-		novel,
-		enforcement.MaxPolicyDecisions,
-	)
+	return novel
 }
 
 // ApplyRuntimePolicyReport merges runtime evidence from a data-plane backend into status.
 func ApplyRuntimePolicyReport(session *relayv1alpha1.AgentSession, report enforcement.RuntimeReport) {
-	AppendRuntimePolicyDecisions(session, report.Decisions)
+	novelDecisions := AppendRuntimePolicyDecisions(session, report.Decisions)
 
 	violations := append([]relayv1alpha1.PolicyViolation(nil), report.Violations...)
 	derived := enforcement.ViolationsFromDecisions(report.Decisions)
@@ -82,6 +88,7 @@ func ApplyRuntimePolicyReport(session *relayv1alpha1.AgentSession, report enforc
 	}
 	AppendRuntimeViolations(session, violations)
 	AppendSessionEvents(session, report.Events)
+	ApplyUsageFromReport(session, usageFromRuntimeReport(report), novelDecisions, len(report.Decisions))
 }
 
 // RuntimePolicyDecisions returns only phase=runtime entries from a decision list.

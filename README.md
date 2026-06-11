@@ -306,7 +306,7 @@ spec:
 | `policyDecisions` | Yes | Merge-time audit entries only (max 64); runtime append is Phase 3 |
 | `matchedRuntimeProfile` | Yes | Applied `RuntimeProfile` ref (when set) |
 | `result` | Yes | Terminal outcome / summary (on success, failure, timeout, cancel) |
-| `usage` | **No** (reserved) | Phase 4 — token/tool/network metrics from observability backends |
+| `usage` | **Yes** (from runtime reports) | Network/tool decisions increment counters; optional `usage` delta in `POST /v1/report` for tokens |
 | `violations` | **Yes** (runtime reports) | Bounded list; `deny` and `dry-run` outcomes via `ApplyRuntimePolicyReport` |
 | `events` | **Yes** (runtime reports) | Structured timeline stream (max 256); appended via `POST /v1/report` `events[]` |
 | `artifacts` | **No** (reserved) | Phase 4 — collected workspace artifacts (`spec.outputs`) |
@@ -733,7 +733,8 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | Finalizer + Job cleanup on delete | Yes | `relay.secureai.dev/finalizer` |
 | Session cancellation | Yes | `spec.cancelRequested` → Job delete + `Phase=Cancelled` |
 | Human approval gate | No | Declared only; does not block runs |
-| `status.usage` / `artifacts` | No | Reserved — see [Status fields](#status-fields) |
+| `status.usage` | Yes (runtime reports) | Network/tool decision counts; optional token deltas via reporter |
+| `status.artifacts` | No | Reserved — see [Status fields](#status-fields) |
 | `status.violations` | Yes (runtime) | Populated by enforcement reporters — see [Status fields](#status-fields) |
 
 Project tracking: [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).

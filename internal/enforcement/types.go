@@ -52,4 +52,6 @@ type RuntimeReport struct {
 	Decisions  []relayv1alpha1.PolicyDecision
 	Violations []relayv1alpha1.PolicyViolation
 	Events     []relayv1alpha1.SessionEvent
+	// Usage is an optional additive delta (e.g. token counts from the agent runtime).
+	Usage *relayv1alpha1.SessionUsage
 }

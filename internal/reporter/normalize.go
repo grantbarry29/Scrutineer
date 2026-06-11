@@ -37,8 +37,13 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 	if len(req.Events) > MaxEventsPerReport {
 		return enforcement.RuntimeReport{}, fmt.Errorf("%w: events exceed max %d", ErrBadRequest, MaxEventsPerReport)
 	}
-	if len(req.Decisions) == 0 && len(req.Violations) == 0 && len(req.Events) == 0 {
-		return enforcement.RuntimeReport{}, fmt.Errorf("%w: decisions, violations, or events required", ErrBadRequest)
+	if len(req.Decisions) == 0 && len(req.Violations) == 0 && len(req.Events) == 0 && req.Usage == nil {
+		return enforcement.RuntimeReport{}, fmt.Errorf("%w: decisions, violations, events, or usage required", ErrBadRequest)
+	}
+	if req.Usage != nil {
+		if err := validateUsageDelta(req.Usage); err != nil {
+			return enforcement.RuntimeReport{}, err
+		}
 	}
 
 	// Pin every timestamp to RFC3339 (second) precision. The apiserver persists
@@ -92,9 +97,29 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		events = append(events, e)
 	}
 
+	var usage *relayv1alpha1.SessionUsage
+	if req.Usage != nil {
+		cp := *req.Usage
+		usage = &cp
+	}
+
 	return enforcement.RuntimeReport{
 		Decisions:  decisions,
 		Violations: violations,
 		Events:     events,
+		Usage:      usage,
 	}, nil
+}
+
+func validateUsageDelta(u *relayv1alpha1.SessionUsage) error {
+	if u == nil {
+		return nil
+	}
+	if u.InputTokens < 0 || u.OutputTokens < 0 || u.ToolCalls < 0 || u.NetworkRequests < 0 {
+		return fmt.Errorf("%w: usage counters must be non-negative", ErrBadRequest)
+	}
+	if u.InputTokens == 0 && u.OutputTokens == 0 && u.ToolCalls == 0 && u.NetworkRequests == 0 {
+		return fmt.Errorf("%w: usage delta must include a positive counter", ErrBadRequest)
+	}
+	return nil
 }

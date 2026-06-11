@@ -59,6 +59,7 @@ var _ = Describe("status patch strategy", func() {
 			setCondition(&live, ConditionRuntimeProfileResolved, metav1.ConditionTrue, "NoProfileRef", "no runtime profile referenced")
 			setCondition(&live, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent", "env current")
 			setCondition(&live, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated", "job exists")
+			setCondition(&live, ConditionReady, metav1.ConditionTrue, "JobRunning", "Underlying Job is running")
 			g.Expect(k8sClient.Status().Update(testCtx, &live)).To(Succeed())
 		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 		Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
@@ -272,6 +273,8 @@ var _ = Describe("PatchRuntimePolicyReport", func() {
 		Expect(after.Status.Violations[0].Target).To(Equal("evil.example.com"))
 		Expect(after.Status.Events).To(HaveLen(1))
 		Expect(after.Status.Events[0].EventID).To(Equal("evt-1"))
+		Expect(after.Status.Usage).NotTo(BeNil())
+		Expect(after.Status.Usage.NetworkRequests).To(Equal(int64(1)))
 
 		By("re-delivering the same report is idempotent")
 		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report)).To(Succeed())
@@ -279,6 +282,7 @@ var _ = Describe("PatchRuntimePolicyReport", func() {
 		Expect(runtimeDecisionsWithTarget(after.Status.PolicyDecisions, "evil.example.com")).To(HaveLen(1))
 		Expect(after.Status.Violations).To(HaveLen(1))
 		Expect(after.Status.Events).To(HaveLen(1))
+		Expect(after.Status.Usage.NetworkRequests).To(Equal(int64(1)))
 	})
 })
 

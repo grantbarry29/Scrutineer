@@ -43,6 +43,7 @@ type ReportRequest struct {
 	Decisions  []relayv1alpha1.PolicyDecision  `json:"decisions"`
 	Violations []relayv1alpha1.PolicyViolation `json:"violations,omitempty"`
 	Events     []relayv1alpha1.SessionEvent    `json:"events,omitempty"`
+	Usage      *relayv1alpha1.SessionUsage     `json:"usage,omitempty"`
 }
 
 // CallerIdentity is an authenticated sidecar pod authorized to report evidence.

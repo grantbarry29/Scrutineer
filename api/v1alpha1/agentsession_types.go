@@ -238,7 +238,7 @@ type SessionResult struct {
 }
 
 // SessionUsage captures resource/usage metrics for an AgentSession.
-// Reserved for Phase 4 observability backends; the MVP controller does not populate this field.
+// Populated from runtime reports: network/tool decisions increment counters; optional usage deltas carry token totals.
 type SessionUsage struct {
 	// InputTokens is the total number of input tokens consumed.
 	// +optional

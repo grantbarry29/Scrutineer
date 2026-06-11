@@ -184,6 +184,21 @@ func TestValidateAndNormalizeReport_rejectsBadInput(t *testing.T) {
 	}
 }
 
+func TestValidateAndNormalizeReport_acceptsUsageOnlyReport(t *testing.T) {
+	now := time.Unix(1, 0)
+	report, err := ValidateAndNormalizeReport(ReportRequest{
+		Session: SessionRef{Namespace: "ns", Name: "s"},
+		Backend: "agent",
+		Usage:   &relayv1alpha1.SessionUsage{InputTokens: 10, OutputTokens: 5},
+	}, now, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Usage == nil || report.Usage.InputTokens != 10 {
+		t.Fatalf("usage = %+v", report.Usage)
+	}
+}
+
 func TestValidateAndNormalizeReport_pinsTimesToSecondPrecision(t *testing.T) {
 	// Sub-second precision must be dropped so the apiserver round-trip (which
 	// stores RFC3339 second precision) keeps dedup keys stable on re-delivery.

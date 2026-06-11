@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Evidence loop #8 done: file/workspace policy API + evaluate stub; Phase 3b evidence loop closed)
+> **Last updated:** 2026-06-10 (Phase 4 plan: e2e usage assertions → timeline → reportId idempotency → FS gateway bundle)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b evidence loop **closed** (slices 1–8). Next: **Phase 4** — usage metrics, then observability surfaces.
+> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **usage metrics (unit) done**; next slices per **Phase 4 execution plan** below (e2e usage hardening first).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -26,37 +26,88 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 7. ~~Live network violation population~~ — **done** (`test/e2e/network_violation_test.go`, in-cluster reporter for e2e)
 8. ~~File/workspace policy implementation~~ — **done** (`PolicyRules` path fields, `workspace.EvaluateFile`, env propagation)
 
-**Phase 4 observability** (next): usage metrics → timeline model → Prometheus → OTel → audit sink → log/artifact collection.
+**Phase 4 observability** (roadmap): ~~usage metrics (control-plane)~~ → **execution plan below** → Prometheus → OTel → audit sink → log/artifact collection.
 
-### Task: Usage metrics (Phase 4)
+### Phase 4 execution plan (pick in order)
+
+Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discovered Follow-Up Tasks** unless marked *(queue head)*.
+
+| # | Task | Why this order |
+|---|------|----------------|
+| **A** | **E2e usage metric assertions** *(queue head — start here)* | Low effort; proves live `status.usage` on existing network/tool violation specs. No new infra. |
+| **B** | **Session timeline model** | Events schema exists; UI projection before Prometheus surfaces. |
+| **C** | **Usage-only report idempotency (`reportId` cache)** | Needed before agent token-only reports; sidecar metrics already idempotent via decision dedup. |
+| **D** | **FS gateway sidecar MVP** | Unblocks file runtime evidence (violations + metrics). |
+| **E** | **File usage metrics** | `SessionUsage` field + `type: file` decision increment; **depends on D** (or ship in same slice). |
+| **F** | **Live file violation + usage e2e** | Mirror network/tool specs; **depends on D** (and E if asserting file counters). |
+
+After A–F: Prometheus exporter, OTel, audit sink (Phase 4 roadmap bullets).
+
+---
+
+### Task: E2e usage metric assertions — Phase 4 · slice A *(start here)*
 
 **Goal:**  
-Populate `status.usage` (tokens, tool calls, network requests) from sidecar/agent runtime reports.
+Assert `status.usage.networkRequests` and `status.usage.toolCalls` in the existing live violation e2e specs.
 
 **Why it matters:**  
-Operators need quantitative session telemetry; usage fields are reserved in the API but empty until reporters aggregate counts.
+Unit tests prove merge/idempotency; live specs already exercise dns-proxy and tool-gateway → reporter → status but do not yet check usage counters.
 
 **Scope:**
-- Extend reporter payload or merge path to increment `status.usage` counters from runtime evidence.
-- Unit tests for merge/idempotency.
+- Extend `test/e2e/network_violation_test.go` and `test/e2e/tool_violation_test.go` with `Eventually` assertions on `status.usage`.
+- Document in design docs that live usage is covered (optional one-liner).
 
 **Non-goals:**
-- Prometheus exporter (separate Phase 4 slice).
-- FS gateway sidecar image.
+- New sidecar images.
+- `reportId` cache.
+- File metrics.
 
 **Acceptance criteria:**
-- At least one usage dimension populated from a documented report path (unit or e2e).
+- Both live specs assert the relevant usage counter ≥ 1 before cancel.
+- Re-delivery/idempotency not required in e2e (unit tests cover).
+- `make test` passes; live specs pass with `make test-e2e-images && make test-e2e`.
+
+**Expected files:**
+- `test/e2e/network_violation_test.go`, `test/e2e/tool_violation_test.go`, `.cursor/relay-project-status.md`
+
+**Verification command:**  
+`make test` (+ `make test-e2e-images && make test-e2e` when cluster available)
+
+---
+
+### Task: Usage metrics (Phase 4) — **done (2026-06-10)**
+
+**Shipped:** `status.usage` populated via `ApplyUsageFromReport` — novel runtime decisions increment `networkRequests` (`type: network`) and `toolCalls` (`type: tool`); optional `usage` delta on `POST /v1/report` for tokens; idempotent with decision dedup; `mergeUsageInPlace` on reconcile/reporter patches. Tests: `usage_test.go`, `status_test.go`, `reporter/more_test.go`. **Gap:** live e2e usage assertions → slice A.
+
+**Verification:** `make test` (pass 2026-06-10)
+
+### Task: Session timeline model (Phase 4) — slice B
+
+**Goal:**  
+Define UI projection/normalization over `status.events[]` for operational timelines.
+
+**Why it matters:**  
+Events are the durable runtime sink; operators need a stable model for filtering, grouping, and display without ad-hoc UI logic.
+
+**Scope:**
+- Design doc and/or pure functions mapping `SessionEvent` → timeline entries.
+- Unit tests for normalization edge cases.
+
+**Non-goals:**
+- Web UI implementation.
+- Prometheus exporter.
+
+**Acceptance criteria:**
+- Documented timeline projection model with tests.
 - `make test` passes.
 
 **Expected files:**
-- `api/v1alpha1/agentsession_types.go` (if schema tweaks), `internal/controller/agentsession/`, `internal/reporter/`, `.cursor/relay-project-status.md`
+- `docs/design/`, possibly `internal/observability/` or similar, `.cursor/relay-project-status.md`
 
 **Verification command:**  
 `make test`
 
-**Next suggested picks:** Session timeline model · FS gateway sidecar MVP · Live file violation e2e (after FS gateway).
-
-**Recently completed** (do not re-implement unless regressions): **Live tool violation e2e** (`test/e2e/tool_violation_test.go`); **File/workspace policy implementation**; **Live network violation population**; **First-party tool-gateway/dns-proxy MVPs**; **Reporter pod wiring**; **Runtime reporter loop (impl)**.
+**Recently completed** (do not re-implement unless regressions): **Usage metrics (control-plane)**; **Live tool violation e2e**; **File/workspace policy implementation**; **Live network violation population**; **Phase 3b evidence loop**.
 
 ---
 
@@ -463,21 +514,88 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-10); `make test-e2e-images && make test-e2e` for live spec.
 
+### Task: Usage-only report idempotency (reportId cache) — Phase 4 · slice C
+
+**Discovered:** 2026-06-10 usage metrics slice. Usage-only `POST /v1/report` payloads (token deltas without decisions) may double-count on re-delivery until optional `reportId` seen-cache ships per `docs/design/phase-3-runtime-reporter-contract.md`.
+
+**Why it matters:**  
+Decision-bundled usage is idempotent today; agent/runtime token-only reports are not. Ship before wiring agent token reporting.
+
+**Scope:**
+- Reporter seen-cache (or status-backed dedup) for `reportId`; TTL documented.
+- Unit tests: duplicate usage-only report does not double-count.
+
+**Non-goals:** Full signed-report / replay protection (contract §future).
+
+**Acceptance criteria:** `make test` passes; contract doc updated.
+
+**Expected files:** `internal/reporter/`, `docs/design/phase-3-runtime-reporter-contract.md`, tests
+
+**Verification:** `make test`
+
 ### Task: File/workspace policy implementation — evidence loop #8 — **done (2026-06-10)**
 
 **Shipped:** `PolicyRules.allowedPaths` / `deniedPaths` / `maxWorkspaceBytes`; merge in `internal/policy/`; `AGENT_POLICY_ALLOWED_PATHS` / `DENIED_PATHS` / `MAX_WORKSPACE_BYTES` env on agent; `internal/enforcement/workspace/` (`EvaluateFile`, `RuntimeReport`, `ApplyFilePolicyRuntimeEvent`, `Backend`); design doc updated.
 
 **Verification:** `make manifests && make test` (pass 2026-06-10)
 
-### Task: First-party FS gateway sidecar MVP
+### Task: First-party FS gateway sidecar MVP — Phase 4 · slice D
 
 **Discovered:** 2026-06-10 after file/workspace policy API + evaluate stub (#8). Mirror dns-proxy/tool-gateway: sidecar type `fs-gateway`, path evaluation at runtime, `POST /v1/report` for deny events.
 
-**Scope:** `cmd/fs-gateway` or in-pod hook; RuntimeProfile sidecar injection; integration test.
+**Why it matters:**  
+File policy is evaluate-only until a data-plane producer reports `type: file` evidence.
+
+**Scope:**
+- `cmd/fs-gateway` or in-pod hook; RuntimeProfile sidecar injection; integration test.
+- Reporter client; `make docker-build-fs-gateway` / kind-load (mirror dns-proxy/tool-gateway).
 
 **Non-goals:** FUSE production hardening in one slice.
 
-**Verification:** `make test` + optional e2e
+**Acceptance criteria:** Integration test proves deny → reporter payload; sidecar replaces placeholder when enabled.
+
+**Verification:** `make test` (+ image build smoke documented)
+
+**Blocks:** slice E (file usage metrics), slice F (live file violation e2e).
+
+### Task: File usage metrics — Phase 4 · slice E
+
+**Discovered:** 2026-06-10 post-usage-metrics discussion. `SessionUsage` has no file counter; `incrementUsageForDecision` ignores `type: file`.
+
+**Why it matters:**  
+Parity with network/tool usage once FS gateway reports file access.
+
+**Scope:**
+- Add `SessionUsage` field (e.g. `fileOperations` or `fileAccesses` — pick one in implementation).
+- Increment from novel `type: file` runtime decisions; optional explicit delta on `usage` wire field.
+- Unit tests; merge/idempotency same as network/tool.
+
+**Non-goals:** FS gateway image (slice D). Prometheus.
+
+**Depends on:** slice D (or implement API increment in same PR as gateway).
+
+**Acceptance criteria:** `make manifests && make test` passes.
+
+**Verification:** `make manifests && make test`
+
+### Task: Live file violation and usage e2e — Phase 4 · slice F
+
+**Discovered:** 2026-06-10. Network and tool have live violation e2e; file has unit tests only.
+
+**Why it matters:**  
+End-to-end proof for the third governance domain (path policy).
+
+**Scope:**
+- E2e spec: enforced `deniedPaths` + fs-gateway sidecar + file access probe → `status.violations` + runtime decisions.
+- Assert file usage counter if slice E shipped.
+
+**Non-goals:** Full MCP / FUSE stack.
+
+**Depends on:** slice D (required); slice E (for usage assertions).
+
+**Acceptance criteria:** `make test-e2e-images && make test-e2e` (fs-gateway image in prereq target).
+
+**Verification:** `make test-e2e`
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
@@ -607,7 +725,7 @@ Relay is in **early MVP / vertical-slice** stage. The core control-plane loop wo
 | Capability | In API/schema | Implemented in controller |
 |------------|---------------|---------------------------|
 | `task.promptConfigMapRef` | Yes | Done — loads key from same-namespace ConfigMap |
-| `status.usage` | Yes | No — reserved for future sidecar/audit |
+| `status.usage` | Yes | Yes — runtime reports (network/tool decision counts + optional token deltas) |
 | `status.podName` | Yes | Done — labeled session Pods, current Job UID, newest `CreationTimestamp` (name tie-break); see `internal/controller/agentsession/pod.go` |
 | `status.violations` | Yes | Yes — via `ApplyRuntimePolicyReport` (`deny` / `dry-run` outcomes) |
 | `status.artifacts` | Yes | No — `outputs.collectArtifacts` not implemented |
@@ -850,8 +968,13 @@ Turn declared/propagated governance into **observed** governance. Until this shi
 
 Backend surfaces for the future operational UI and enterprise audit requirements. **Depends on Phase 3b** — these consume the runtime evidence the reporter loop and events API produce.
 
-- [ ] **Usage metrics** — Populate `status.usage` (tokens, tool calls, network requests) from sidecar/agent reports *(first, once reports flow)*
-- [ ] **Session timeline model** — UI projection/normalization over `status.events[]` *(schema ships in Phase 3b)*
+- [x] **Usage metrics (control-plane)** — `status.usage` from runtime reports (novel network/tool decisions + optional `usage` delta on `POST /v1/report`)
+- [ ] **E2e usage metric assertions** — live `networkRequests` / `toolCalls` on existing violation specs *(slice A)*
+- [ ] **Session timeline model** — UI projection/normalization over `status.events[]` *(slice B)*
+- [ ] **Usage-only report idempotency** — `reportId` seen-cache for token-only reports *(slice C)*
+- [ ] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D)*
+- [ ] **File usage metrics** — `SessionUsage` file counter from `type: file` decisions *(slice E; depends D)*
+- [ ] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F; depends D,E)*
 - [ ] **Prometheus metrics** — Sessions by phase, violations, approval queue depth, reconcile latency
 - [ ] **OpenTelemetry** — Traces for reconcile loop + optional agent runtime traces
 - [ ] **Audit log sink** — Export to OTLP, S3, or SIEM-compatible format

@@ -123,11 +123,17 @@ Single endpoint for the MVP. Versioned path (`/v1/`) so the payload schema can e
       "actor": "egress-proxy"
     }
   ],
-  "violations": []                  // optional; usually derived from decisions by the controller
+  "violations": [],                 // optional; usually derived from decisions by the controller
+  "usage": {                        // optional additive delta (tokens); may be usage-only report
+    "inputTokens": 1200,
+    "outputTokens": 400
+  }
 }
 ```
 
-The `decisions[]` / `violations[]` element shapes map **1:1** onto the existing `relayv1alpha1.PolicyDecision` / `relayv1alpha1.PolicyViolation` API types. The wire payload deserializes into `enforcement.RuntimeReport`. **Do not invent a parallel schema** — reuse the API types.
+The `decisions[]` / `violations[]` element shapes map **1:1** onto the existing `relayv1alpha1.PolicyDecision` / `relayv1alpha1.PolicyViolation` API types. Optional `usage` maps to `relayv1alpha1.SessionUsage` deltas. The wire payload deserializes into `enforcement.RuntimeReport`. **Do not invent a parallel schema** — reuse the API types.
+
+**Usage aggregation (Phase 4):** novel runtime `decisions[]` with `type: network` increment `status.usage.networkRequests`; `type: tool` increment `toolCalls`. Explicit `usage` deltas add token (or counter) fields. Re-delivered decision reports do not double-count bundled usage deltas when all decisions are duplicates.
 
 ### 4.4 Responses
 
