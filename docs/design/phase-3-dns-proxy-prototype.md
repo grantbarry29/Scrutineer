@@ -1,6 +1,6 @@
 # Phase 3 DNS / Egress Proxy Prototype
 
-Relay enforces domain and CIDR egress policy through an in-pod **dns-proxy** sidecar. Phase 3 slice 7 ships the **contract and configuration propagation**; the placeholder sidecar image still runs `sleep infinity`.
+Relay enforces domain and CIDR egress policy through an in-pod **dns-proxy** sidecar. Phase 3 slice 7 ships the **contract and configuration propagation**; the first-party **`cmd/dns-proxy`** sidecar image performs HTTP(S) egress evaluation and reports to `POST /v1/report`.
 
 ## Role
 
@@ -34,14 +34,14 @@ Evaluates `allowedDomains`, `deniedDomains`, `allowedCIDRs`, and `deniedCIDRs` w
 ## Runtime reporting handshake
 
 1. Sidecar observes egress to `host` (domain or IP).
-2. Sidecar (or a future reporter) calls controller logic with `dnsproxy.RuntimeEvent{host}`.
-3. Controller calls `agentsession.ApplyEgressProxyRuntimeEvent`, which re-evaluates policy and merges via `ApplyRuntimePolicyReport`.
+2. Sidecar evaluates policy locally (`dnsproxy.EvaluateEgress`) and POSTs `RuntimeReport` JSON to `{RELAY_REPORTER_URL}/v1/report` with the projected token (`RELAY_REPORTER_TOKEN_PATH`, audience `relay-reporter`).
+3. Controller reporter merges via `ApplyRuntimePolicyReport` into `status.policyDecisions` / `status.violations`.
+
+In-process helper (tests / controller integration):
 
 ```go
 ApplyEgressProxyRuntimeEvent(session, profile, dnsproxy.RuntimeEvent{Host: "evil.example"}, time.Now())
 ```
-
-Production sidecars may PATCH status directly or POST to a future Relay API; slice 7 uses the in-process helper above for tests and controller integration.
 
 ## Implementation
 

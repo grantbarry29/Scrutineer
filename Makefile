@@ -124,6 +124,15 @@ kind-down: ## Delete the local kind cluster.
 kind-load: docker-build ## Build the controller image and load it into kind.
 	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 
+.PHONY: docker-build-dns-proxy kind-load-dns-proxy
+DNS_PROXY_IMG ?= ghcr.io/secureai/relay-dns-proxy:latest
+
+docker-build-dns-proxy: ## Build the dns-proxy sidecar image.
+	$(CONTAINER_TOOL) build -f Dockerfile.dns-proxy -t ${DNS_PROXY_IMG} .
+
+kind-load-dns-proxy: docker-build-dns-proxy ## Build and load dns-proxy image into kind.
+	kind load docker-image $(DNS_PROXY_IMG) --name $(KIND_CLUSTER_NAME)
+
 .PHONY: dev-up
 dev-up: kind-up install ## Bring up kind + install CRDs (controller runs locally via `make run`).
 	@echo ""

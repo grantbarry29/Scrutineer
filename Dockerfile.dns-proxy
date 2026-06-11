@@ -1,0 +1,22 @@
+# Build the dns-proxy sidecar binary.
+FROM golang:1.23 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY cmd/dns-proxy/ cmd/dns-proxy/
+COPY api/ api/
+COPY internal/ internal/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o dns-proxy ./cmd/dns-proxy
+
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/dns-proxy .
+USER 65532:65532
+
+ENTRYPOINT ["/dns-proxy"]

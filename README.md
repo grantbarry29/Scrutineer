@@ -174,7 +174,7 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 | `status.matchedRuntimeProfile` | Which `RuntimeProfile` was applied (name, UID, resourceVersion) |
 | `RuntimeProfileResolved` condition | `ProfileApplied` when a ref resolves; `NoProfileRef` when unset |
 
-**Sidecars (Phase 3):** enabled `spec.sidecars[]` entries (`envoy`, `dns-proxy`, `tool-gateway`) are injected into the Job pod template with placeholder images until first-party data-plane images ship. Sandbox `runtimeClassName` is written to the pod template but not enforced by Relay until sandbox runtimes are integrated.
+**Sidecars (Phase 3):** enabled `spec.sidecars[]` entries (`envoy`, `dns-proxy`, `tool-gateway`) are injected into the Job pod template. The **dns-proxy** sidecar uses the first-party image `ghcr.io/secureai/relay-dns-proxy:latest` (build: `make docker-build-dns-proxy`; load into kind: `make kind-load-dns-proxy`). `tool-gateway` and `envoy` still use placeholder `busybox` images until their MVP images ship.
 
 **Runtime reporter wiring (Phase 3b):** when any enabled enforcement sidecar is present, the Job pod template also includes:
 
@@ -727,7 +727,7 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | `status.policyDecisions` | Yes | Merge-time audit entries only (max 64) |
 | Policy change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
-| `RuntimeProfile.spec.sidecars` | Injected when enabled | `dns-proxy`, `tool-gateway`, `envoy`; placeholder images until data-plane ships |
+| `RuntimeProfile.spec.sidecars` | Injected when enabled | `dns-proxy` first-party image; `tool-gateway`/`envoy` placeholder until MVP images ship |
 | Pod watch for reconcile | Yes | Faster `podName` / Running updates |
 | `Ready` condition | Yes | Aggregate readiness from `status.phase` |
 | Finalizer + Job cleanup on delete | Yes | `relay.secureai.dev/finalizer` |

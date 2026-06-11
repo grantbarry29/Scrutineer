@@ -30,10 +30,8 @@ const (
 	SidecarTypeEnvoy       = "envoy"
 )
 
-// Placeholder sidecar images until first-party data-plane images ship (slice 7+).
-// Each runs `sleep infinity` so envtest and local clusters can schedule pods without custom images.
+// Placeholder sidecar images until first-party data-plane images ship.
 const (
-	PlaceholderDNSProxyImage    = "busybox:latest"
 	PlaceholderToolGatewayImage = "busybox:latest"
 	PlaceholderEnvoyImage       = "busybox:latest"
 )
@@ -156,11 +154,18 @@ func buildSidecarContainer(sc relayv1alpha1.RuntimeProfileSidecar, session *rela
 		Name:            name,
 		Image:           image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"sleep", placeholderSidecarSleep},
+		Command:         sidecarCommand(sc.Type),
 		Env:             env,
 		VolumeMounts:    sidecarVolumeMounts(profile),
 		SecurityContext: defaultContainerSecurityContext(),
 	}
+}
+
+func sidecarCommand(sidecarType string) []string {
+	if sidecarType == SidecarTypeDNSProxy {
+		return nil
+	}
+	return []string{"sleep", placeholderSidecarSleep}
 }
 
 func sidecarVolumeMounts(profile *relayv1alpha1.RuntimeProfile) []corev1.VolumeMount {
@@ -173,13 +178,13 @@ func sidecarVolumeMounts(profile *relayv1alpha1.RuntimeProfile) []corev1.VolumeM
 func placeholderImageForType(sidecarType string) string {
 	switch sidecarType {
 	case SidecarTypeDNSProxy:
-		return PlaceholderDNSProxyImage
+		return dnsproxy.DefaultDNSProxyImage
 	case SidecarTypeToolGateway:
 		return PlaceholderToolGatewayImage
 	case SidecarTypeEnvoy:
 		return PlaceholderEnvoyImage
 	default:
-		return PlaceholderDNSProxyImage
+		return dnsproxy.DefaultDNSProxyImage
 	}
 }
 

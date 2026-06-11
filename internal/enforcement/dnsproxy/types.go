@@ -10,9 +10,8 @@ You may obtain a copy of the License at
 
 // Package dnsproxy defines the control-plane contract for DNS/egress proxy sidecars.
 //
-// Phase 3 slice 7: policy evaluation, sidecar configuration env, and runtime reporting.
-// The placeholder sidecar image does not perform real proxying yet; this package is
-// the contract first-party proxies will implement.
+// Phase 3 slice 7: policy evaluation, sidecar configuration env, runtime reporting,
+// and the first-party dns-proxy sidecar binary (`cmd/dns-proxy`, `Dockerfile.dns-proxy`).
 package dnsproxy
 
 import (

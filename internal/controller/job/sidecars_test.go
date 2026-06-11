@@ -46,8 +46,11 @@ func TestInjectSidecars_enabledKnownTypes(t *testing.T) {
 	if len(spec.Containers) != 3 {
 		t.Fatalf("containers = %d, want agent + 2 sidecars", len(spec.Containers))
 	}
-	if spec.Containers[1].Name != "egress" || spec.Containers[1].Image != PlaceholderDNSProxyImage {
+	if spec.Containers[1].Name != "egress" || spec.Containers[1].Image != dnsproxy.DefaultDNSProxyImage {
 		t.Fatalf("dns sidecar = %+v", spec.Containers[1])
+	}
+	if spec.Containers[1].Command != nil {
+		t.Fatalf("dns sidecar command = %v, want nil (image entrypoint)", spec.Containers[1].Command)
 	}
 	if spec.Containers[2].Name != "tools" {
 		t.Fatalf("tool sidecar = %+v", spec.Containers[2])
