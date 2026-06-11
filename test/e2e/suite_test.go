@@ -19,6 +19,7 @@ You may obtain a copy of the License at
 //   - fixtures_test.go  — namespaces, session builders, options
 //   - assertions_test.go — phase/job/condition wait helpers
 //   - agentsession_test.go — Ginkgo specs only
+//   - network_violation_test.go — live dns-proxy → reporter → status.violations
 //
 // Run with:   make test-e2e
 // Skipped by: `go test ./...` (build tag `e2e`).
@@ -39,6 +40,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -85,6 +88,8 @@ var _ = BeforeSuite(func() {
 
 	By("registering core + relay types on the scheme")
 	Expect(clientgoscheme.AddToScheme(scheme)).To(Succeed())
+	Expect(appsv1.AddToScheme(scheme)).To(Succeed())
+	Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
 	Expect(relayv1alpha1.AddToScheme(scheme)).To(Succeed())
 
 	By("loading kubeconfig from the current environment")
@@ -106,6 +111,10 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cleanupInClusterReporter(ctx)
+
 	if managerCancel != nil {
 		By("stopping the controller manager")
 		managerCancel()

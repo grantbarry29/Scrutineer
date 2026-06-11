@@ -47,11 +47,15 @@ verify-samples: manifests install ## Server-side dry-run of config/samples manif
 	  kubectl apply --dry-run=server -f "$$f"; \
 	done
 
+.PHONY: test-e2e-images
+test-e2e-images: kind-load kind-load-dns-proxy ## Build and load controller + dns-proxy images into kind (e2e live-evidence prereq).
+
 .PHONY: test-e2e
 test-e2e: manifests install ## Run e2e tests against the live kind cluster (assumes `make dev-up` has been run).
 	@echo ">> running e2e suite against $$(kubectl config current-context)"
 	@echo ">> ensure no other relay controller is running (no concurrent 'make run')"
-	go test -tags=e2e -v ./test/e2e/... -timeout 15m -ginkgo.v
+	@echo ">> live evidence specs need images in kind: run 'make test-e2e-images' once"
+	go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v
 
 ##@ Build
 

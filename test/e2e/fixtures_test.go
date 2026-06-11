@@ -99,6 +99,16 @@ func withSleepExceedingTimeout() agentSessionOption {
 	}
 }
 
+// withDeniedDomainEgressProbe waits for sidecars then probes a denied domain via HTTP_PROXY.
+func withDeniedDomainEgressProbe(domain string) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
+			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null http://%s/ 2>/dev/null || true; sleep 2; done; sleep 120`,
+			domain,
+		)}
+	}
+}
+
 // newTestNamespace creates a uniquely-named namespace for one It block.
 func newTestNamespace(prefix string) string {
 	name := fmt.Sprintf("%s-%s", prefix, rand.String(5))
@@ -176,6 +186,44 @@ func createEnforcedCIDRPolicy(ctx context.Context, namespace, name, cidr string)
 func strPtr(s string) *string { return &s }
 
 func boolPtr(b bool) *bool { return &b }
+
+func createEnforcedDeniedDomainPolicy(ctx context.Context, namespace, name, domain string) {
+	GinkgoHelper()
+	ap := &relayv1alpha1.AgentPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: relayv1alpha1.AgentPolicySpec{
+			Mode: relayv1alpha1.PolicyModeEnforced,
+			PolicyRules: relayv1alpha1.PolicyRules{
+				DeniedDomains: []string{domain},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
+}
+
+func createRuntimeProfileWithDNSProxy(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	enabled := true
+	rp := &relayv1alpha1.RuntimeProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
+			Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+				AllowPrivilegeEscalation: boolPtr(false),
+			},
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+				Name:    "egress",
+				Type:    relayjob.SidecarTypeDNSProxy,
+				Enabled: &enabled,
+			}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
+}
 
 // createRuntimeProfile creates a RuntimeProfile in the test namespace.
 // Uses pod seccomp only so busybox samples can still succeed in e2e.

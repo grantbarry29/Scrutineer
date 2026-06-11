@@ -43,6 +43,16 @@ In-process helper (tests / controller integration):
 ApplyEgressProxyRuntimeEvent(session, profile, dnsproxy.RuntimeEvent{Host: "evil.example"}, time.Now())
 ```
 
+## Live evidence path (e2e)
+
+With `relay-controller-reporter` reachable from session pods (`make deploy` or e2e in-cluster reporter), enforced denies flow:
+
+1. Agent egress via `HTTP_PROXY` hits the dns-proxy sidecar.
+2. Sidecar evaluates policy, returns `403`, POSTs to `/v1/report`.
+3. Controller merges into `status.policyDecisions` and `status.violations`.
+
+E2e: `test/e2e/network_violation_test.go` (requires `make test-e2e-images`).
+
 ## Implementation
 
 See [`internal/enforcement/dnsproxy/`](../internal/enforcement/dnsproxy/).
