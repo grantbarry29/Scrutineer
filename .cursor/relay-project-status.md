@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 slice A done: e2e usage assertions on network/tool violation specs)
+> **Last updated:** 2026-06-10 (Phase 4 slice B done: session timeline projection model)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **usage metrics + e2e usage assertions done**; next: **session timeline model** (slice B).
+> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **timeline model done**; next: **usage-only reportId idempotency** (slice C).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -35,8 +35,8 @@ Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discove
 | # | Task | Why this order |
 |---|------|----------------|
 | ~~**A**~~ | ~~**E2e usage metric assertions**~~ — **done** | Live `networkRequests` / `toolCalls` in violation e2e specs. |
-| **B** | **Session timeline model** *(queue head)* | Events schema exists; UI projection before Prometheus surfaces. |
-| **C** | **Usage-only report idempotency (`reportId` cache)** | Needed before agent token-only reports; sidecar metrics already idempotent via decision dedup. |
+| ~~**B**~~ | ~~**Session timeline model**~~ — **done** | `internal/observability` projection + design doc. |
+| **C** | **Usage-only report idempotency (`reportId` cache)** *(queue head)* | Needed before agent token-only reports; sidecar metrics already idempotent via decision dedup. |
 | **D** | **FS gateway sidecar MVP** | Unblocks file runtime evidence (violations + metrics). |
 | **E** | **File usage metrics** | `SessionUsage` field + `type: file` decision increment; **depends on D** (or ship in same slice). |
 | **F** | **Live file violation + usage e2e** | Mirror network/tool specs; **depends on D** (and E if asserting file counters). |
@@ -59,33 +59,13 @@ After A–F: Prometheus exporter, OTel, audit sink (Phase 4 roadmap bullets).
 
 **Verification:** `make test` (pass 2026-06-10)
 
-### Task: Session timeline model (Phase 4) — slice B *(queue head)*
+### Task: Session timeline model (Phase 4) — slice B — **done (2026-06-10)**
 
-**Goal:**  
-Define UI projection/normalization over `status.events[]` for operational timelines.
+**Shipped:** `internal/observability/timeline.go` — `ProjectTimeline`, `FilterTimeline`, `GroupByCategory`; `TimelineEntry` with severity/title/detail normalization; `docs/design/phase-4-session-timeline.md`; unit tests.
 
-**Why it matters:**  
-Events are the durable runtime sink; operators need a stable model for filtering, grouping, and display without ad-hoc UI logic.
+**Verification:** `make test` (pass 2026-06-10)
 
-**Scope:**
-- Design doc and/or pure functions mapping `SessionEvent` → timeline entries.
-- Unit tests for normalization edge cases.
-
-**Non-goals:**
-- Web UI implementation.
-- Prometheus exporter.
-
-**Acceptance criteria:**
-- Documented timeline projection model with tests.
-- `make test` passes.
-
-**Expected files:**
-- `docs/design/`, possibly `internal/observability/` or similar, `.cursor/relay-project-status.md`
-
-**Verification command:**  
-`make test`
-
-**Recently completed** (do not re-implement unless regressions): **E2e usage metric assertions**; **Usage metrics (control-plane)**; **Live tool violation e2e**; **File/workspace policy implementation**; **Live network violation population**; **Phase 3b evidence loop**.
+**Recently completed** (do not re-implement unless regressions): **Session timeline model**; **E2e usage metric assertions**; **Usage metrics (control-plane)**; **Phase 3b evidence loop**.
 
 ---
 
@@ -946,8 +926,8 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 
 - [x] **Usage metrics (control-plane)** — `status.usage` from runtime reports (novel network/tool decisions + optional `usage` delta on `POST /v1/report`)
 - [x] **E2e usage metric assertions** — live `networkRequests` / `toolCalls` on existing violation specs *(slice A)*
-- [ ] **Session timeline model** — UI projection/normalization over `status.events[]` *(slice B — queue head)*
-- [ ] **Usage-only report idempotency** — `reportId` seen-cache for token-only reports *(slice C)*
+- [x] **Session timeline model** — UI projection/normalization over `status.events[]` *(slice B)*
+- [ ] **Usage-only report idempotency** — `reportId` seen-cache for token-only reports *(slice C — queue head)*
 - [ ] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D)*
 - [ ] **File usage metrics** — `SessionUsage` file counter from `type: file` decisions *(slice E; depends D)*
 - [ ] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F; depends D,E)*
