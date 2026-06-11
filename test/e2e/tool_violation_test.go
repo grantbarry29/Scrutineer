@@ -67,6 +67,10 @@ var _ = Describe("Live tool violation population", func() {
 			g.Expect(runtimeDecisions).NotTo(BeEmpty())
 			g.Expect(runtimeDecisions[0].Action).To(Equal(relayv1alpha1.PolicyDecisionDeny))
 			g.Expect(runtimeDecisions[0].Type).To(Equal("tool"))
+
+			g.Expect(got.Status.Usage).NotTo(BeNil(), "expected status.usage after runtime tool decision")
+			g.Expect(got.Status.Usage.ToolCalls).To(BeNumerically(">=", 1),
+				"expected toolCalls from novel type:tool runtime decision; usage=%+v", got.Status.Usage)
 		}, 90*time.Second, 2*time.Second).Should(Succeed())
 
 		By("confirming the session pod has tool-gateway and agent containers")

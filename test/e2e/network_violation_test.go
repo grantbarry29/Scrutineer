@@ -66,6 +66,11 @@ var _ = Describe("Live network violation population", func() {
 			}
 			g.Expect(runtimeDecisions).NotTo(BeEmpty())
 			g.Expect(runtimeDecisions[0].Action).To(Equal(relayv1alpha1.PolicyDecisionDeny))
+			g.Expect(runtimeDecisions[0].Type).To(Equal("network"))
+
+			g.Expect(got.Status.Usage).NotTo(BeNil(), "expected status.usage after runtime network decision")
+			g.Expect(got.Status.Usage.NetworkRequests).To(BeNumerically(">=", 1),
+				"expected networkRequests from novel type:network runtime decision; usage=%+v", got.Status.Usage)
 		}, 90*time.Second, 2*time.Second).Should(Succeed())
 
 		By("confirming the session pod has dns-proxy and agent containers")

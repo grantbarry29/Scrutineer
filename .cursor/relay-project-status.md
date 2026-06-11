@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 plan: e2e usage assertions → timeline → reportId idempotency → FS gateway bundle)
+> **Last updated:** 2026-06-10 (Phase 4 slice A done: e2e usage assertions on network/tool violation specs)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **usage metrics (unit) done**; next slices per **Phase 4 execution plan** below (e2e usage hardening first).
+> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **usage metrics + e2e usage assertions done**; next: **session timeline model** (slice B).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -34,8 +34,8 @@ Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discove
 
 | # | Task | Why this order |
 |---|------|----------------|
-| **A** | **E2e usage metric assertions** *(queue head — start here)* | Low effort; proves live `status.usage` on existing network/tool violation specs. No new infra. |
-| **B** | **Session timeline model** | Events schema exists; UI projection before Prometheus surfaces. |
+| ~~**A**~~ | ~~**E2e usage metric assertions**~~ — **done** | Live `networkRequests` / `toolCalls` in violation e2e specs. |
+| **B** | **Session timeline model** *(queue head)* | Events schema exists; UI projection before Prometheus surfaces. |
 | **C** | **Usage-only report idempotency (`reportId` cache)** | Needed before agent token-only reports; sidecar metrics already idempotent via decision dedup. |
 | **D** | **FS gateway sidecar MVP** | Unblocks file runtime evidence (violations + metrics). |
 | **E** | **File usage metrics** | `SessionUsage` field + `type: file` decision increment; **depends on D** (or ship in same slice). |
@@ -45,43 +45,21 @@ After A–F: Prometheus exporter, OTel, audit sink (Phase 4 roadmap bullets).
 
 ---
 
-### Task: E2e usage metric assertions — Phase 4 · slice A *(start here)*
+### Task: E2e usage metric assertions — Phase 4 · slice A — **done (2026-06-10)**
 
-**Goal:**  
-Assert `status.usage.networkRequests` and `status.usage.toolCalls` in the existing live violation e2e specs.
+**Shipped:** `test/e2e/network_violation_test.go` and `tool_violation_test.go` assert `status.usage.networkRequests` / `toolCalls` ≥ 1 alongside runtime violations and decisions.
 
-**Why it matters:**  
-Unit tests prove merge/idempotency; live specs already exercise dns-proxy and tool-gateway → reporter → status but do not yet check usage counters.
-
-**Scope:**
-- Extend `test/e2e/network_violation_test.go` and `test/e2e/tool_violation_test.go` with `Eventually` assertions on `status.usage`.
-- Document in design docs that live usage is covered (optional one-liner).
-
-**Non-goals:**
-- New sidecar images.
-- `reportId` cache.
-- File metrics.
-
-**Acceptance criteria:**
-- Both live specs assert the relevant usage counter ≥ 1 before cancel.
-- Re-delivery/idempotency not required in e2e (unit tests cover).
-- `make test` passes; live specs pass with `make test-e2e-images && make test-e2e`.
-
-**Expected files:**
-- `test/e2e/network_violation_test.go`, `test/e2e/tool_violation_test.go`, `.cursor/relay-project-status.md`
-
-**Verification command:**  
-`make test` (+ `make test-e2e-images && make test-e2e` when cluster available)
+**Verification:** `make test` (pass 2026-06-10); live specs with `make test-e2e-images && make test-e2e`.
 
 ---
 
 ### Task: Usage metrics (Phase 4) — **done (2026-06-10)**
 
-**Shipped:** `status.usage` populated via `ApplyUsageFromReport` — novel runtime decisions increment `networkRequests` (`type: network`) and `toolCalls` (`type: tool`); optional `usage` delta on `POST /v1/report` for tokens; idempotent with decision dedup; `mergeUsageInPlace` on reconcile/reporter patches. Tests: `usage_test.go`, `status_test.go`, `reporter/more_test.go`. **Gap:** live e2e usage assertions → slice A.
+**Shipped:** `status.usage` populated via `ApplyUsageFromReport` — novel runtime decisions increment `networkRequests` (`type: network`) and `toolCalls` (`type: tool`); optional `usage` delta on `POST /v1/report` for tokens; idempotent with decision dedup; `mergeUsageInPlace` on reconcile/reporter patches. Tests: `usage_test.go`, `status_test.go`, `reporter/more_test.go`; live e2e usage in slice A.
 
 **Verification:** `make test` (pass 2026-06-10)
 
-### Task: Session timeline model (Phase 4) — slice B
+### Task: Session timeline model (Phase 4) — slice B *(queue head)*
 
 **Goal:**  
 Define UI projection/normalization over `status.events[]` for operational timelines.
@@ -107,7 +85,7 @@ Events are the durable runtime sink; operators need a stable model for filtering
 **Verification command:**  
 `make test`
 
-**Recently completed** (do not re-implement unless regressions): **Usage metrics (control-plane)**; **Live tool violation e2e**; **File/workspace policy implementation**; **Live network violation population**; **Phase 3b evidence loop**.
+**Recently completed** (do not re-implement unless regressions): **E2e usage metric assertions**; **Usage metrics (control-plane)**; **Live tool violation e2e**; **File/workspace policy implementation**; **Live network violation population**; **Phase 3b evidence loop**.
 
 ---
 
@@ -969,8 +947,8 @@ Turn declared/propagated governance into **observed** governance. Until this shi
 Backend surfaces for the future operational UI and enterprise audit requirements. **Depends on Phase 3b** — these consume the runtime evidence the reporter loop and events API produce.
 
 - [x] **Usage metrics (control-plane)** — `status.usage` from runtime reports (novel network/tool decisions + optional `usage` delta on `POST /v1/report`)
-- [ ] **E2e usage metric assertions** — live `networkRequests` / `toolCalls` on existing violation specs *(slice A)*
-- [ ] **Session timeline model** — UI projection/normalization over `status.events[]` *(slice B)*
+- [x] **E2e usage metric assertions** — live `networkRequests` / `toolCalls` on existing violation specs *(slice A)*
+- [ ] **Session timeline model** — UI projection/normalization over `status.events[]` *(slice B — queue head)*
 - [ ] **Usage-only report idempotency** — `reportId` seen-cache for token-only reports *(slice C)*
 - [ ] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D)*
 - [ ] **File usage metrics** — `SessionUsage` file counter from `type: file` decisions *(slice E; depends D)*
