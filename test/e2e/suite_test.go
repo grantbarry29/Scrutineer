@@ -20,6 +20,7 @@ You may obtain a copy of the License at
 //   - assertions_test.go — phase/job/condition wait helpers
 //   - agentsession_test.go — Ginkgo specs only
 //   - network_violation_test.go — live dns-proxy → reporter → status.violations
+//   - tool_violation_test.go — live tool-gateway → reporter → status.violations
 //
 // Run with:   make test-e2e
 // Skipped by: `go test ./...` (build tag `e2e`).

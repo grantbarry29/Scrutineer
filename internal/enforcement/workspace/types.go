@@ -8,24 +8,22 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package workspace holds design stubs for future file/workspace governance backends.
-//
-// Phase 3 slice 8 is design-only. See docs/design/phase-3-file-workspace-policy.md.
-// Evaluation, sidecar injection, and PolicyRules fields are intentionally deferred.
+// Package workspace implements file/workspace policy evaluation and reporting hooks.
+// FS gateway sidecar injection is deferred; see docs/design/phase-3-file-workspace-policy.md.
 package workspace
 
-// BackendKind identifies a future file enforcement backend.
-type BackendKind string
+import "github.com/secureai/relay/internal/enforcement"
 
-const (
-	BackendMountStrategy BackendKind = "mount-strategy"
-	BackendFSGateway     BackendKind = "fs-gateway"
-)
-
-// FileRequest is metadata for a single file operation (future FS gateway).
+// FileRequest is metadata for a single file operation.
 type FileRequest struct {
-	// Path is the absolute or workspace-relative path accessed.
+	// Path is the absolute path accessed.
 	Path string
-	// Operation is read, write, delete, or list (future).
+	// Operation is read, write, delete, or list (optional).
 	Operation string
+}
+
+// FileAuthorization is the outcome of EvaluateFile.
+type FileAuthorization struct {
+	enforcement.Evaluation
+	Reason string
 }

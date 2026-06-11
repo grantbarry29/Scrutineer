@@ -28,6 +28,9 @@ func MergeRules(base, overlay relayv1alpha1.PolicyRules) relayv1alpha1.PolicyRul
 		MaxNetworkRequests:   minInt32Ptr(base.MaxNetworkRequests, overlay.MaxNetworkRequests),
 		MaxToolCalls:         minInt32Ptr(base.MaxToolCalls, overlay.MaxToolCalls),
 		MaxCallsPerMinute:    minInt32Ptr(base.MaxCallsPerMinute, overlay.MaxCallsPerMinute),
+		AllowedPaths:         unionStrings(base.AllowedPaths, overlay.AllowedPaths),
+		DeniedPaths:          unionStrings(base.DeniedPaths, overlay.DeniedPaths),
+		MaxWorkspaceBytes:    minInt64Ptr(base.MaxWorkspaceBytes, overlay.MaxWorkspaceBytes),
 	}
 }
 
@@ -81,6 +84,21 @@ func unionStrings(a, b []string) []string {
 }
 
 func minInt32Ptr(a, b *int32) *int32 {
+	switch {
+	case a == nil:
+		return b
+	case b == nil:
+		return a
+	default:
+		v := *a
+		if *b < v {
+			v = *b
+		}
+		return &v
+	}
+}
+
+func minInt64Ptr(a, b *int64) *int64 {
 	switch {
 	case a == nil:
 		return b

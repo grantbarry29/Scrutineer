@@ -44,6 +44,9 @@ const (
 	EnvPolicyMaxNetReqs            = "AGENT_POLICY_MAX_NETWORK_REQUESTS"
 	EnvPolicyMaxToolCalls          = "AGENT_POLICY_MAX_TOOL_CALLS"
 	EnvPolicyMaxToolCallsPerMinute = "AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE"
+	EnvPolicyAllowedPaths          = "AGENT_POLICY_ALLOWED_PATHS"
+	EnvPolicyDeniedPaths           = "AGENT_POLICY_DENIED_PATHS"
+	EnvPolicyMaxWorkspaceBytes     = "AGENT_POLICY_MAX_WORKSPACE_BYTES"
 	EnvPolicyMode                  = "AGENT_POLICY_MODE"
 )
 

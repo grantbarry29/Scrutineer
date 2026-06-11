@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Evidence loop #7 done: live network violation population e2e; queue advanced to file/workspace policy)
+> **Last updated:** 2026-06-10 (Evidence loop #8 done: file/workspace policy API + evaluate stub; Phase 3b evidence loop closed)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Evidence loop slices 1–7 ship (reporter → sidecars → live `status.violations` from dns-proxy). Next: **file/workspace policy implementation**.
+> **Critical path:** Phase 3b evidence loop **closed** (slices 1–8). Next: **Phase 4** — usage metrics, then observability surfaces.
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -24,39 +24,39 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 5. ~~First-party dns-proxy image MVP~~ — **done** (`cmd/dns-proxy`, `Dockerfile.dns-proxy`, sidecar image ref)
 6. ~~First-party tool-gateway image MVP~~ — **done** (`cmd/tool-gateway`, `Dockerfile.tool-gateway`, sidecar image ref)
 7. ~~Live network violation population~~ — **done** (`test/e2e/network_violation_test.go`, in-cluster reporter for e2e)
-8. **File/workspace policy implementation** *(this card — start here)*
+8. ~~File/workspace policy implementation~~ — **done** (`PolicyRules` path fields, `workspace.EvaluateFile`, env propagation)
 
-Then Phase 4 observability surfaces (usage metrics → timeline model → Prometheus → OTel → audit sink → log/artifact collection).
+**Phase 4 observability** (next): usage metrics → timeline model → Prometheus → OTel → audit sink → log/artifact collection.
 
-### Task: File/workspace policy implementation
+### Task: Usage metrics (Phase 4)
 
 **Goal:**  
-Implement path-level file/workspace governance per `docs/design/phase-3-file-workspace-policy.md` (API fields, merge semantics, propagation hooks).
+Populate `status.usage` (tokens, tool calls, network requests) from sidecar/agent runtime reports.
 
 **Why it matters:**  
-Mount-only hardening is insufficient for path governance; separate domain from network/tool evidence loop now that those report end-to-end.
+Operators need quantitative session telemetry; usage fields are reserved in the API but empty until reporters aggregate counts.
 
 **Scope:**
-- `PolicyRules.allowedPaths` / `deniedPaths` (or scoped CRD) + merge + env/sidecar propagation.
-- Optional FS gateway evaluate stub with tests.
+- Extend reporter payload or merge path to increment `status.usage` counters from runtime evidence.
+- Unit tests for merge/idempotency.
 
 **Non-goals:**
-- gVisor/Kata enforcement.
-- Full FS gateway image in one slice.
+- Prometheus exporter (separate Phase 4 slice).
+- FS gateway sidecar image.
 
 **Acceptance criteria:**
-- API fields or explicit CRD; mount-strategy enforcement or FS gateway evaluate stub with tests.
-- `make manifests && make test` passes.
+- At least one usage dimension populated from a documented report path (unit or e2e).
+- `make test` passes.
 
 **Expected files:**
-- `api/v1alpha1/`, `internal/policy/`, `internal/enforcement/workspace/`, docs, `.cursor/relay-project-status.md`
+- `api/v1alpha1/agentsession_types.go` (if schema tweaks), `internal/controller/agentsession/`, `internal/reporter/`, `.cursor/relay-project-status.md`
 
 **Verification command:**  
-`make manifests && make test`
+`make test`
 
-**Next suggested picks:** Usage metrics (Phase 4) · Tool-gateway live violation e2e (follow-up).
+**Next suggested picks:** Session timeline model · FS gateway sidecar MVP · Live file violation e2e (after FS gateway).
 
-**Recently completed** (do not re-implement unless regressions): **Live network violation population** (`test/e2e/network_violation_test.go`, `--reporter-only`, `make test-e2e-images`); **First-party tool-gateway image MVP**; **First-party dns-proxy image MVP**; **Reporter pod wiring**; **Runtime reporter loop (impl)**.
+**Recently completed** (do not re-implement unless regressions): **Live tool violation e2e** (`test/e2e/tool_violation_test.go`); **File/workspace policy implementation**; **Live network violation population**; **First-party tool-gateway/dns-proxy MVPs**; **Reporter pod wiring**; **Runtime reporter loop (impl)**.
 
 ---
 
@@ -320,7 +320,7 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 5. ~~First-party dns-proxy image MVP~~ — **done** (`cmd/dns-proxy`, `Dockerfile.dns-proxy`).
 6. ~~First-party tool-gateway image MVP~~ — **done** (`cmd/tool-gateway`, `Dockerfile.tool-gateway`).
 7. ~~Live network violation population~~ — **done** (`test/e2e/network_violation_test.go`).
-8. **File/workspace policy implementation** — **In Ready for Cursor Queue now.**
+8. ~~File/workspace policy implementation~~ — **done** (`internal/enforcement/workspace/`, `PolicyRules` path fields).
 
 Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
@@ -457,37 +457,27 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-10); `make test-e2e-images && make test-e2e` for live spec.
 
-### Task: Live tool violation population (tool-gateway e2e)
+### Task: Live tool violation population (tool-gateway e2e) — **done (2026-06-10)**
 
-**Discovered:** 2026-06-10 while closing network violation e2e (#7). Mirror `test/e2e/network_violation_test.go` for tool-gateway: enforced `deniedTools` + sidecar + `POST /v1/tools/invoke` probe → `status.violations`.
+**Shipped:** `test/e2e/tool_violation_test.go` — enforced `ToolPolicy` `deniedTools` + tool-gateway sidecar + agent `wget` POST to `/v1/tools/invoke` → in-cluster reporter → `status.violations` + runtime `policyDecisions` (`type: tool`). Fixtures in `fixtures_test.go`; `requireLiveToolEvidenceImages`; `make test-e2e-images` includes `kind-load-tool-gateway`.
 
-**Scope:** E2e spec reusing `reporter_infra_test.go` in-cluster reporter; agent or init script calls tool-gateway with denied tool.
+**Verification:** `make test` (pass 2026-06-10); `make test-e2e-images && make test-e2e` for live spec.
 
-**Non-goals:** Full MCP protocol stack.
+### Task: File/workspace policy implementation — evidence loop #8 — **done (2026-06-10)**
 
-**Verification:** `make test-e2e-images && make test-e2e`
+**Shipped:** `PolicyRules.allowedPaths` / `deniedPaths` / `maxWorkspaceBytes`; merge in `internal/policy/`; `AGENT_POLICY_ALLOWED_PATHS` / `DENIED_PATHS` / `MAX_WORKSPACE_BYTES` env on agent; `internal/enforcement/workspace/` (`EvaluateFile`, `RuntimeReport`, `ApplyFilePolicyRuntimeEvent`, `Backend`); design doc updated.
 
-### Task: File/workspace policy implementation (post–design) — evidence loop #8
+**Verification:** `make manifests && make test` (pass 2026-06-10)
 
-**Why it matters:**  
-Slice 8 deferred path-level rules and FS gateway; mount-only hardening is insufficient for path governance. Separate domain from network/tool; tackle after those report end-to-end.
+### Task: First-party FS gateway sidecar MVP
 
-**Scope:**
-- `PolicyRules.allowedPaths` / `deniedPaths` (or `FilePolicy` CRD) per `docs/design/phase-3-file-workspace-policy.md`.
-- Merge semantics + env/sidecar propagation.
-- Optional FS gateway backend implementing `internal/enforcement/workspace/`.
+**Discovered:** 2026-06-10 after file/workspace policy API + evaluate stub (#8). Mirror dns-proxy/tool-gateway: sidecar type `fs-gateway`, path evaluation at runtime, `POST /v1/report` for deny events.
 
-**Non-goals:**
-- gVisor/Kata enforcement (platform concern).
+**Scope:** `cmd/fs-gateway` or in-pod hook; RuntimeProfile sidecar injection; integration test.
 
-**Acceptance criteria:**
-- API fields or explicit CRD; at least mount-strategy enforcement or FS gateway evaluate stub with tests.
+**Non-goals:** FUSE production hardening in one slice.
 
-**Expected files:**
-- `api/v1alpha1/`, `internal/policy/`, `internal/enforcement/workspace/`, docs
-
-**Verification command:**  
-`make manifests && make test`
+**Verification:** `make test` + optional e2e
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
@@ -830,7 +820,8 @@ Real governance beyond env var propagation. Start narrow, prove value, then expa
 5. [x] **RuntimeProfile sidecar injection** — `job/sidecars.go`; enabled `dns-proxy`/`tool-gateway`/`envoy`; first-party images for dns-proxy + tool-gateway; envoy placeholder; drift detection.
 6. [x] **Tool gateway contract** — `internal/enforcement/toolgateway/` + `docs/design/phase-3-tool-gateway-contract.md`; evaluate + report; first-party gateway image ships in Phase 3b #6.
 7. [x] **DNS / egress proxy prototype** — `internal/enforcement/dnsproxy/`; sidecar env; `ApplyEgressProxyRuntimeEvent`; docs.
-8. [x] **File/workspace policy design** — `docs/design/phase-3-file-workspace-policy.md`; mount + RuntimeProfile MVP; defer FS gateway and path CRD fields.
+8. [x] **File/workspace policy design** — `docs/design/phase-3-file-workspace-policy.md`; mount + RuntimeProfile MVP.
+9. [x] **File/workspace policy implementation** — path CRD fields + evaluate stub (2026-06-10).
 
 **Phase 3 contract + design slices are complete.** Real enforcement and runtime evidence are **not** yet wired in-cluster — that is **Phase 3b** below, which is the critical path (not "optional hardening").
 
@@ -851,7 +842,7 @@ Turn declared/propagated governance into **observed** governance. Until this shi
 5. [x] **First-party dns-proxy image MVP** — `cmd/dns-proxy`, `Dockerfile.dns-proxy`, HTTP egress proxy + reporter client; integration test.
 6. [x] **First-party tool-gateway image MVP** — `cmd/tool-gateway`, `Dockerfile.tool-gateway`, HTTP invoke API + reporter client; integration test.
 7. [x] **Live network violation population** — dns-proxy enforced deny → reporter → `status.violations` (e2e).
-8. [ ] **File/workspace policy implementation** — path rules / FS gateway deferred from slice 8 (separate domain).
+8. [x] **File/workspace policy implementation** — `PolicyRules` path fields; `workspace.EvaluateFile`; env propagation; FS gateway image deferred.
 
 ---
 

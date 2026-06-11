@@ -1,6 +1,6 @@
 # Phase 3 File / Workspace Policy Design
 
-Relay Phase 3 slice 8 defines how **file and workspace access** should be governed for AgentSession runtimes. This is a **design document only** — no file enforcement ships in slice 8.
+Relay Phase 3 slice 8 defines how **file and workspace access** should be governed for AgentSession runtimes. **API fields, merge semantics, env propagation, and an FS gateway evaluate stub** ship in `internal/enforcement/workspace/`; a first-party FS gateway sidecar is deferred.
 
 ## Current state (MVP)
 
@@ -9,7 +9,7 @@ Relay Phase 3 slice 8 defines how **file and workspace access** should be govern
 | `spec.workspace` | Optional ephemeral `emptyDir` at `/workspace` (size-validated) |
 | `RuntimeProfile` container | `readOnlyRootFilesystem`, dropped capabilities, optional seccomp |
 | `RuntimeProfile` pod | `runtimeClassName` (schema only; sandbox not enforced by Relay) |
-| `PolicyRules` | Network + tool fields only; **no file/path rules** |
+| `PolicyRules` | `allowedPaths`, `deniedPaths`, `maxWorkspaceBytes` + network/tool fields |
 
 Agents can still write anywhere the container filesystem allows outside the workspace mount. There is no path-level allow/deny policy in CRDs today.
 
@@ -65,31 +65,29 @@ File policy must be **auditable**, **mode-aware** (`audit-only` / `dry-run` / `e
 **Pros:** Consistent with Phase 2 policy model.  
 **Cons:** Requires API change, merge semantics, and a backend (mount or FS proxy) to enforce.
 
-**Fit:** **Defer schema** until mount baseline + reporter path are proven; document proposed shape in this file.
+**Fit:** **Shipped** on `PolicyRules` (2026-06-10); FS gateway sidecar deferred.
 
 ## Recommendation
 
-### Phase 3 close-out (no new enforcement code)
+### Shipped (2026-06-10)
 
-1. **Treat mount + RuntimeProfile hardening as the file governance MVP** for Kubernetes Job runtimes.
-2. **Defer path-level `PolicyRules`** and FS proxy sidecar to a post–Phase 3 slice (see status tracker).
-3. **Reuse existing reporting** when file enforcement ships: `type: file` decisions, `ApplyRuntimePolicyReport`, `enforcement.EvaluateRestrictive` mode semantics.
+1. **`PolicyRules.allowedPaths` / `deniedPaths` / `maxWorkspaceBytes`** — merge + `AGENT_POLICY_*` env propagation on agent containers.
+2. **`workspace.EvaluateFile` + `RuntimeReport`** — evaluate stub with `/**` prefix and `path.Match` glob support; `ApplyFilePolicyRuntimeEvent` in the controller.
+3. **Mount + RuntimeProfile hardening** remain the coarse control-plane baseline (no hostPath enforcement in this slice).
 
-### Proposed future API shape (not implemented)
+### API shape
 
 ```yaml
-# Illustrative — not in CRDs today
 policyRules:
   allowedPaths:
     - /workspace/**
-    - /tmp/runtime-*
   deniedPaths:
     - /etc/**
     - /root/.ssh/**
-  maxWorkspaceBytes: 5368709120  # optional cap
+  maxWorkspaceBytes: 5368709120  # optional cap; propagated, not enforced yet
 ```
 
-Merge semantics (when implemented): union allow lists, union deny lists, min numeric caps — same spirit as network/tool merge.
+Merge semantics: union allow/deny lists; min `maxWorkspaceBytes` — same spirit as network/tool merge.
 
 ### Proposed future backend order
 
@@ -97,9 +95,9 @@ Merge semantics (when implemented): union allow lists, union deny lists, min num
 2. **FS gateway sidecar** — path checks + `RuntimeReport` (mirror `dnsproxy` / `toolgateway`).
 3. **Sandbox profile** — platform team sets `runtimeClassName`; Relay records matched profile only.
 
-## Reporting contract (future)
+## Reporting contract
 
-When file enforcement exists, data-plane components should emit:
+FS gateway sidecars (future) and controller helpers emit:
 
 | Field | Value |
 |-------|--------|
@@ -108,14 +106,18 @@ When file enforcement exists, data-plane components should emit:
 | `PolicyDecision.reason` | `DeniedPaths`, `NotInAllowedPaths`, etc. |
 | `PolicyViolation.type` | `file` |
 
-Controller entry point (future): `ApplyFilePolicyRuntimeEvent` mirroring `ApplyEgressProxyRuntimeEvent`.
+Controller entry point: `ApplyFilePolicyRuntimeEvent` (mirrors `ApplyEgressProxyRuntimeEvent`).
 
-## Non-goals (slice 8)
+## Non-goals (remaining)
 
-- No FS proxy sidecar implementation
+- No FS proxy sidecar image / injection
 - No new CRDs (`FilePolicy`, `WorkspacePolicy`)
-- No changes to Job volume builder beyond documentation
+- No mount-strategy validation beyond existing RuntimeProfile fields
 - No syscall/eBPF monitoring
+
+## Implementation
+
+See [`internal/enforcement/workspace/`](../internal/enforcement/workspace/).
 
 ## Related docs
 

@@ -135,6 +135,12 @@ spec:
                     items:
                       type: string
                     type: array
+                  allowedPaths:
+                    description: AllowedPaths is a path/glob allowlist for file and
+                      workspace access (e.g. /workspace/**).
+                    items:
+                      type: string
+                    type: array
                   allowedTools:
                     description: AllowedTools lists tool identifiers the agent is
                       permitted to invoke.
@@ -150,6 +156,12 @@ spec:
                   deniedDomains:
                     description: DeniedDomains is an FQDN denylist for outbound network
                       access.
+                    items:
+                      type: string
+                    type: array
+                  deniedPaths:
+                    description: DeniedPaths is a path/glob denylist for file and
+                      workspace access (e.g. /etc/**).
                     items:
                       type: string
                     type: array
@@ -175,6 +187,12 @@ spec:
                     description: MaxToolCalls caps the total number of tool calls
                       the agent may issue.
                     format: int32
+                    minimum: 0
+                    type: integer
+                  maxWorkspaceBytes:
+                    description: MaxWorkspaceBytes caps total workspace storage when
+                      enforced by a future FS gateway.
+                    format: int64
                     minimum: 0
                     type: integer
                   requireHumanApproval:
@@ -667,6 +685,12 @@ spec:
                     items:
                       type: string
                     type: array
+                  allowedPaths:
+                    description: AllowedPaths is a path/glob allowlist for file and
+                      workspace access (e.g. /workspace/**).
+                    items:
+                      type: string
+                    type: array
                   allowedTools:
                     description: AllowedTools lists tool identifiers the agent is
                       permitted to invoke.
@@ -682,6 +706,12 @@ spec:
                   deniedDomains:
                     description: DeniedDomains is an FQDN denylist for outbound network
                       access.
+                    items:
+                      type: string
+                    type: array
+                  deniedPaths:
+                    description: DeniedPaths is a path/glob denylist for file and
+                      workspace access (e.g. /etc/**).
                     items:
                       type: string
                     type: array
@@ -707,6 +737,12 @@ spec:
                     description: MaxToolCalls caps the total number of tool calls
                       the agent may issue.
                     format: int32
+                    minimum: 0
+                    type: integer
+                  maxWorkspaceBytes:
+                    description: MaxWorkspaceBytes caps total workspace storage when
+                      enforced by a future FS gateway.
+                    format: int64
                     minimum: 0
                     type: integer
                   mode:

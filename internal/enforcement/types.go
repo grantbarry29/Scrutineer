@@ -24,6 +24,7 @@ const (
 	BackendNetworkPolicy BackendKind = "networkpolicy"
 	BackendEgressProxy   BackendKind = "egress-proxy"
 	BackendToolGateway   BackendKind = "tool-gateway"
+	BackendFSGateway     BackendKind = "fs-gateway"
 )
 
 // Capabilities reports what policy dimensions a backend can enforce.

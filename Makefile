@@ -48,7 +48,7 @@ verify-samples: manifests install ## Server-side dry-run of config/samples manif
 	done
 
 .PHONY: test-e2e-images
-test-e2e-images: kind-load kind-load-dns-proxy ## Build and load controller + dns-proxy images into kind (e2e live-evidence prereq).
+test-e2e-images: kind-load kind-load-dns-proxy kind-load-tool-gateway ## Build and load controller + sidecar images into kind (e2e live-evidence prereq).
 
 .PHONY: test-e2e
 test-e2e: manifests install ## Run e2e tests against the live kind cluster (assumes `make dev-up` has been run).

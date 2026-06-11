@@ -206,6 +206,9 @@ func buildEnv(session *relayv1alpha1.AgentSession, task *Task, resolved *policy.
 		{Name: EnvPolicyMaxNetReqs, Value: int32PtrToStr(rules.MaxNetworkRequests)},
 		{Name: EnvPolicyMaxToolCalls, Value: int32PtrToStr(rules.MaxToolCalls)},
 		{Name: EnvPolicyMaxToolCallsPerMinute, Value: int32PtrToStr(rules.MaxCallsPerMinute)},
+		{Name: EnvPolicyAllowedPaths, Value: csv(rules.AllowedPaths)},
+		{Name: EnvPolicyDeniedPaths, Value: csv(rules.DeniedPaths)},
+		{Name: EnvPolicyMaxWorkspaceBytes, Value: int64PtrToStr(rules.MaxWorkspaceBytes)},
 		{Name: EnvPolicyMode, Value: string(mode)},
 	}
 
@@ -222,4 +225,11 @@ func int32PtrToStr(p *int32) string {
 		return ""
 	}
 	return strconv.FormatInt(int64(*p), 10)
+}
+
+func int64PtrToStr(p *int64) string {
+	if p == nil {
+		return ""
+	}
+	return strconv.FormatInt(*p, 10)
 }

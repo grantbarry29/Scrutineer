@@ -133,6 +133,19 @@ type PolicyRules struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MaxCallsPerMinute *int32 `json:"maxCallsPerMinute,omitempty"`
+
+	// AllowedPaths is a path/glob allowlist for file and workspace access (e.g. /workspace/**).
+	// +optional
+	AllowedPaths []string `json:"allowedPaths,omitempty"`
+
+	// DeniedPaths is a path/glob denylist for file and workspace access (e.g. /etc/**).
+	// +optional
+	DeniedPaths []string `json:"deniedPaths,omitempty"`
+
+	// MaxWorkspaceBytes caps total workspace storage when enforced by a future FS gateway.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxWorkspaceBytes *int64 `json:"maxWorkspaceBytes,omitempty"`
 }
 
 // PolicyRef references a reusable policy CRD in the same namespace as the AgentSession.

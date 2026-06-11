@@ -58,6 +58,31 @@ func TestMergeRules_minMaxCallsPerMinute(t *testing.T) {
 	}
 }
 
+func TestMergeRules_unionsPaths(t *testing.T) {
+	got := MergeRules(
+		relayv1alpha1.PolicyRules{AllowedPaths: []string{"/workspace/**"}},
+		relayv1alpha1.PolicyRules{DeniedPaths: []string{"/etc/**"}},
+	)
+	if len(got.AllowedPaths) != 1 || got.AllowedPaths[0] != "/workspace/**" {
+		t.Fatalf("AllowedPaths = %v", got.AllowedPaths)
+	}
+	if len(got.DeniedPaths) != 1 || got.DeniedPaths[0] != "/etc/**" {
+		t.Fatalf("DeniedPaths = %v", got.DeniedPaths)
+	}
+}
+
+func TestMergeRules_minWorkspaceBytes(t *testing.T) {
+	a := int64(1_000_000_000)
+	b := int64(500_000_000)
+	got := MergeRules(
+		relayv1alpha1.PolicyRules{MaxWorkspaceBytes: &a},
+		relayv1alpha1.PolicyRules{MaxWorkspaceBytes: &b},
+	)
+	if got.MaxWorkspaceBytes == nil || *got.MaxWorkspaceBytes != b {
+		t.Fatalf("MaxWorkspaceBytes = %v, want 500000000", got.MaxWorkspaceBytes)
+	}
+}
+
 func TestStrictestMode(t *testing.T) {
 	got := StrictestMode(
 		relayv1alpha1.PolicyModeAuditOnly,

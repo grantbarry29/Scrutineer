@@ -32,6 +32,9 @@ var managedEnvKeys = []string{
 	EnvPolicyMaxNetReqs,
 	EnvPolicyMaxToolCalls,
 	EnvPolicyMaxToolCallsPerMinute,
+	EnvPolicyAllowedPaths,
+	EnvPolicyDeniedPaths,
+	EnvPolicyMaxWorkspaceBytes,
 	EnvPolicyMode,
 }
 

@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/secureai/relay/internal/enforcement/dnsproxy"
+	"github.com/secureai/relay/internal/enforcement/toolgateway"
 )
 
 const (
@@ -50,14 +51,28 @@ func relayE2EImage() string {
 	return "ghcr.io/secureai/relay:latest"
 }
 
-// requireLiveEvidenceImages skips the spec when sidecar/controller images are not present in kind.
+// requireLiveEvidenceImages skips the spec when dns-proxy e2e images are not present in kind.
 func requireLiveEvidenceImages(ctx SpecContext) {
+	GinkgoHelper()
+	requireRelayE2EImage(ctx)
+	if !clusterImageRunnable(ctx, dnsproxy.DefaultDNSProxyImage) {
+		Skip("dns-proxy image not available in cluster — run: make kind-load-dns-proxy")
+	}
+}
+
+// requireLiveToolEvidenceImages skips the spec when tool-gateway e2e images are not present in kind.
+func requireLiveToolEvidenceImages(ctx SpecContext) {
+	GinkgoHelper()
+	requireRelayE2EImage(ctx)
+	if !clusterImageRunnable(ctx, toolgateway.DefaultToolGatewayImage) {
+		Skip("tool-gateway image not available in cluster — run: make kind-load-tool-gateway")
+	}
+}
+
+func requireRelayE2EImage(ctx SpecContext) {
 	GinkgoHelper()
 	if !clusterImageRunnable(ctx, relayE2EImage()) {
 		Skip("relay image not available in cluster — run: make kind-load")
-	}
-	if !clusterImageRunnable(ctx, dnsproxy.DefaultDNSProxyImage) {
-		Skip("dns-proxy image not available in cluster — run: make kind-load-dns-proxy")
 	}
 }
 

@@ -43,6 +43,16 @@ Produces `phase: runtime` policy decisions and violations (for `deny` / `dry-run
 - `POST /v1/tools/invoke` with JSON `{"tool":"read_file",...}` — evaluates policy, returns `403` on enforced deny, posts runtime evidence to `POST /v1/report`.
 - Agents use `RELAY_TOOL_GATEWAY_URL=http://127.0.0.1:19090` (injected on the agent container).
 
+## Live evidence path (e2e)
+
+With `relay-controller-reporter` reachable from session pods (`make deploy` or e2e in-cluster reporter), enforced tool denies flow:
+
+1. Agent calls `POST ${RELAY_TOOL_GATEWAY_URL}/v1/tools/invoke` with `{"tool":"kubectl"}`.
+2. Tool-gateway evaluates policy, returns `403`, POSTs to `/v1/report`.
+3. Controller merges into `status.policyDecisions` and `status.violations`.
+
+E2e: `test/e2e/tool_violation_test.go` (requires `make test-e2e-images`).
+
 ## Implementation
 
 See [`internal/enforcement/toolgateway/`](../internal/enforcement/toolgateway/) and [`cmd/tool-gateway/`](../../cmd/tool-gateway/).
