@@ -1,0 +1,27 @@
+# RuntimeProfile with enforcement sidecars and runtime reporter wiring.
+# When enabled sidecars (dns-proxy, tool-gateway, envoy) are present, the
+# controller injects RELAY_REPORTER_URL, a projected SA token (audience:
+# relay-reporter), and mounts the token into sidecar containers only.
+apiVersion: relay.secureai.dev/v1alpha1
+kind: RuntimeProfile
+metadata:
+  name: enforced-sidecars
+  namespace: default
+spec:
+  container:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+  pod:
+    seccompProfile:
+      type: RuntimeDefault
+  sidecars:
+  - name: egress
+    type: dns-proxy
+    enabled: true
+  - name: tools
+    type: tool-gateway
+    enabled: true

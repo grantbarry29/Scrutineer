@@ -85,6 +85,71 @@ func TestBuild_agentDNSProxyEnv(t *testing.T) {
 	}
 }
 
+func TestBuild_reporterWiringForSidecars(t *testing.T) {
+	enabled := true
+	session := minimalSession()
+	profile := &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
+			}},
+		},
+	}
+	job := Build(session, &Task{}, nil, profile)
+	spec := job.Spec.Template.Spec
+
+	var tokenVol *corev1.Volume
+	for i := range spec.Volumes {
+		if spec.Volumes[i].Name == ReporterTokenVolumeName {
+			tokenVol = &spec.Volumes[i]
+			break
+		}
+	}
+	if tokenVol == nil || tokenVol.Projected == nil || len(tokenVol.Projected.Sources) != 1 {
+		t.Fatalf("expected projected reporter token volume, got volumes=%+v", spec.Volumes)
+	}
+	tok := tokenVol.Projected.Sources[0].ServiceAccountToken
+	if tok == nil || tok.Audience != ReporterTokenAudience {
+		t.Fatalf("token projection = %+v", tok)
+	}
+
+	byName := map[string]corev1.Container{}
+	for _, c := range spec.Containers {
+		byName[c.Name] = c
+	}
+	agent := byName[AgentContainerName]
+	if len(agent.VolumeMounts) != 0 {
+		t.Fatalf("agent should not mount reporter token, got %+v", agent.VolumeMounts)
+	}
+	for _, key := range []string{EnvRelayReporterURL, EnvRelayReporterTokenPath} {
+		if envVarsToMap(agent.Env)[key] != "" {
+			t.Fatalf("agent should not have %s", key)
+		}
+	}
+
+	sidecar := byName["egress"]
+	sidecarEnv := envVarsToMap(sidecar.Env)
+	if sidecarEnv[EnvRelayReporterURL] != DefaultReporterURL {
+		t.Fatalf("RELAY_REPORTER_URL = %q", sidecarEnv[EnvRelayReporterURL])
+	}
+	wantToken := ReporterTokenMountPath + "/" + ReporterTokenFileName
+	if sidecarEnv[EnvRelayReporterTokenPath] != wantToken {
+		t.Fatalf("RELAY_REPORTER_TOKEN_PATH = %q", sidecarEnv[EnvRelayReporterTokenPath])
+	}
+	if len(sidecar.VolumeMounts) != 1 || sidecar.VolumeMounts[0].Name != ReporterTokenVolumeName {
+		t.Fatalf("sidecar volume mounts = %+v", sidecar.VolumeMounts)
+	}
+}
+
+func TestBuild_noReporterWiringWithoutSidecars(t *testing.T) {
+	job := Build(minimalSession(), &Task{}, nil, nil)
+	for _, v := range job.Spec.Template.Spec.Volumes {
+		if v.Name == ReporterTokenVolumeName {
+			t.Fatal("reporter token volume should not be present without sidecars")
+		}
+	}
+}
+
 func TestBuild_agentToolGatewayEnv(t *testing.T) {
 	enabled := true
 	session := minimalSession()

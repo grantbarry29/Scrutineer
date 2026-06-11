@@ -2,6 +2,7 @@ resources:
 - relay_v1alpha1_agentpolicy.yaml
 - relay_v1alpha1_toolpolicy.yaml
 - relay_v1alpha1_runtimeprofile.yaml
+- relay_v1alpha1_runtimeprofile_sidecars.yaml
 - relay_v1alpha1_agentsession.yaml
 - relay_v1alpha1_agentsession_failing.yaml
 - relay_v1alpha1_agentsession_cancel.yaml
@@ -9,3 +10,4 @@ resources:
 - relay_v1alpha1_agentsession_policy_ref.yaml
 - relay_v1alpha1_agentsession_toolpolicy_ref.yaml
 - relay_v1alpha1_agentsession_runtimeprofile_ref.yaml
+- relay_v1alpha1_agentsession_runtimeprofile_sidecars.yaml

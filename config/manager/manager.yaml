@@ -38,12 +38,16 @@ spec:
         - --leader-elect
         - --health-probe-bind-address=:8081
         - --metrics-bind-address=:8080
+        - --reporter-bind-address=:8088
         ports:
         - containerPort: 8080
           name: metrics
           protocol: TCP
         - containerPort: 8081
           name: health
+          protocol: TCP
+        - containerPort: 8088
+          name: reporter
           protocol: TCP
         securityContext:
           allowPrivilegeEscalation: false

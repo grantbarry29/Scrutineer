@@ -176,6 +176,16 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 
 **Sidecars (Phase 3):** enabled `spec.sidecars[]` entries (`envoy`, `dns-proxy`, `tool-gateway`) are injected into the Job pod template with placeholder images until first-party data-plane images ship. Sandbox `runtimeClassName` is written to the pod template but not enforced by Relay until sandbox runtimes are integrated.
 
+**Runtime reporter wiring (Phase 3b):** when any enabled enforcement sidecar is present, the Job pod template also includes:
+
+| Injected into sidecars | Value |
+|------------------------|-------|
+| `RELAY_REPORTER_URL` | `http://relay-controller-reporter.relay-system.svc:8088` (base URL; append `/v1/report`) |
+| `RELAY_REPORTER_TOKEN_PATH` | `/var/run/secrets/relay/reporter-token/token` |
+| Projected volume | ServiceAccount token with audience `relay-reporter` (600s expiry, kubelet-refreshed) |
+
+The agent container does **not** receive the reporter URL or token — only sidecars report runtime evidence. Deploy the controller with `make deploy` (or `make dev-deploy`) so the `relay-controller-reporter` Service exposes port `:8088`. Contract: [`docs/design/phase-3-runtime-reporter-contract.md`](docs/design/phase-3-runtime-reporter-contract.md).
+
 **Profile change behavior:**
 
 - Updating a referenced `RuntimeProfile` re-reconciles affected sessions (controller watch).
@@ -187,6 +197,8 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 ```bash
 kubectl apply -f config/samples/relay_v1alpha1_runtimeprofile.yaml
 kubectl apply -f config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml
+kubectl apply -f config/samples/relay_v1alpha1_runtimeprofile_sidecars.yaml
+kubectl apply -f config/samples/relay_v1alpha1_agentsession_runtimeprofile_sidecars.yaml
 ```
 
 ### Reusable policy (`AgentPolicy` + `ToolPolicy`)

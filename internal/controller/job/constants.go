@@ -46,3 +46,8 @@ const (
 	EnvPolicyMaxToolCallsPerMinute = "AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE"
 	EnvPolicyMode                  = "AGENT_POLICY_MODE"
 )
+
+// Runtime reporter wiring (Phase 3b). Audience must match internal/reporter.TokenAudience.
+const (
+	ReporterTokenAudience = "relay-reporter"
+)

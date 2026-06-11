@@ -39,12 +39,25 @@ const (
 )
 
 const (
-	EnvRelaySidecarType     = "RELAY_SIDECAR_TYPE"
-	EnvRelayToolGatewayURL  = "RELAY_TOOL_GATEWAY_URL"
-	EnvHTTPProxy            = "HTTP_PROXY"
-	EnvHTTPSProxy           = "HTTPS_PROXY"
-	EnvNoProxy              = "NO_PROXY"
-	placeholderSidecarSleep = "infinity"
+	EnvRelaySidecarType       = "RELAY_SIDECAR_TYPE"
+	EnvRelayToolGatewayURL    = "RELAY_TOOL_GATEWAY_URL"
+	EnvRelayReporterURL       = "RELAY_REPORTER_URL"
+	EnvRelayReporterTokenPath = "RELAY_REPORTER_TOKEN_PATH"
+	EnvHTTPProxy              = "HTTP_PROXY"
+	EnvHTTPSProxy             = "HTTPS_PROXY"
+	EnvNoProxy                = "NO_PROXY"
+	placeholderSidecarSleep   = "infinity"
+)
+
+// DefaultReporterURL is the in-cluster base URL for POST /v1/report (no path suffix).
+// Matches the relay-controller-reporter Service in config/manager/reporter_service.yaml.
+const DefaultReporterURL = "http://relay-controller-reporter.relay-system.svc:8088"
+
+const (
+	ReporterTokenVolumeName    = "relay-reporter-token"
+	ReporterTokenMountPath     = "/var/run/secrets/relay/reporter-token"
+	ReporterTokenFileName      = "token"
+	reporterTokenExpirationSec = int64(600)
 )
 
 var knownSidecarTypes = map[string]struct{}{
@@ -59,6 +72,7 @@ func injectSidecars(spec *corev1.PodSpec, session *relayv1alpha1.AgentSession, p
 	if spec == nil || profile == nil || len(profile.Spec.Sidecars) == 0 {
 		return
 	}
+	wireReporterAccess(spec, profile)
 	for _, sc := range profile.Spec.Sidecars {
 		if !sidecarEnabled(sc) {
 			continue
@@ -67,6 +81,61 @@ func injectSidecars(spec *corev1.PodSpec, session *relayv1alpha1.AgentSession, p
 			continue
 		}
 		spec.Containers = append(spec.Containers, buildSidecarContainer(sc, session, pol, profile))
+	}
+}
+
+func hasEnabledReportingSidecar(profile *relayv1alpha1.RuntimeProfile) bool {
+	if profile == nil {
+		return false
+	}
+	for _, sc := range profile.Spec.Sidecars {
+		if sidecarEnabled(sc) {
+			if _, ok := knownSidecarTypes[sc.Type]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func wireReporterAccess(spec *corev1.PodSpec, profile *relayv1alpha1.RuntimeProfile) {
+	if spec == nil || !hasEnabledReportingSidecar(profile) {
+		return
+	}
+	for _, v := range spec.Volumes {
+		if v.Name == ReporterTokenVolumeName {
+			return
+		}
+	}
+	exp := reporterTokenExpirationSec
+	spec.Volumes = append(spec.Volumes, corev1.Volume{
+		Name: ReporterTokenVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{{
+					ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+						Audience:          ReporterTokenAudience,
+						ExpirationSeconds: &exp,
+						Path:              ReporterTokenFileName,
+					},
+				}},
+			},
+		},
+	})
+}
+
+func reporterSidecarEnv() []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{Name: EnvRelayReporterURL, Value: DefaultReporterURL},
+		{Name: EnvRelayReporterTokenPath, Value: ReporterTokenMountPath + "/" + ReporterTokenFileName},
+	}
+}
+
+func reporterVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      ReporterTokenVolumeName,
+		MountPath: ReporterTokenMountPath,
+		ReadOnly:  true,
 	}
 }
 
@@ -89,8 +158,16 @@ func buildSidecarContainer(sc relayv1alpha1.RuntimeProfileSidecar, session *rela
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"sleep", placeholderSidecarSleep},
 		Env:             env,
+		VolumeMounts:    sidecarVolumeMounts(profile),
 		SecurityContext: defaultContainerSecurityContext(),
 	}
+}
+
+func sidecarVolumeMounts(profile *relayv1alpha1.RuntimeProfile) []corev1.VolumeMount {
+	if !hasEnabledReportingSidecar(profile) {
+		return nil
+	}
+	return []corev1.VolumeMount{reporterVolumeMount()}
 }
 
 func placeholderImageForType(sidecarType string) string {
@@ -127,6 +204,9 @@ func sidecarBaseEnv(sidecarType string, session *relayv1alpha1.AgentSession, pol
 		ctx.Mode = mode
 		ctx.Policy = rules
 		env = append(env, dnsproxy.EnvForConfig(dnsproxy.BuildConfig(ctx))...)
+	}
+	if hasEnabledReportingSidecar(profile) {
+		env = append(env, reporterSidecarEnv()...)
 	}
 	return env
 }
@@ -185,6 +265,21 @@ func sidecarContainersEqual(a, b []corev1.Container) bool {
 			return false
 		}
 		if !envSlicesEqual(a[i].Env, b[i].Env) {
+			return false
+		}
+		if !volumeMountsEqual(a[i].VolumeMounts, b[i].VolumeMounts) {
+			return false
+		}
+	}
+	return true
+}
+
+func volumeMountsEqual(a, b []corev1.VolumeMount) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || a[i].MountPath != b[i].MountPath || a[i].ReadOnly != b[i].ReadOnly {
 			return false
 		}
 	}

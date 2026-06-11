@@ -1,0 +1,23 @@
+# AgentSession using enforced-sidecars RuntimeProfile (dns-proxy + tool-gateway).
+# Requires relay-controller-reporter Service in relay-system (make deploy).
+apiVersion: relay.secureai.dev/v1alpha1
+kind: AgentSession
+metadata:
+  name: sidecar-demo
+  namespace: default
+spec:
+  task:
+    description: Demonstrate sidecar + reporter wiring
+    prompt: noop
+  model:
+    provider: openai
+    name: gpt-4.1
+  runtime:
+    orchestrator: kubernetes-job
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - echo ok; exit 0
+  runtimeProfileRef:
+    name: enforced-sidecars
