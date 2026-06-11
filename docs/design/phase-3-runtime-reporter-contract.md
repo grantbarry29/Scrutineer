@@ -246,7 +246,8 @@ The reporter and the reconciler both write `status`. The reporter MUST:
 Idempotency:
 
 - `ApplyRuntimePolicyReport` already de-duplicates decisions by `(time, phase, type, reason, target, action)` and violations by their key, so **re-delivering the same report is safe** and converges.
-- The optional `reportId` may back a short-lived seen-cache to short-circuit duplicates cheaply; not required for correctness.
+- **Usage-only reports** (token deltas without decisions) are **not** deduplicated by merge helpers; clients **should** set `reportId` when retrying token-only payloads.
+- When `reportId` is set, the reporter keeps an in-process seen-cache keyed by `(namespace, session, reportId)` for **24 hours** (`DefaultReportIDCacheTTL`). A cache hit returns `202 Accepted` without patching status. The cache is cleared on controller restart (safe client retry). Reports without `reportId` behave as before.
 
 Ordering: decisions are appended in arrival order; consumers sort by `time` for display. The contract does **not** guarantee global ordering across sidecars.
 

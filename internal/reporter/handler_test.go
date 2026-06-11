@@ -209,6 +209,67 @@ func TestHandler_rejectsNonRuntimePhase(t *testing.T) {
 	}
 }
 
+func TestHandler_usageOnlyReportIdIdempotent(t *testing.T) {
+	ts := metav1.NewTime(time.Unix(300, 0))
+	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	cl := newFakeClient(session)
+	cache := newReportIDCache(time.Hour)
+	h := &Handler{
+		Writer:    cl.Status(),
+		Reader:    cl,
+		Verifier:  stubVerifier{identity: CallerIdentity{Namespace: "ns", PodName: "p"}},
+		ReportIDs: cache,
+		Now:       func() time.Time { return ts.Time },
+	}
+	body := ReportRequest{
+		Session:  SessionRef{Namespace: "ns", Name: "s"},
+		Backend:  "agent",
+		ReportID: "usage-batch-1",
+		Usage:    &relayv1alpha1.SessionUsage{InputTokens: 100, OutputTokens: 25},
+	}
+	if rec := postReport(t, h, body, "Bearer ok"); rec.Code != http.StatusAccepted {
+		t.Fatalf("first status = %d", rec.Code)
+	}
+	if rec := postReport(t, h, body, "Bearer ok"); rec.Code != http.StatusAccepted {
+		t.Fatalf("second status = %d", rec.Code)
+	}
+
+	var updated relayv1alpha1.AgentSession
+	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: "ns", Name: "s"}, &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status.Usage == nil || updated.Status.Usage.InputTokens != 100 || updated.Status.Usage.OutputTokens != 25 {
+		t.Fatalf("usage = %+v", updated.Status.Usage)
+	}
+}
+
+func TestHandler_usageOnlyWithoutReportIdDoubleCounts(t *testing.T) {
+	ts := metav1.NewTime(time.Unix(301, 0))
+	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	cl := newFakeClient(session)
+	h := &Handler{
+		Writer:   cl.Status(),
+		Reader:   cl,
+		Verifier: stubVerifier{identity: CallerIdentity{Namespace: "ns", PodName: "p"}},
+		Now:      func() time.Time { return ts.Time },
+	}
+	body := ReportRequest{
+		Session: SessionRef{Namespace: "ns", Name: "s"},
+		Backend: "agent",
+		Usage:   &relayv1alpha1.SessionUsage{InputTokens: 10},
+	}
+	postReport(t, h, body, "Bearer ok")
+	postReport(t, h, body, "Bearer ok")
+
+	var updated relayv1alpha1.AgentSession
+	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: "ns", Name: "s"}, &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status.Usage == nil || updated.Status.Usage.InputTokens != 20 {
+		t.Fatalf("without reportId usage should double-count, got %+v", updated.Status.Usage)
+	}
+}
+
 func TestHandler_idempotentRedelivery(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(200, 0))
 	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}

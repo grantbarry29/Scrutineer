@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 slice B done: session timeline projection model)
+> **Last updated:** 2026-06-10 (Phase 4 slice C done: usage-only reportId idempotency cache)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **timeline model done**; next: **usage-only reportId idempotency** (slice C).
+> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **reportId cache done**; next: **FS gateway sidecar MVP** (slice D).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -36,8 +36,8 @@ Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discove
 |---|------|----------------|
 | ~~**A**~~ | ~~**E2e usage metric assertions**~~ — **done** | Live `networkRequests` / `toolCalls` in violation e2e specs. |
 | ~~**B**~~ | ~~**Session timeline model**~~ — **done** | `internal/observability` projection + design doc. |
-| **C** | **Usage-only report idempotency (`reportId` cache)** *(queue head)* | Needed before agent token-only reports; sidecar metrics already idempotent via decision dedup. |
-| **D** | **FS gateway sidecar MVP** | Unblocks file runtime evidence (violations + metrics). |
+| ~~**C**~~ | ~~**Usage-only report idempotency (`reportId` cache)**~~ — **done** | In-process seen-cache; 24h TTL. |
+| **D** | **FS gateway sidecar MVP** *(queue head)* | Unblocks file runtime evidence (violations + metrics). |
 | **E** | **File usage metrics** | `SessionUsage` field + `type: file` decision increment; **depends on D** (or ship in same slice). |
 | **F** | **Live file violation + usage e2e** | Mirror network/tool specs; **depends on D** (and E if asserting file counters). |
 
@@ -470,24 +470,11 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-10); `make test-e2e-images && make test-e2e` for live spec.
 
-### Task: Usage-only report idempotency (reportId cache) — Phase 4 · slice C
+### Task: Usage-only report idempotency (reportId cache) — Phase 4 · slice C — **done (2026-06-10)**
 
-**Discovered:** 2026-06-10 usage metrics slice. Usage-only `POST /v1/report` payloads (token deltas without decisions) may double-count on re-delivery until optional `reportId` seen-cache ships per `docs/design/phase-3-runtime-reporter-contract.md`.
+**Shipped:** `internal/reporter/reportid_cache.go` — in-process seen-cache keyed by session + `reportId` (24h TTL); handler short-circuits duplicate `POST /v1/report` with `202` before status patch; wired in `NewRunnable`. Tests: `reportid_cache_test.go`, `handler_test.go` (usage-only with/without reportId). Contract doc §7 updated.
 
-**Why it matters:**  
-Decision-bundled usage is idempotent today; agent/runtime token-only reports are not. Ship before wiring agent token reporting.
-
-**Scope:**
-- Reporter seen-cache (or status-backed dedup) for `reportId`; TTL documented.
-- Unit tests: duplicate usage-only report does not double-count.
-
-**Non-goals:** Full signed-report / replay protection (contract §future).
-
-**Acceptance criteria:** `make test` passes; contract doc updated.
-
-**Expected files:** `internal/reporter/`, `docs/design/phase-3-runtime-reporter-contract.md`, tests
-
-**Verification:** `make test`
+**Verification:** `make test` (pass 2026-06-10)
 
 ### Task: File/workspace policy implementation — evidence loop #8 — **done (2026-06-10)**
 
@@ -927,8 +914,8 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 - [x] **Usage metrics (control-plane)** — `status.usage` from runtime reports (novel network/tool decisions + optional `usage` delta on `POST /v1/report`)
 - [x] **E2e usage metric assertions** — live `networkRequests` / `toolCalls` on existing violation specs *(slice A)*
 - [x] **Session timeline model** — UI projection/normalization over `status.events[]` *(slice B)*
-- [ ] **Usage-only report idempotency** — `reportId` seen-cache for token-only reports *(slice C — queue head)*
-- [ ] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D)*
+- [x] **Usage-only report idempotency** — `reportId` seen-cache for token-only reports *(slice C)*
+- [ ] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D — queue head)*
 - [ ] **File usage metrics** — `SessionUsage` file counter from `type: file` decisions *(slice E; depends D)*
 - [ ] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F; depends D,E)*
 - [ ] **Prometheus metrics** — Sessions by phase, violations, approval queue depth, reconcile latency

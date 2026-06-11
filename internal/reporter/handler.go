@@ -30,12 +30,13 @@ const reportPath = "/v1/report"
 
 // Handler serves POST /v1/report.
 type Handler struct {
-	Writer   client.StatusWriter
-	Reader   client.Reader
-	Verifier IdentityVerifier
-	Recorder record.EventRecorder
-	Limiter  *sessionRateLimiter
-	Now      func() time.Time
+	Writer    client.StatusWriter
+	Reader    client.Reader
+	Verifier  IdentityVerifier
+	Recorder  record.EventRecorder
+	Limiter   *sessionRateLimiter
+	ReportIDs *reportIDCache
+	Now       func() time.Time
 }
 
 // ServeHTTP implements http.Handler.
@@ -109,6 +110,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if reportID := normalizeReportID(req.ReportID); reportID != "" && h.ReportIDs != nil {
+		if h.ReportIDs.contains(reportIDCacheKey(sessionKey, reportID), receivedAt) {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+	}
+
 	hadViolations := len(session.Status.Violations) == 0 && len(report.Decisions) > 0
 	if err := agentsession.PatchRuntimePolicyReport(r.Context(), h.Writer, h.Reader, sessionKey, report); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -130,6 +138,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+	}
+
+	if reportID := normalizeReportID(req.ReportID); reportID != "" && h.ReportIDs != nil {
+		h.ReportIDs.mark(reportIDCacheKey(sessionKey, reportID), receivedAt)
 	}
 
 	w.WriteHeader(http.StatusAccepted)

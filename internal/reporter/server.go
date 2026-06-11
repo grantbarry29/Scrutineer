@@ -54,11 +54,12 @@ func NewRunnable(opts Options) manager.Runnable {
 	}
 
 	handler := &Handler{
-		Writer:   opts.Client.Status(),
-		Reader:   opts.APIReader,
-		Verifier: verifier,
-		Recorder: opts.Recorder,
-		Limiter:  newSessionRateLimiter(time.Second),
+		Writer:    opts.Client.Status(),
+		Reader:    opts.APIReader,
+		Verifier:  verifier,
+		Recorder:  opts.Recorder,
+		Limiter:   newSessionRateLimiter(time.Second),
+		ReportIDs: newReportIDCache(DefaultReportIDCacheTTL),
 	}
 
 	mux := http.NewServeMux()
