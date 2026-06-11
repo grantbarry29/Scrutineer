@@ -57,3 +57,39 @@ func TestTimedOut(t *testing.T) {
 		t.Fatal("expected false for BackoffLimitExceeded")
 	}
 }
+
+func TestDescribePhase(t *testing.T) {
+	if DescribePhase(nil) != "unknown" {
+		t.Fatal("nil job")
+	}
+	if DescribePhase(&batchv1.Job{Status: batchv1.JobStatus{Succeeded: 1}}) != "succeeded" {
+		t.Fatal("succeeded")
+	}
+	if DescribePhase(&batchv1.Job{Status: batchv1.JobStatus{Failed: 2}}) != "failed (2 retries)" {
+		t.Fatal("failed")
+	}
+	if DescribePhase(&batchv1.Job{Status: batchv1.JobStatus{Active: 1}}) != "running" {
+		t.Fatal("running")
+	}
+	if DescribePhase(&batchv1.Job{}) != "pending" {
+		t.Fatal("pending")
+	}
+}
+
+func TestBackoffExhausted(t *testing.T) {
+	limit := int32(2)
+	if BackoffExhausted(nil) || BackoffExhausted(&batchv1.Job{}) {
+		t.Fatal("nil or missing backoff limit")
+	}
+	job := &batchv1.Job{
+		Spec:   batchv1.JobSpec{BackoffLimit: &limit},
+		Status: batchv1.JobStatus{Failed: 1},
+	}
+	if BackoffExhausted(job) {
+		t.Fatal("failed count within limit")
+	}
+	job.Status.Failed = 3
+	if !BackoffExhausted(job) {
+		t.Fatal("expected backoff exhausted")
+	}
+}

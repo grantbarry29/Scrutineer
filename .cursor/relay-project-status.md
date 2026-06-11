@@ -369,15 +369,13 @@ Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
 **Files (likely):** `internal/controller/agentsession/reconciler.go`, `policy_decisions.go`, event-recording helpers.
 
-### Task: Raise unit coverage on data-plane producer packages
+### Task: Raise unit coverage on data-plane producer packages — **done (2026-06-10)**
 
-**Discovered:** 2026-06-09 test-hardening pass. Coverage is uneven: `internal/enforcement/dnsproxy` ~57.8%, `internal/policy` ~59.8%, `internal/controller/job` ~67.5%, `internal/enforcement/toolgateway` ~67.9% (vs reporter 79%, networkpolicy 92%, enforcement 91%). These are existing packages, out of scope for the reporter/events test pass, but worth lifting before the dns-proxy/tool-gateway producer slices build on them.
+**Shipped:** Unit tests for `internal/controller/job` (status, sync drift, workspace volumes, envoy placeholder), `dnsproxy` (backend, evaluate/report/reporter/proxy allow path), `toolgateway` (runtime env, config, backend), `workspace` (backend, report), `policy` (LoadPolicyLayers fake client, ApplyStatus, caps/network merge decisions). All previously sub-70% packages now ≥73%.
 
-**Scope (proposed):** Add table-driven unit tests for the lowest-covered branches (sidecar/config rendering edge cases, policy merge precedence, job builder env propagation). Target ~80%+ on each.
+**Coverage (2026-06-10):** job **80.8%**, dnsproxy **73.7%**, toolgateway **85.8%**, workspace **95.8%**, policy **93.0%**.
 
-**Non-goals:** Behavior changes; e2e additions.
-
-**Verification:** `make test` (per-package coverage).
+**Verification:** `make test` (pass 2026-06-10).
 
 ### Task: Watch owned Pods for reconcile triggers — **done (2026-06-08)**
 

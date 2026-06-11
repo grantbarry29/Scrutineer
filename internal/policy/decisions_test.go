@@ -71,3 +71,43 @@ func TestBuildMergeDecisions_truncates(t *testing.T) {
 		t.Fatalf("last reason = %q", last.Reason)
 	}
 }
+
+func TestBuildMergeDecisions_capsAndNetworkLists(t *testing.T) {
+	maxNet := int32(100)
+	maxTool := int32(50)
+	maxPerMin := int32(10)
+	resolved := Resolved{
+		Mode: relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{
+			AllowedDomains:       []string{"github.com"},
+			DeniedCIDRs:          []string{"10.0.0.0/8"},
+			RequireHumanApproval: []string{"deploy"},
+			MaxNetworkRequests:   &maxNet,
+			MaxToolCalls:         &maxTool,
+			MaxCallsPerMinute:    &maxPerMin,
+		},
+	}
+	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
+
+	var capCount int
+	for _, d := range decisions {
+		if d.Type == "cap" {
+			capCount++
+		}
+		if d.Target == "github.com" && d.Action != relayv1alpha1.PolicyDecisionAllow {
+			t.Fatalf("allowed domain decision = %+v", d)
+		}
+		if d.Target == "10.0.0.0/8" && d.Action != relayv1alpha1.PolicyDecisionDeny {
+			t.Fatalf("denied cidr decision = %+v", d)
+		}
+	}
+	if capCount != 3 {
+		t.Fatalf("cap decisions = %d", capCount)
+	}
+}
+
+func TestNormalizeMode_emptyDefaultsAuditOnly(t *testing.T) {
+	if NormalizeMode("") != relayv1alpha1.PolicyModeAuditOnly {
+		t.Fatalf("mode = %q", NormalizeMode(""))
+	}
+}

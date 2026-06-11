@@ -82,6 +82,72 @@ func TestEnvForConfig_includesPolicyLists(t *testing.T) {
 	}
 }
 
+func TestEvaluateEgress_allowedDomain(t *testing.T) {
+	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+		AllowedDomains: []string{"github.com"},
+	})
+	auth := EvaluateEgress(ctx, EgressRequest{Host: "github.com"})
+	if !auth.Allowed || auth.Reason != ReasonAllowed {
+		t.Fatalf("got %+v", auth)
+	}
+}
+
+func TestEvaluateEgress_allowedCIDR(t *testing.T) {
+	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+		AllowedCIDRs: []string{"203.0.113.0/24"},
+	})
+	auth := EvaluateEgress(ctx, EgressRequest{Host: "203.0.113.50"})
+	if !auth.Allowed {
+		t.Fatalf("got %+v", auth)
+	}
+}
+
+func TestEvaluateEgress_notInAllowedCIDR(t *testing.T) {
+	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+		AllowedCIDRs: []string{"203.0.113.0/24"},
+	})
+	auth := EvaluateEgress(ctx, EgressRequest{Host: "198.51.100.1"})
+	if auth.Allowed || auth.Reason != ReasonNotInAllowedCIDRs {
+		t.Fatalf("got %+v", auth)
+	}
+}
+
+func TestEvaluateEgress_emptyHost(t *testing.T) {
+	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{})
+	auth := EvaluateEgress(ctx, EgressRequest{})
+	if auth.Allowed || auth.Reason != ReasonEmptyHost {
+		t.Fatalf("got %+v", auth)
+	}
+}
+
+func TestHasEnabledSidecar(t *testing.T) {
+	disabled := false
+	ctx := enforcement.SessionContext{
+		Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+			{Type: SidecarType, Enabled: &disabled},
+		},
+	}
+	if HasEnabledSidecar(ctx) {
+		t.Fatal("disabled sidecar should not count")
+	}
+	ctx.Sidecars[0].Enabled = nil
+	if !HasEnabledSidecar(ctx) {
+		t.Fatal("nil enabled should default to enabled")
+	}
+}
+
+func TestBuildConfig_nilWhenNotApplicable(t *testing.T) {
+	if BuildConfig(enforcement.SessionContext{}) != nil {
+		t.Fatal("expected nil config")
+	}
+}
+
+func TestEnvForConfig_nil(t *testing.T) {
+	if EnvForConfig(nil) != nil {
+		t.Fatal("expected nil env")
+	}
+}
+
 func envMap(vars []corev1.EnvVar) map[string]string {
 	out := make(map[string]string, len(vars))
 	for _, e := range vars {

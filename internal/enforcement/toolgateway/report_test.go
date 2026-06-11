@@ -46,6 +46,35 @@ func TestRuntimeReport_dryRunIncludesViolation(t *testing.T) {
 	}
 }
 
+func TestRuntimeReport_allowedAndApprovalMessages(t *testing.T) {
+	allowedCtx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+		AllowedTools: []string{"shell"},
+	})
+	allowed := EvaluateTool(allowedCtx, ToolRequest{Tool: "shell"})
+	report := RuntimeReport(allowedCtx, ToolRequest{Tool: "shell"}, allowed, time.Unix(0, 0))
+	if report.Decisions[0].Message == "" || report.Decisions[0].Rule != "" {
+		t.Fatalf("allowed decision = %+v", report.Decisions[0])
+	}
+
+	approvalCtx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+		RequireHumanApproval: []string{"deploy"},
+	})
+	auth := EvaluateTool(approvalCtx, ToolRequest{Tool: "deploy"})
+	report = RuntimeReport(approvalCtx, ToolRequest{Tool: "deploy"}, auth, time.Unix(0, 0))
+	if report.Decisions[0].Rule != "requireHumanApproval" {
+		t.Fatalf("rule=%q", report.Decisions[0].Rule)
+	}
+
+	denyListCtx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+		AllowedTools: []string{"shell"},
+	})
+	auth = EvaluateTool(denyListCtx, ToolRequest{Tool: "deploy"})
+	report = RuntimeReport(denyListCtx, ToolRequest{Tool: "deploy"}, auth, time.Unix(0, 0))
+	if report.Decisions[0].Rule != "allowedTools" {
+		t.Fatalf("rule=%q", report.Decisions[0].Rule)
+	}
+}
+
 func TestRuntimeReport_auditNoViolation(t *testing.T) {
 	ctx := baseCtx(relayv1alpha1.PolicyModeAuditOnly, relayv1alpha1.PolicyRules{
 		DeniedTools: []string{"kubectl"},

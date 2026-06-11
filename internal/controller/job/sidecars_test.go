@@ -220,6 +220,32 @@ func TestBuild_reporterWiringForToolGateway(t *testing.T) {
 	}
 }
 
+func TestInjectSidecars_placeholderEnvoy(t *testing.T) {
+	enabled := true
+	session := minimalSession()
+	profile := &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+				Name: "envoy", Type: SidecarTypeEnvoy, Enabled: &enabled,
+			}},
+		},
+	}
+	spec := &corev1.PodSpec{
+		Containers: []corev1.Container{{Name: AgentContainerName, Image: "agent:latest"}},
+	}
+	injectSidecars(spec, session, nil, profile)
+	if len(spec.Containers) != 2 {
+		t.Fatalf("containers = %d", len(spec.Containers))
+	}
+	sc := spec.Containers[1]
+	if sc.Image != PlaceholderEnvoyImage {
+		t.Fatalf("image = %q", sc.Image)
+	}
+	if len(sc.Command) != 2 || sc.Command[0] != "sleep" {
+		t.Fatalf("command = %v", sc.Command)
+	}
+}
+
 func TestRuntimeProfileDrift_sidecars(t *testing.T) {
 	base := Build(minimalSession(), &Task{}, nil, nil)
 	withSidecar := Build(minimalSession(), &Task{}, nil, profileWithSidecar(SidecarTypeDNSProxy))

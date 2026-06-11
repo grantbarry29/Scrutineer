@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/policy"
 )
 
 func TestMergeContainerSecurityContext(t *testing.T) {
@@ -61,5 +62,50 @@ func TestApplyRuntimeProfileToPodSpec(t *testing.T) {
 	}
 	if spec.SecurityContext == nil || spec.SecurityContext.SeccompProfile == nil {
 		t.Fatalf("expected seccomp profile on pod spec")
+	}
+}
+
+func TestBuild_ephemeralWorkspace(t *testing.T) {
+	session := minimalSession()
+	session.Spec.Workspace = relayv1alpha1.WorkspaceSpec{
+		Ephemeral: true,
+		Size:      "1Gi",
+		MountPath: "/data",
+	}
+	job := Build(session, &Task{}, nil, nil)
+	spec := job.Spec.Template.Spec
+	if len(spec.Volumes) != 1 || spec.Volumes[0].Name != "workspace" {
+		t.Fatalf("volumes = %+v", spec.Volumes)
+	}
+	if spec.Volumes[0].EmptyDir == nil || spec.Volumes[0].EmptyDir.SizeLimit == nil {
+		t.Fatal("expected emptyDir size limit")
+	}
+	agent := spec.Containers[0]
+	if len(agent.VolumeMounts) != 1 || agent.VolumeMounts[0].MountPath != "/data" {
+		t.Fatalf("mounts = %+v", agent.VolumeMounts)
+	}
+}
+
+func TestBuild_policyCapEnv(t *testing.T) {
+	maxNet := int32(50)
+	maxTool := int32(10)
+	maxPerMin := int32(5)
+	maxBytes := int64(1_000_000)
+	pol := &policy.Resolved{
+		Mode: relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{
+			MaxNetworkRequests: &maxNet,
+			MaxToolCalls:       &maxTool,
+			MaxCallsPerMinute:  &maxPerMin,
+			MaxWorkspaceBytes:  &maxBytes,
+		},
+	}
+	job := Build(minimalSession(), &Task{}, pol, nil)
+	env := envVarsToMap(job.Spec.Template.Spec.Containers[0].Env)
+	if env[EnvPolicyMaxNetReqs] != "50" || env[EnvPolicyMaxToolCalls] != "10" {
+		t.Fatalf("cap env = %+v", env)
+	}
+	if env[EnvPolicyMaxToolCallsPerMinute] != "5" || env[EnvPolicyMaxWorkspaceBytes] != "1000000" {
+		t.Fatalf("cap env = %+v", env)
 	}
 }

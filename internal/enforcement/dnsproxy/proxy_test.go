@@ -13,10 +13,12 @@ package dnsproxy
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,6 +94,63 @@ func TestProxy_deniesAndReportsEnforcedEgress(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for runtime report")
+	}
+}
+
+func TestProxy_allowsHTTPViaDial(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("upstream-ok"))
+	}))
+	defer upstream.Close()
+
+	env := RuntimeEnv{
+		SessionNamespace: "ns1",
+		SessionName:      "sess-a",
+		Mode:             relayv1alpha1.PolicyModeEnforced,
+	}
+	proxy := httptest.NewServer(&Proxy{
+		Env: env,
+		Dial: func(network, address string) (net.Conn, error) {
+			return net.Dial("tcp", strings.TrimPrefix(upstream.URL, "http://"))
+		},
+	})
+	defer proxy.Close()
+
+	req, err := http.NewRequest(http.MethodGet, proxy.URL+"/path", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = "allowed.example.com"
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%q", resp.StatusCode, body)
+	}
+}
+
+func TestLoadRuntimeEnv_policyCSV(t *testing.T) {
+	t.Setenv(EnvSessionNamespace, "ns")
+	t.Setenv(EnvSessionName, "s")
+	t.Setenv(EnvReporterURL, "http://reporter")
+	t.Setenv(EnvReporterToken, writeTempToken(t, "tok"))
+	t.Setenv(EnvPolicyDeniedDomains, " evil.example , bad.test ")
+	t.Setenv(EnvPolicyAllowedCIDRs, "10.0.0.0/8,203.0.113.0/24")
+
+	env, err := LoadRuntimeEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(env.Policy.DeniedDomains) != 2 || env.Policy.DeniedDomains[0] != "evil.example" {
+		t.Fatalf("denied = %v", env.Policy.DeniedDomains)
+	}
+	if len(env.Policy.AllowedCIDRs) != 2 {
+		t.Fatalf("cidrs = %v", env.Policy.AllowedCIDRs)
 	}
 }
 

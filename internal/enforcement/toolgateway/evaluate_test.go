@@ -13,6 +13,8 @@ package toolgateway
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/enforcement"
 )
@@ -98,6 +100,57 @@ func TestBuildConfig_fromToolPolicy(t *testing.T) {
 	if len(cfg.AllowedTools) != 1 || *cfg.MaxCallsPerMinute != 10 {
 		t.Fatalf("cfg=%+v", cfg)
 	}
+}
+
+func TestBackend_metadata(t *testing.T) {
+	b := Backend{}
+	if b.Kind() != enforcement.BackendToolGateway {
+		t.Fatalf("kind = %q", b.Kind())
+	}
+	if !b.Capabilities().Tools {
+		t.Fatal("expected tools capability")
+	}
+}
+
+func TestHasEnabledSidecar(t *testing.T) {
+	disabled := false
+	ctx := enforcement.SessionContext{
+		Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+			{Type: SidecarType, Enabled: &disabled},
+		},
+	}
+	if HasEnabledSidecar(ctx) {
+		t.Fatal("disabled sidecar")
+	}
+}
+
+func TestEnvForConfig(t *testing.T) {
+	max := int32(5)
+	cfg := BuildConfig(baseCtx(relayv1alpha1.PolicyModeDryRun, relayv1alpha1.PolicyRules{
+		AllowedTools:         []string{"shell"},
+		DeniedTools:          []string{"kubectl"},
+		RequireHumanApproval: []string{"deploy"},
+		MaxToolCalls:         &max,
+		MaxCallsPerMinute:    &max,
+	}))
+	env := envMap(EnvForConfig(cfg))
+	if env[EnvPolicyAllowedTools] != "shell" || env[EnvPolicyDeniedTools] != "kubectl" {
+		t.Fatalf("env = %+v", env)
+	}
+	if env[EnvPolicyMaxToolCalls] != "5" || env[EnvPolicyMaxToolCallsPerMinute] != "5" {
+		t.Fatalf("caps = %+v", env)
+	}
+	if EnvForConfig(nil) != nil {
+		t.Fatal("nil cfg")
+	}
+}
+
+func envMap(vars []corev1.EnvVar) map[string]string {
+	out := make(map[string]string, len(vars))
+	for _, e := range vars {
+		out[e.Name] = e.Value
+	}
+	return out
 }
 
 func TestBackendDesiredState_nilWithoutPolicy(t *testing.T) {

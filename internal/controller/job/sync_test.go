@@ -60,3 +60,46 @@ func TestReplaceableForSync(t *testing.T) {
 		t.Fatal("active job should not be replaceable")
 	}
 }
+
+func TestPolicyEnvDriftMessage(t *testing.T) {
+	if PolicyEnvDriftMessage() == "" {
+		t.Fatal("expected non-empty drift message")
+	}
+}
+
+func TestRuntimeProfileDrift_runtimeClassAndSecurity(t *testing.T) {
+	base := Build(minimalSession(), &Task{}, nil, nil)
+	gvisor := "gvisor"
+	withClass := Build(minimalSession(), &Task{}, nil, &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Pod: &relayv1alpha1.RuntimeProfilePodSpec{RuntimeClassName: gvisor},
+		},
+	})
+	if !RuntimeProfileDrift(base, withClass) {
+		t.Fatal("expected drift for runtime class")
+	}
+
+	runAsNonRoot := true
+	withSec := Build(minimalSession(), &Task{}, nil, &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Container: &relayv1alpha1.RuntimeProfileContainerSpec{RunAsNonRoot: &runAsNonRoot},
+		},
+	})
+	if !RuntimeProfileDrift(base, withSec) {
+		t.Fatal("expected drift for container security context")
+	}
+}
+
+func TestRuntimeProfileDrift_sidecarEnv(t *testing.T) {
+	dns := Build(minimalSession(), &Task{}, &policy.Resolved{
+		Mode:  relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
+	}, profileWithSidecar(SidecarTypeDNSProxy))
+	dns2 := Build(minimalSession(), &Task{}, &policy.Resolved{
+		Mode:  relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{DeniedDomains: []string{"other.example"}},
+	}, profileWithSidecar(SidecarTypeDNSProxy))
+	if !RuntimeProfileDrift(dns, dns2) {
+		t.Fatal("expected drift when sidecar policy env differs")
+	}
+}
