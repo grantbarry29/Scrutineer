@@ -32,8 +32,7 @@ const (
 
 // Placeholder sidecar images until first-party data-plane images ship.
 const (
-	PlaceholderToolGatewayImage = "busybox:latest"
-	PlaceholderEnvoyImage       = "busybox:latest"
+	PlaceholderEnvoyImage = "busybox:latest"
 )
 
 const (
@@ -162,10 +161,12 @@ func buildSidecarContainer(sc relayv1alpha1.RuntimeProfileSidecar, session *rela
 }
 
 func sidecarCommand(sidecarType string) []string {
-	if sidecarType == SidecarTypeDNSProxy {
+	switch sidecarType {
+	case SidecarTypeDNSProxy, SidecarTypeToolGateway:
 		return nil
+	default:
+		return []string{"sleep", placeholderSidecarSleep}
 	}
-	return []string{"sleep", placeholderSidecarSleep}
 }
 
 func sidecarVolumeMounts(profile *relayv1alpha1.RuntimeProfile) []corev1.VolumeMount {
@@ -180,7 +181,7 @@ func placeholderImageForType(sidecarType string) string {
 	case SidecarTypeDNSProxy:
 		return dnsproxy.DefaultDNSProxyImage
 	case SidecarTypeToolGateway:
-		return PlaceholderToolGatewayImage
+		return toolgateway.DefaultToolGatewayImage
 	case SidecarTypeEnvoy:
 		return PlaceholderEnvoyImage
 	default:
@@ -203,6 +204,10 @@ func sidecarBaseEnv(sidecarType string, session *relayv1alpha1.AgentSession, pol
 	}
 	if sidecarType == SidecarTypeToolGateway {
 		env = append(env, corev1.EnvVar{Name: EnvRelayToolGatewayURL, Value: toolgateway.DefaultListenAddr})
+		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))
+		ctx.Mode = mode
+		ctx.Policy = rules
+		env = append(env, toolgateway.EnvForConfig(toolgateway.BuildConfig(ctx))...)
 	}
 	if sidecarType == SidecarTypeDNSProxy {
 		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))

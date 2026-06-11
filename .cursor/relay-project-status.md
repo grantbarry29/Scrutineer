@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-09 (Evidence loop #5 done: first-party dns-proxy image MVP; queue advanced to tool-gateway image MVP)
+> **Last updated:** 2026-06-10 (Evidence loop #6 done: first-party tool-gateway image MVP; queue advanced to live network violation population)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Reporter endpoint, pod wiring, and **dns-proxy MVP** ship. Next: **first-party tool-gateway image MVP**, then live violation population from running pods.
+> **Critical path:** Reporter endpoint, pod wiring, **dns-proxy MVP**, and **tool-gateway MVP** ship. Next: **live network violation population** from running pods.
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -22,41 +22,41 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 3. ~~Structured session events API~~ — **done** (`status.events[]`, reporter `events[]` payload)
 4. ~~Reporter pod wiring~~ — **done** (`relay-controller-reporter` Service, projected token, `RELAY_REPORTER_URL`)
 5. ~~First-party dns-proxy image MVP~~ — **done** (`cmd/dns-proxy`, `Dockerfile.dns-proxy`, sidecar image ref)
-6. **First-party tool-gateway image MVP** *(this card — start here)*
-7. Live network violation population
+6. ~~First-party tool-gateway image MVP~~ — **done** (`cmd/tool-gateway`, `Dockerfile.tool-gateway`, sidecar image ref)
+7. **Live network violation population** *(this card — start here)*
 8. File/workspace policy implementation *(separate domain; after network/tool proven)*
 
 Then Phase 4 observability surfaces (usage metrics → timeline model → Prometheus → OTel → audit sink → log/artifact collection).
 
-### Task: First-party tool-gateway image MVP
+### Task: Live network violation population
 
 **Goal:**  
-Ship a minimal tool-gateway sidecar that governs tool/MCP calls and reports runtime evidence via `POST /v1/report`.
+End-to-end path from enforced network blocks (dns-proxy denies) to populated `status.violations` on running AgentSessions.
 
 **Why it matters:**  
-dns-proxy covers network egress; tool governance needs a parallel first-party producer before the evidence loop is end-to-end for tool policy.
+NetworkPolicy and dns-proxy can block egress, but operators cannot see violations in session status until the reporter loop closes the gap from data-plane evidence to control-plane status.
 
 **Scope:**
-- Minimal tool-gateway container (reads policy env, evaluates tool calls, calls reporter).
-- Replace placeholder `busybox` image for `tool-gateway` sidecar type.
+- Document and/or implement minimal path: dns-proxy deny → `POST /v1/report` → `status.violations` on a live session (e2e or documented manual probe).
+- Align with existing reporter + NetworkPolicy lifecycle tests.
 
 **Non-goals:**
-- Full MCP protocol stack.
-- dns-proxy changes (done).
+- Cilium/eBPF kernel drop visibility.
+- tool-gateway changes (done).
 
 **Acceptance criteria:**
-- Sidecar reads `RELAY_REPORTER_*` env and posts deny/dry-run decisions on blocked tool calls.
-- Integration test proves reporter payload shape.
+- Running pod with enforced deny produces `PolicyViolation` entries visible on AgentSession status (e2e or documented smoke).
+- `make test` passes.
 
 **Expected files:**
-- `cmd/tool-gateway/` or similar, Dockerfile, `internal/controller/job/sidecars.go`, samples, `.cursor/relay-project-status.md`
+- `test/e2e/`, possibly `docs/design/`, `.cursor/relay-project-status.md`
 
 **Verification command:**  
-`make test`
+`make test` (+ `make test-e2e` when cluster available)
 
-**Next suggested picks:** Live network violation population · File/workspace policy implementation.
+**Next suggested picks:** File/workspace policy implementation · Usage metrics (Phase 4).
 
-**Recently completed** (do not re-implement unless regressions): **First-party dns-proxy image MVP** (`cmd/dns-proxy`, `Dockerfile.dns-proxy`, `internal/enforcement/dnsproxy/proxy.go`, integration test); **Reporter pod wiring**; **Test hardening pass**; **Structured session events API**; **Runtime reporter loop (impl)**.
+**Recently completed** (do not re-implement unless regressions): **First-party tool-gateway image MVP** (`cmd/tool-gateway`, `Dockerfile.tool-gateway`, `internal/enforcement/toolgateway/gateway.go`, integration test); **First-party dns-proxy image MVP**; **Reporter pod wiring**; **Test hardening pass**; **Structured session events API**; **Runtime reporter loop (impl)**.
 
 ---
 
@@ -318,8 +318,8 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 3. ~~Structured session events API~~ — **done** (`docs/design/phase-4-session-events.md`).
 4. ~~Reporter pod wiring~~ — **done** (Service + projected token + `RELAY_REPORTER_URL`).
 5. ~~First-party dns-proxy image MVP~~ — **done** (`cmd/dns-proxy`, `Dockerfile.dns-proxy`).
-6. **First-party tool-gateway image MVP** — **In Ready for Cursor Queue now.**
-7. **Live network violation population** — once the reporter exists.
+6. ~~First-party tool-gateway image MVP~~ — **done** (`cmd/tool-gateway`, `Dockerfile.tool-gateway`).
+7. **Live network violation population** — **In Ready for Cursor Queue now.**
 8. **File/workspace policy implementation** — separate domain; after network/tool proven.
 
 Cards below are grouped: evidence-loop cards first, then unrelated backlog.
@@ -427,31 +427,11 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-08)
 
-### Task: First-party data-plane sidecar images — evidence loop #4–#5
+### Task: First-party data-plane sidecar images — evidence loop #5–#6 — **done (2026-06-10)**
 
-**Status:** dns-proxy **done** (2026-06-09); tool-gateway **pending** (in queue).
+**Shipped:** dns-proxy (`cmd/dns-proxy`, `Dockerfile.dns-proxy`, `ghcr.io/secureai/relay-dns-proxy:latest`); tool-gateway (`cmd/tool-gateway`, `Dockerfile.tool-gateway`, `ghcr.io/secureai/relay-tool-gateway:latest`); sidecar injection in `job/sidecars.go`; `make docker-build-dns-proxy` / `make docker-build-tool-gateway`; integration tests in `dnsproxy/proxy_test.go` and `toolgateway/gateway_test.go`. Envoy still uses `busybox` placeholder.
 
-**Why it matters:**  
-RuntimeProfile sidecar injection uses `busybox:latest` placeholders for `dns-proxy`, `tool-gateway`, and `envoy`. Real enforcement requires first-party images that implement the contracts in `internal/enforcement/dnsproxy/` and `toolgateway/`. Split as #4 (dns-proxy) then #5 (tool-gateway). **Depends on:** *Runtime reporter loop (impl)* so the images can report evidence end-to-end.
-
-**Scope:**
-- Container images (or documented build targets) for dns-proxy and tool-gateway MVP.
-- Wire image refs via RuntimeProfile samples or controller defaults (configurable).
-- Smoke test that sidecars start and expose expected ports/env.
-
-**Non-goals:**
-- Production-grade Envoy/Cilium integration in one slice.
-- FS gateway image (see file policy implementation task).
-
-**Acceptance criteria:**
-- At least dns-proxy and tool-gateway images replace busybox for enabled sidecars in samples/e2e.
-- README documents image build and RuntimeProfile usage.
-
-**Expected files:**
-- `Dockerfile` or `images/` tree, samples, `README.md`, `.cursor/relay-project-status.md`
-
-**Verification command:**  
-`make test` + image build smoke (document command)
+**Verification:** `make test` (pass 2026-06-10)
 
 ### Task: Runtime reporter loop (impl) — evidence loop #2 — **done (2026-06-08)**
 
@@ -852,8 +832,8 @@ Real governance beyond env var propagation. Start narrow, prove value, then expa
 2. [x] **Runtime policy decision append** — `ApplyPolicyStatus`, `AppendRuntimePolicyDecisions`, `patchStatus` runtime merge; envtest preserve on policy re-resolve.
 3. [x] **NetworkPolicy baseline** — `internal/enforcement/networkpolicy/` + reconciler; enforced CIDR egress; FQDN not covered.
 4. [x] **Violation reporting MVP** — `AppendViolations`, `ApplyRuntimePolicyReport` derives `deny`/`dry-run` violations; `patchStatus` merge; README updated.
-5. [x] **RuntimeProfile sidecar injection** — `job/sidecars.go`; enabled `dns-proxy`/`tool-gateway`/`envoy`; placeholder images; drift detection.
-6. [x] **Tool gateway contract** — `internal/enforcement/toolgateway/` + `docs/design/phase-3-tool-gateway-contract.md`; evaluate + report; no production gateway.
+5. [x] **RuntimeProfile sidecar injection** — `job/sidecars.go`; enabled `dns-proxy`/`tool-gateway`/`envoy`; first-party images for dns-proxy + tool-gateway; envoy placeholder; drift detection.
+6. [x] **Tool gateway contract** — `internal/enforcement/toolgateway/` + `docs/design/phase-3-tool-gateway-contract.md`; evaluate + report; first-party gateway image ships in Phase 3b #6.
 7. [x] **DNS / egress proxy prototype** — `internal/enforcement/dnsproxy/`; sidecar env; `ApplyEgressProxyRuntimeEvent`; docs.
 8. [x] **File/workspace policy design** — `docs/design/phase-3-file-workspace-policy.md`; mount + RuntimeProfile MVP; defer FS gateway and path CRD fields.
 
@@ -874,7 +854,7 @@ Turn declared/propagated governance into **observed** governance. Until this shi
 3. [x] **Structured session events API** — `status.events[]`; reporter `events[]`; merge/idempotent append; design doc.
 4. [x] **Reporter pod wiring** — projected token + Service + `RELAY_REPORTER_URL` for sidecars.
 5. [x] **First-party dns-proxy image MVP** — `cmd/dns-proxy`, `Dockerfile.dns-proxy`, HTTP egress proxy + reporter client; integration test.
-6. [ ] **First-party tool-gateway image MVP** — second real producer.
+6. [x] **First-party tool-gateway image MVP** — `cmd/tool-gateway`, `Dockerfile.tool-gateway`, HTTP invoke API + reporter client; integration test.
 7. [ ] **Live network violation population** — enforced NetworkPolicy blocks → `PolicyViolation` entries.
 8. [ ] **File/workspace policy implementation** — path rules / FS gateway deferred from slice 8 (separate domain).
 

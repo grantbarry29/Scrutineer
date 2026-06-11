@@ -1,6 +1,6 @@
 # Phase 3 Tool Gateway Contract
 
-Relay governs MCP and tool calls through a **tool gateway** data-plane component. Phase 3 slice 6 defines the contract only; production gateway images and sidecar injection are later slices.
+Relay governs MCP and tool calls through a **tool gateway** data-plane component. Phase 3 defines the contract in `internal/enforcement/toolgateway/`; the first-party sidecar image (`ghcr.io/secureai/relay-tool-gateway:latest`, `cmd/tool-gateway`, `Dockerfile.tool-gateway`) implements the MVP HTTP invoke API and reporter client.
 
 ## Role
 
@@ -37,6 +37,12 @@ Produces `phase: runtime` policy decisions and violations (for `deny` / `dry-run
 
 `enforcement.Backend` implementation returns `GatewayConfig` when tool policy hints exist or a `tool-gateway` sidecar is enabled on the matched RuntimeProfile. The reconciler does not consume this yet; sidecar injection (slice 5) and gateway images wire it later.
 
+## Sidecar HTTP API (MVP)
+
+- Listen: `127.0.0.1:19090` (override via `RELAY_TOOL_GATEWAY_LISTEN`).
+- `POST /v1/tools/invoke` with JSON `{"tool":"read_file",...}` — evaluates policy, returns `403` on enforced deny, posts runtime evidence to `POST /v1/report`.
+- Agents use `RELAY_TOOL_GATEWAY_URL=http://127.0.0.1:19090` (injected on the agent container).
+
 ## Implementation
 
-See [`internal/enforcement/toolgateway/`](../internal/enforcement/toolgateway/).
+See [`internal/enforcement/toolgateway/`](../internal/enforcement/toolgateway/) and [`cmd/tool-gateway/`](../../cmd/tool-gateway/).

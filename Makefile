@@ -133,6 +133,15 @@ docker-build-dns-proxy: ## Build the dns-proxy sidecar image.
 kind-load-dns-proxy: docker-build-dns-proxy ## Build and load dns-proxy image into kind.
 	kind load docker-image $(DNS_PROXY_IMG) --name $(KIND_CLUSTER_NAME)
 
+.PHONY: docker-build-tool-gateway kind-load-tool-gateway
+TOOL_GATEWAY_IMG ?= ghcr.io/secureai/relay-tool-gateway:latest
+
+docker-build-tool-gateway: ## Build the tool-gateway sidecar image.
+	$(CONTAINER_TOOL) build -f Dockerfile.tool-gateway -t ${TOOL_GATEWAY_IMG} .
+
+kind-load-tool-gateway: docker-build-tool-gateway ## Build and load tool-gateway image into kind.
+	kind load docker-image $(TOOL_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
+
 .PHONY: dev-up
 dev-up: kind-up install ## Bring up kind + install CRDs (controller runs locally via `make run`).
 	@echo ""

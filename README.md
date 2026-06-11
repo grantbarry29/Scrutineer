@@ -174,7 +174,7 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 | `status.matchedRuntimeProfile` | Which `RuntimeProfile` was applied (name, UID, resourceVersion) |
 | `RuntimeProfileResolved` condition | `ProfileApplied` when a ref resolves; `NoProfileRef` when unset |
 
-**Sidecars (Phase 3):** enabled `spec.sidecars[]` entries (`envoy`, `dns-proxy`, `tool-gateway`) are injected into the Job pod template. The **dns-proxy** sidecar uses the first-party image `ghcr.io/secureai/relay-dns-proxy:latest` (build: `make docker-build-dns-proxy`; load into kind: `make kind-load-dns-proxy`). `tool-gateway` and `envoy` still use placeholder `busybox` images until their MVP images ship.
+**Sidecars (Phase 3):** enabled `spec.sidecars[]` entries (`envoy`, `dns-proxy`, `tool-gateway`) are injected into the Job pod template. **dns-proxy** (`ghcr.io/secureai/relay-dns-proxy:latest`) and **tool-gateway** (`ghcr.io/secureai/relay-tool-gateway:latest`) use first-party images (build: `make docker-build-dns-proxy` / `make docker-build-tool-gateway`; load into kind: `make kind-load-dns-proxy` / `make kind-load-tool-gateway`). `envoy` still uses a placeholder `busybox` image until its MVP image ships.
 
 **Runtime reporter wiring (Phase 3b):** when any enabled enforcement sidecar is present, the Job pod template also includes:
 
@@ -727,7 +727,7 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | `status.policyDecisions` | Yes | Merge-time audit entries only (max 64) |
 | Policy change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
-| `RuntimeProfile.spec.sidecars` | Injected when enabled | `dns-proxy` first-party image; `tool-gateway`/`envoy` placeholder until MVP images ship |
+| `RuntimeProfile.spec.sidecars` | Injected when enabled | `dns-proxy` and `tool-gateway` first-party images; `envoy` placeholder until MVP image ships |
 | Pod watch for reconcile | Yes | Faster `podName` / Running updates |
 | `Ready` condition | Yes | Aggregate readiness from `status.phase` |
 | Finalizer + Job cleanup on delete | Yes | `relay.secureai.dev/finalizer` |

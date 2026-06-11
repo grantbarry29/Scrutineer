@@ -52,8 +52,11 @@ func TestInjectSidecars_enabledKnownTypes(t *testing.T) {
 	if spec.Containers[1].Command != nil {
 		t.Fatalf("dns sidecar command = %v, want nil (image entrypoint)", spec.Containers[1].Command)
 	}
-	if spec.Containers[2].Name != "tools" {
+	if spec.Containers[2].Name != "tools" || spec.Containers[2].Image != toolgateway.DefaultToolGatewayImage {
 		t.Fatalf("tool sidecar = %+v", spec.Containers[2])
+	}
+	if spec.Containers[2].Command != nil {
+		t.Fatalf("tool sidecar command = %v, want nil (image entrypoint)", spec.Containers[2].Command)
 	}
 }
 
@@ -163,11 +166,57 @@ func TestBuild_agentToolGatewayEnv(t *testing.T) {
 			}},
 		},
 	}
+	pol := &policy.Resolved{
+		Mode:  relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
+	}
+	job := Build(session, &Task{}, pol, profile)
+
+	byName := map[string]corev1.Container{}
+	for _, c := range job.Spec.Template.Spec.Containers {
+		byName[c.Name] = c
+	}
+	agentEnv := envVarsToMap(byName[AgentContainerName].Env)
+	if agentEnv[EnvRelayToolGatewayURL] != toolgateway.DefaultListenAddr {
+		t.Fatalf("agent env = %v", agentEnv[EnvRelayToolGatewayURL])
+	}
+
+	gwEnv := envVarsToMap(byName["tools"].Env)
+	if gwEnv[toolgateway.EnvPolicyDeniedTools] != "kubectl" {
+		t.Fatalf("sidecar denied tools = %q", gwEnv[toolgateway.EnvPolicyDeniedTools])
+	}
+	if gwEnv[toolgateway.EnvPolicyMode] != string(relayv1alpha1.PolicyModeEnforced) {
+		t.Fatalf("sidecar mode = %q", gwEnv[toolgateway.EnvPolicyMode])
+	}
+}
+
+func TestBuild_reporterWiringForToolGateway(t *testing.T) {
+	enabled := true
+	session := minimalSession()
+	profile := &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+				Name: "tools", Type: SidecarTypeToolGateway, Enabled: &enabled,
+			}},
+		},
+	}
 	job := Build(session, &Task{}, nil, profile)
-	agent := job.Spec.Template.Spec.Containers[0]
-	env := envVarsToMap(agent.Env)
-	if env[EnvRelayToolGatewayURL] != toolgateway.DefaultListenAddr {
-		t.Fatalf("agent env = %v", env[EnvRelayToolGatewayURL])
+
+	byName := map[string]corev1.Container{}
+	for _, c := range job.Spec.Template.Spec.Containers {
+		byName[c.Name] = c
+	}
+	sidecar := byName["tools"]
+	sidecarEnv := envVarsToMap(sidecar.Env)
+	if sidecarEnv[EnvRelayReporterURL] != DefaultReporterURL {
+		t.Fatalf("RELAY_REPORTER_URL = %q", sidecarEnv[EnvRelayReporterURL])
+	}
+	wantToken := ReporterTokenMountPath + "/" + ReporterTokenFileName
+	if sidecarEnv[EnvRelayReporterTokenPath] != wantToken {
+		t.Fatalf("RELAY_REPORTER_TOKEN_PATH = %q", sidecarEnv[EnvRelayReporterTokenPath])
+	}
+	if len(sidecar.VolumeMounts) != 1 || sidecar.VolumeMounts[0].Name != ReporterTokenVolumeName {
+		t.Fatalf("sidecar volume mounts = %+v", sidecar.VolumeMounts)
 	}
 }
 

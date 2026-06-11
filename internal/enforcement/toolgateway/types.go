@@ -8,11 +8,8 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package toolgateway defines the control-plane contract for MCP/tool-call governance.
-//
-// Phase 3 slice 6: request metadata, authorization evaluation, and runtime reporting
-// shapes only. A production gateway sidecar is not implemented here; see RuntimeProfile
-// sidecar injection (slice 5) and future gateway images.
+// Package toolgateway defines the control-plane contract and first-party tool-gateway
+// sidecar (`cmd/tool-gateway`, `Dockerfile.tool-gateway`) for MCP/tool-call governance.
 package toolgateway
 
 import (
@@ -55,6 +52,9 @@ type GatewayConfig struct {
 	DeniedTools       []string                 `json:"deniedTools,omitempty"`
 	MaxToolCalls      *int32                   `json:"maxToolCalls,omitempty"`
 	MaxCallsPerMinute *int32                   `json:"maxCallsPerMinute,omitempty"`
-	// ListenAddr is the in-pod address agents should target (contract default).
+	RequireApproval   []string                 `json:"requireHumanApproval,omitempty"`
+	// ListenHost is the HTTP bind address (127.0.0.1:19090).
+	ListenHost string `json:"listenHost"`
+	// ListenAddr is the in-pod URL agents should target (contract default).
 	ListenAddr string `json:"listenAddr"`
 }
