@@ -119,6 +119,16 @@ func withDeniedDomainEgressProbe(domain string) agentSessionOption {
 	}
 }
 
+// withDeniedPathAccessProbe waits for sidecars then POSTs denied file access to RELAY_FS_GATEWAY_URL.
+func withDeniedPathAccessProbe(path string) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
+			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='{"path":"%s","operation":"read"}' --header='Content-Type: application/json' "${RELAY_FS_GATEWAY_URL}/v1/files/access" 2>/dev/null || true; sleep 2; done; sleep 120`,
+			path,
+		)}
+	}
+}
+
 // newTestNamespace creates a uniquely-named namespace for one It block.
 func newTestNamespace(prefix string) string {
 	name := fmt.Sprintf("%s-%s", prefix, rand.String(5))
@@ -223,6 +233,20 @@ func createEnforcedDeniedToolPolicy(ctx context.Context, namespace, name, tool s
 	Expect(k8sClient.Create(ctx, tp)).To(Succeed())
 }
 
+func createEnforcedDeniedPathPolicy(ctx context.Context, namespace, name, path string) {
+	GinkgoHelper()
+	ap := &relayv1alpha1.AgentPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: relayv1alpha1.AgentPolicySpec{
+			Mode: relayv1alpha1.PolicyModeEnforced,
+			PolicyRules: relayv1alpha1.PolicyRules{
+				DeniedPaths: []string{path},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
+}
+
 func createRuntimeProfileWithToolGateway(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	enabled := true
@@ -264,6 +288,30 @@ func createRuntimeProfileWithDNSProxy(ctx context.Context, namespace, name strin
 			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
 				Name:    "egress",
 				Type:    relayjob.SidecarTypeDNSProxy,
+				Enabled: &enabled,
+			}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
+}
+
+func createRuntimeProfileWithFSGateway(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	enabled := true
+	rp := &relayv1alpha1.RuntimeProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
+			Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+				AllowPrivilegeEscalation: boolPtr(false),
+			},
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+				Name:    "files",
+				Type:    relayjob.SidecarTypeFSGateway,
 				Enabled: &enabled,
 			}},
 		},

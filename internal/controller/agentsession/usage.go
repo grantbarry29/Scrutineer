@@ -43,6 +43,8 @@ func incrementUsageForDecision(session *relayv1alpha1.AgentSession, d relayv1alp
 		u.NetworkRequests++
 	case "tool":
 		u.ToolCalls++
+	case "file":
+		u.FileOperations++
 	}
 }
 
@@ -55,6 +57,7 @@ func addUsageDelta(session *relayv1alpha1.AgentSession, delta *relayv1alpha1.Ses
 	u.OutputTokens += delta.OutputTokens
 	u.ToolCalls += delta.ToolCalls
 	u.NetworkRequests += delta.NetworkRequests
+	u.FileOperations += delta.FileOperations
 }
 
 func ensureUsage(session *relayv1alpha1.AgentSession) *relayv1alpha1.SessionUsage {
@@ -78,6 +81,7 @@ func mergeUsageInPlace(dst **relayv1alpha1.SessionUsage, preserve *relayv1alpha1
 	(*dst).OutputTokens = max64((*dst).OutputTokens, preserve.OutputTokens)
 	(*dst).ToolCalls = max64((*dst).ToolCalls, preserve.ToolCalls)
 	(*dst).NetworkRequests = max64((*dst).NetworkRequests, preserve.NetworkRequests)
+	(*dst).FileOperations = max64((*dst).FileOperations, preserve.FileOperations)
 }
 
 func max64(a, b int64) int64 {

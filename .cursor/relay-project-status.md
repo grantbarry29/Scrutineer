@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 slice D done: fs-gateway sidecar MVP)
+> **Last updated:** 2026-06-10 (Phase 4 slices E–F done: file usage metrics + live file violation e2e)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **fs-gateway sidecar done**; next: **file usage metrics** (slice E).
+> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **file domain e2e complete**; next: **Prometheus metrics exporter** (Phase 4 roadmap).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -38,8 +38,8 @@ Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discove
 | ~~**B**~~ | ~~**Session timeline model**~~ — **done** | `internal/observability` projection + design doc. |
 | ~~**C**~~ | ~~**Usage-only report idempotency (`reportId` cache)**~~ — **done** | In-process seen-cache; 24h TTL. |
 | ~~**D**~~ | ~~**FS gateway sidecar MVP**~~ — **done** | First-party image + sidecar injection + integration test. |
-| **E** | **File usage metrics** *(queue head)* | `SessionUsage` file counter from `type: file` decisions. |
-| **F** | **Live file violation + usage e2e** | Mirror network/tool specs; **depends on D** (and E if asserting file counters). |
+| ~~**E**~~ | ~~**File usage metrics**~~ — **done** | `SessionUsage.fileOperations` from `type: file` decisions. |
+| ~~**F**~~ | ~~**Live file violation + usage e2e**~~ — **done** | `test/e2e/file_violation_test.go`; `kind-load-fs-gateway` in `test-e2e-images`. |
 
 After A–F: Prometheus exporter, OTel, audit sink (Phase 4 roadmap bullets).
 
@@ -488,44 +488,17 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-10)
 
-### Task: File usage metrics — Phase 4 · slice E *(queue head)*
+### Task: File usage metrics — Phase 4 · slice E — **done (2026-06-10)**
 
-**Discovered:** 2026-06-10 post-usage-metrics discussion. `SessionUsage` has no file counter; `incrementUsageForDecision` ignores `type: file`.
+**Shipped:** `SessionUsage.fileOperations` on `AgentSession` status; `incrementUsageForDecision` / `addUsageDelta` / `mergeUsageInPlace` for `type: file`; reporter `validateUsageDelta` accepts file counter; CRD regenerated. Tests: `usage_test.go`.
 
-**Why it matters:**  
-Parity with network/tool usage once FS gateway reports file access.
+**Verification:** `make manifests && make test` (pass 2026-06-10)
 
-**Scope:**
-- Add `SessionUsage` field (e.g. `fileOperations` or `fileAccesses` — pick one in implementation).
-- Increment from novel `type: file` runtime decisions; optional explicit delta on `usage` wire field.
-- Unit tests; merge/idempotency same as network/tool.
+### Task: Live file violation and usage e2e — Phase 4 · slice F — **done (2026-06-10)**
 
-**Non-goals:** FS gateway image (slice D). Prometheus.
+**Shipped:** `test/e2e/file_violation_test.go` — enforced `deniedPaths` + fs-gateway sidecar + file access probe → `status.violations`, runtime `type: file` decisions, `status.usage.fileOperations` ≥ 1; fixtures (`createRuntimeProfileWithFSGateway`, `createEnforcedDeniedPathPolicy`, `withDeniedPathAccessProbe`); `requireLiveFileEvidenceImages`; `make test-e2e-images` includes `kind-load-fs-gateway`.
 
-**Depends on:** slice D (or implement API increment in same PR as gateway).
-
-**Acceptance criteria:** `make manifests && make test` passes.
-
-**Verification:** `make manifests && make test`
-
-### Task: Live file violation and usage e2e — Phase 4 · slice F
-
-**Discovered:** 2026-06-10. Network and tool have live violation e2e; file has unit tests only.
-
-**Why it matters:**  
-End-to-end proof for the third governance domain (path policy).
-
-**Scope:**
-- E2e spec: enforced `deniedPaths` + fs-gateway sidecar + file access probe → `status.violations` + runtime decisions.
-- Assert file usage counter if slice E shipped.
-
-**Non-goals:** Full MCP / FUSE stack.
-
-**Depends on:** slice D (required); slice E (for usage assertions).
-
-**Acceptance criteria:** `make test-e2e-images && make test-e2e` (fs-gateway image in prereq target).
-
-**Verification:** `make test-e2e`
+**Verification:** `make test` (pass 2026-06-10); live spec with `make test-e2e-images && make test-e2e`.
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
@@ -903,9 +876,9 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 - [x] **Session timeline model** — UI projection/normalization over `status.events[]` *(slice B)*
 - [x] **Usage-only report idempotency** — `reportId` seen-cache for token-only reports *(slice C)*
 - [x] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D)*
-- [ ] **File usage metrics** — `SessionUsage` file counter from `type: file` decisions *(slice E — queue head)*
-- [ ] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F; depends D,E)*
-- [ ] **Prometheus metrics** — Sessions by phase, violations, approval queue depth, reconcile latency
+- [x] **File usage metrics** — `SessionUsage.fileOperations` from `type: file` decisions *(slice E)*
+- [x] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F)*
+- [ ] **Prometheus metrics** — Sessions by phase, violations, approval queue depth, reconcile latency *(queue head)*
 - [ ] **OpenTelemetry** — Traces for reconcile loop + optional agent runtime traces
 - [ ] **Audit log sink** — Export to OTLP, S3, or SIEM-compatible format
 - [ ] **Log / artifact collection** — Implement `outputs.collectLogs` / `collectArtifacts`

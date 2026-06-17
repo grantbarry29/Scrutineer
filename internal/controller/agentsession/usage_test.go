@@ -104,11 +104,41 @@ func TestApplyRuntimePolicyReport_skipsUsageDeltaWhenDecisionsAreDuplicates(t *t
 	}
 }
 
+func TestApplyRuntimePolicyReport_incrementsFileUsageFromNovelDecision(t *testing.T) {
+	ts := metav1.NewTime(time.Unix(1_700_000_003, 0))
+	session := &relayv1alpha1.AgentSession{}
+	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+		Decisions: []relayv1alpha1.PolicyDecision{{
+			Time:   ts,
+			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Type:   "file",
+			Action: relayv1alpha1.PolicyDecisionDeny,
+			Target: "/etc/passwd",
+		}},
+	})
+	if session.Status.Usage == nil || session.Status.Usage.FileOperations != 1 {
+		t.Fatalf("file operations = %+v", session.Status.Usage)
+	}
+
+	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+		Decisions: []relayv1alpha1.PolicyDecision{{
+			Time:   ts,
+			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Type:   "file",
+			Action: relayv1alpha1.PolicyDecisionDeny,
+			Target: "/etc/passwd",
+		}},
+	})
+	if session.Status.Usage.FileOperations != 1 {
+		t.Fatalf("file operations after re-delivery = %d", session.Status.Usage.FileOperations)
+	}
+}
+
 func TestMergeUsageInPlace_monotonic(t *testing.T) {
 	dst := &relayv1alpha1.SessionUsage{ToolCalls: 3}
-	preserve := &relayv1alpha1.SessionUsage{ToolCalls: 5, NetworkRequests: 2}
+	preserve := &relayv1alpha1.SessionUsage{ToolCalls: 5, NetworkRequests: 2, FileOperations: 4}
 	mergeUsageInPlace(&dst, preserve)
-	if dst.ToolCalls != 5 || dst.NetworkRequests != 2 {
+	if dst.ToolCalls != 5 || dst.NetworkRequests != 2 || dst.FileOperations != 4 {
 		t.Fatalf("merged = %+v", dst)
 	}
 }

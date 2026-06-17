@@ -1026,6 +1026,11 @@ spec:
                   Usage captures resource/usage metrics for the session.
                   Not populated in the MVP; reserved for Phase 4 observability backends.
                 properties:
+                  fileOperations:
+                    description: FileOperations is the total number of file access
+                      operations observed at runtime.
+                    format: int64
+                    type: integer
                   inputTokens:
                     description: InputTokens is the total number of input tokens consumed.
                     format: int64

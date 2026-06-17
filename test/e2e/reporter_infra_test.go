@@ -31,6 +31,7 @@ import (
 
 	"github.com/secureai/relay/internal/enforcement/dnsproxy"
 	"github.com/secureai/relay/internal/enforcement/toolgateway"
+	"github.com/secureai/relay/internal/enforcement/workspace"
 )
 
 const (
@@ -66,6 +67,15 @@ func requireLiveToolEvidenceImages(ctx SpecContext) {
 	requireRelayE2EImage(ctx)
 	if !clusterImageRunnable(ctx, toolgateway.DefaultToolGatewayImage) {
 		Skip("tool-gateway image not available in cluster — run: make kind-load-tool-gateway")
+	}
+}
+
+// requireLiveFileEvidenceImages skips the spec when fs-gateway e2e images are not present in kind.
+func requireLiveFileEvidenceImages(ctx SpecContext) {
+	GinkgoHelper()
+	requireRelayE2EImage(ctx)
+	if !clusterImageRunnable(ctx, workspace.DefaultFSGatewayImage) {
+		Skip("fs-gateway image not available in cluster — run: make kind-load-fs-gateway")
 	}
 }
 

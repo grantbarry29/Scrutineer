@@ -252,6 +252,9 @@ type SessionUsage struct {
 	// NetworkRequests is the total number of network requests made.
 	// +optional
 	NetworkRequests int64 `json:"networkRequests,omitempty"`
+	// FileOperations is the total number of file access operations observed at runtime.
+	// +optional
+	FileOperations int64 `json:"fileOperations,omitempty"`
 }
 
 // SessionEventType categorizes structured timeline events for observability surfaces.

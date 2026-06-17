@@ -115,10 +115,10 @@ func validateUsageDelta(u *relayv1alpha1.SessionUsage) error {
 	if u == nil {
 		return nil
 	}
-	if u.InputTokens < 0 || u.OutputTokens < 0 || u.ToolCalls < 0 || u.NetworkRequests < 0 {
+	if u.InputTokens < 0 || u.OutputTokens < 0 || u.ToolCalls < 0 || u.NetworkRequests < 0 || u.FileOperations < 0 {
 		return fmt.Errorf("%w: usage counters must be non-negative", ErrBadRequest)
 	}
-	if u.InputTokens == 0 && u.OutputTokens == 0 && u.ToolCalls == 0 && u.NetworkRequests == 0 {
+	if u.InputTokens == 0 && u.OutputTokens == 0 && u.ToolCalls == 0 && u.NetworkRequests == 0 && u.FileOperations == 0 {
 		return fmt.Errorf("%w: usage delta must include a positive counter", ErrBadRequest)
 	}
 	return nil
