@@ -19,6 +19,7 @@ import (
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/enforcement/dnsproxy"
 	"github.com/secureai/relay/internal/enforcement/toolgateway"
+	"github.com/secureai/relay/internal/enforcement/workspace"
 	"github.com/secureai/relay/internal/policy"
 )
 
@@ -243,6 +244,43 @@ func TestInjectSidecars_placeholderEnvoy(t *testing.T) {
 	}
 	if len(sc.Command) != 2 || sc.Command[0] != "sleep" {
 		t.Fatalf("command = %v", sc.Command)
+	}
+}
+
+func TestBuild_agentFSGatewayEnv(t *testing.T) {
+	enabled := true
+	session := minimalSession()
+	profile := &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+				Name: "files", Type: SidecarTypeFSGateway, Enabled: &enabled,
+			}},
+		},
+	}
+	pol := &policy.Resolved{
+		Mode:  relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{DeniedPaths: []string{"/etc/**"}},
+	}
+	job := Build(session, &Task{}, pol, profile)
+
+	byName := map[string]corev1.Container{}
+	for _, c := range job.Spec.Template.Spec.Containers {
+		byName[c.Name] = c
+	}
+	agentEnv := envVarsToMap(byName[AgentContainerName].Env)
+	if agentEnv[EnvRelayFSGatewayURL] != workspace.DefaultListenAddr {
+		t.Fatalf("agent env = %v", agentEnv[EnvRelayFSGatewayURL])
+	}
+
+	fsEnv := envVarsToMap(byName["files"].Env)
+	if fsEnv[workspace.EnvPolicyDeniedPaths] != "/etc/**" {
+		t.Fatalf("denied paths = %q", fsEnv[workspace.EnvPolicyDeniedPaths])
+	}
+	if fsEnv[EnvRelayReporterURL] != DefaultReporterURL {
+		t.Fatalf("reporter url = %q", fsEnv[EnvRelayReporterURL])
+	}
+	if byName["files"].Image != workspace.DefaultFSGatewayImage {
+		t.Fatalf("image = %q", byName["files"].Image)
 	}
 }
 

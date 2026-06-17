@@ -1,6 +1,6 @@
 # Phase 3 File / Workspace Policy Design
 
-Relay Phase 3 slice 8 defines how **file and workspace access** should be governed for AgentSession runtimes. **API fields, merge semantics, env propagation, and an FS gateway evaluate stub** ship in `internal/enforcement/workspace/`; a first-party FS gateway sidecar is deferred.
+Relay Phase 3 slice 8 defines how **file and workspace access** should be governed for AgentSession runtimes. **API fields, merge semantics, env propagation, evaluate/report helpers, and the first-party fs-gateway sidecar** ship in `internal/enforcement/workspace/`.
 
 ## Current state (MVP)
 
@@ -72,7 +72,7 @@ File policy must be **auditable**, **mode-aware** (`audit-only` / `dry-run` / `e
 ### Shipped (2026-06-10)
 
 1. **`PolicyRules.allowedPaths` / `deniedPaths` / `maxWorkspaceBytes`** — merge + `AGENT_POLICY_*` env propagation on agent containers.
-2. **`workspace.EvaluateFile` + `RuntimeReport`** — evaluate stub with `/**` prefix and `path.Match` glob support; `ApplyFilePolicyRuntimeEvent` in the controller.
+2. **`workspace.EvaluateFile` + `RuntimeReport` + fs-gateway sidecar** — path evaluation, `POST /v1/files/access`, reporter client (`cmd/fs-gateway`).
 3. **Mount + RuntimeProfile hardening** remain the coarse control-plane baseline (no hostPath enforcement in this slice).
 
 ### API shape
@@ -92,7 +92,7 @@ Merge semantics: union allow/deny lists; min `maxWorkspaceBytes` — same spirit
 ### Proposed future backend order
 
 1. **Mount enforcement** — controller rejects unsafe volume mounts; document required RuntimeProfile defaults for production.
-2. **FS gateway sidecar** — path checks + `RuntimeReport` (mirror `dnsproxy` / `toolgateway`).
+2. **FUSE / syscall hardening** — optional future path for transparent interception (MVP uses explicit HTTP gateway).
 3. **Sandbox profile** — platform team sets `runtimeClassName`; Relay records matched profile only.
 
 ## Reporting contract
@@ -110,7 +110,7 @@ Controller entry point: `ApplyFilePolicyRuntimeEvent` (mirrors `ApplyEgressProxy
 
 ## Non-goals (remaining)
 
-- No FS proxy sidecar image / injection
+- No FUSE transparent filesystem interception
 - No new CRDs (`FilePolicy`, `WorkspacePolicy`)
 - No mount-strategy validation beyond existing RuntimeProfile fields
 - No syscall/eBPF monitoring

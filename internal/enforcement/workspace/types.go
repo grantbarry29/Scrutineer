@@ -8,11 +8,23 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package workspace implements file/workspace policy evaluation and reporting hooks.
-// FS gateway sidecar injection is deferred; see docs/design/phase-3-file-workspace-policy.md.
+// Package workspace implements file/workspace policy evaluation and the first-party
+// fs-gateway sidecar (`cmd/fs-gateway`, `Dockerfile.fs-gateway`).
 package workspace
 
 import "github.com/secureai/relay/internal/enforcement"
+
+// SidecarType is the RuntimeProfile sidecar type for FS gateways.
+const SidecarType = "fs-gateway"
+
+// DefaultFSGatewayImage is the first-party fs-gateway container image reference.
+const DefaultFSGatewayImage = "ghcr.io/secureai/relay-fs-gateway:latest"
+
+// DefaultListenHost is the bind address for the fs-gateway HTTP server.
+const DefaultListenHost = "127.0.0.1:19191"
+
+// DefaultListenAddr is the in-pod URL agents use when an fs-gateway sidecar is injected.
+const DefaultListenAddr = "http://127.0.0.1:19191"
 
 // FileRequest is metadata for a single file operation.
 type FileRequest struct {

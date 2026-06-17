@@ -32,14 +32,25 @@ func HasFilePolicy(rules relayv1alpha1.PolicyRules) bool {
 		rules.MaxWorkspaceBytes != nil
 }
 
-// Applicable reports whether file policy evaluation should run for a session.
+// Applicable reports whether file policy evaluation or fs-gateway config should run.
 func Applicable(ctx enforcement.SessionContext) bool {
-	return HasFilePolicy(ctx.Policy)
+	return HasFilePolicy(ctx.Policy) || HasEnabledSidecar(ctx)
+}
+
+// HasEnabledSidecar reports whether the session context includes an enabled fs-gateway sidecar.
+func HasEnabledSidecar(ctx enforcement.SessionContext) bool {
+	for _, s := range ctx.Sidecars {
+		if s.Type != SidecarType {
+			continue
+		}
+		if s.Enabled == nil || *s.Enabled {
+			return true
+		}
+	}
+	return false
 }
 
 // EvaluateFile applies effective file policy and mode semantics to a file access request.
-// Enforcement is evaluate-only until an FS gateway sidecar ships; callers use this stub
-// for tests and future data-plane integration.
 func EvaluateFile(ctx enforcement.SessionContext, req FileRequest) FileAuthorization {
 	p := normalizePath(req.Path)
 	if p == "" {

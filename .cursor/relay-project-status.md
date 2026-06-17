@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 slice C done: usage-only reportId idempotency cache)
+> **Last updated:** 2026-06-10 (Phase 4 slice D done: fs-gateway sidecar MVP)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **reportId cache done**; next: **FS gateway sidecar MVP** (slice D).
+> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **fs-gateway sidecar done**; next: **file usage metrics** (slice E).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -37,8 +37,8 @@ Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discove
 | ~~**A**~~ | ~~**E2e usage metric assertions**~~ — **done** | Live `networkRequests` / `toolCalls` in violation e2e specs. |
 | ~~**B**~~ | ~~**Session timeline model**~~ — **done** | `internal/observability` projection + design doc. |
 | ~~**C**~~ | ~~**Usage-only report idempotency (`reportId` cache)**~~ — **done** | In-process seen-cache; 24h TTL. |
-| **D** | **FS gateway sidecar MVP** *(queue head)* | Unblocks file runtime evidence (violations + metrics). |
-| **E** | **File usage metrics** | `SessionUsage` field + `type: file` decision increment; **depends on D** (or ship in same slice). |
+| ~~**D**~~ | ~~**FS gateway sidecar MVP**~~ — **done** | First-party image + sidecar injection + integration test. |
+| **E** | **File usage metrics** *(queue head)* | `SessionUsage` file counter from `type: file` decisions. |
 | **F** | **Live file violation + usage e2e** | Mirror network/tool specs; **depends on D** (and E if asserting file counters). |
 
 After A–F: Prometheus exporter, OTel, audit sink (Phase 4 roadmap bullets).
@@ -482,26 +482,13 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make manifests && make test` (pass 2026-06-10)
 
-### Task: First-party FS gateway sidecar MVP — Phase 4 · slice D
+### Task: First-party FS gateway sidecar MVP — Phase 4 · slice D — **done (2026-06-10)**
 
-**Discovered:** 2026-06-10 after file/workspace policy API + evaluate stub (#8). Mirror dns-proxy/tool-gateway: sidecar type `fs-gateway`, path evaluation at runtime, `POST /v1/report` for deny events.
+**Shipped:** `cmd/fs-gateway`, `Dockerfile.fs-gateway`, `internal/enforcement/workspace/` gateway (`POST /v1/files/access`), runtime env, reporter client; `job/sidecars.go` injection for `fs-gateway` + `RELAY_FS_GATEWAY_URL` on agent; `make docker-build-fs-gateway` / `kind-load-fs-gateway`; integration test in `gateway_test.go`.
 
-**Why it matters:**  
-File policy is evaluate-only until a data-plane producer reports `type: file` evidence.
+**Verification:** `make test` (pass 2026-06-10)
 
-**Scope:**
-- `cmd/fs-gateway` or in-pod hook; RuntimeProfile sidecar injection; integration test.
-- Reporter client; `make docker-build-fs-gateway` / kind-load (mirror dns-proxy/tool-gateway).
-
-**Non-goals:** FUSE production hardening in one slice.
-
-**Acceptance criteria:** Integration test proves deny → reporter payload; sidecar replaces placeholder when enabled.
-
-**Verification:** `make test` (+ image build smoke documented)
-
-**Blocks:** slice E (file usage metrics), slice F (live file violation e2e).
-
-### Task: File usage metrics — Phase 4 · slice E
+### Task: File usage metrics — Phase 4 · slice E *(queue head)*
 
 **Discovered:** 2026-06-10 post-usage-metrics discussion. `SessionUsage` has no file counter; `incrementUsageForDecision` ignores `type: file`.
 
@@ -915,8 +902,8 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 - [x] **E2e usage metric assertions** — live `networkRequests` / `toolCalls` on existing violation specs *(slice A)*
 - [x] **Session timeline model** — UI projection/normalization over `status.events[]` *(slice B)*
 - [x] **Usage-only report idempotency** — `reportId` seen-cache for token-only reports *(slice C)*
-- [ ] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D — queue head)*
-- [ ] **File usage metrics** — `SessionUsage` file counter from `type: file` decisions *(slice E; depends D)*
+- [x] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D)*
+- [ ] **File usage metrics** — `SessionUsage` file counter from `type: file` decisions *(slice E — queue head)*
 - [ ] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F; depends D,E)*
 - [ ] **Prometheus metrics** — Sessions by phase, violations, approval queue depth, reconcile latency
 - [ ] **OpenTelemetry** — Traces for reconcile loop + optional agent runtime traces

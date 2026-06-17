@@ -108,10 +108,17 @@ func expectNoJobForSession(ctx context.Context, ns string, session *relayv1alpha
 
 func requestCancellation(ctx context.Context, key client.ObjectKey) {
 	GinkgoHelper()
-	var got relayv1alpha1.AgentSession
-	Expect(k8sClient.Get(ctx, key, &got)).To(Succeed())
-	got.Spec.CancelRequested = true
-	Expect(k8sClient.Update(ctx, &got)).To(Succeed())
+	// The in-process reconciler updates status concurrently; a bare Get+Update races
+	// on resourceVersion and returns 409 Conflict on slow CI.
+	Eventually(func(g Gomega) {
+		var got relayv1alpha1.AgentSession
+		g.Expect(k8sClient.Get(ctx, key, &got)).To(Succeed())
+		if got.Spec.CancelRequested {
+			return
+		}
+		got.Spec.CancelRequested = true
+		g.Expect(k8sClient.Update(ctx, &got)).To(Succeed())
+	}, 15*time.Second, 200*time.Millisecond).Should(Succeed())
 }
 
 func expectTimedOutStatus(got *relayv1alpha1.AgentSession) {

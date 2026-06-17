@@ -139,13 +139,17 @@ func postRuntimeReport(ctx context.Context, baseURL string, report reporter.Repo
 	body, err := json.Marshal(report)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/report", bytes.NewReader(body))
-	Expect(err).NotTo(HaveOccurred())
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer stub")
+	// Reporter status merges race with the reconciler; the handler returns 409 when
+	// optimistic concurrency retries are exhausted — retry the POST like a real sidecar.
+	Eventually(func(g Gomega) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/report", bytes.NewReader(body))
+		g.Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer stub")
 
-	resp, err := http.DefaultClient.Do(req)
-	Expect(err).NotTo(HaveOccurred())
-	defer resp.Body.Close()
-	Expect(resp.StatusCode).To(Equal(http.StatusAccepted), "reporter returned non-202")
+		resp, err := http.DefaultClient.Do(req)
+		g.Expect(err).NotTo(HaveOccurred())
+		defer resp.Body.Close()
+		g.Expect(resp.StatusCode).To(Equal(http.StatusAccepted), "reporter returned %d", resp.StatusCode)
+	}, 15*time.Second, 200*time.Millisecond).Should(Succeed())
 }

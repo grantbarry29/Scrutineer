@@ -146,6 +146,15 @@ docker-build-tool-gateway: ## Build the tool-gateway sidecar image.
 kind-load-tool-gateway: docker-build-tool-gateway ## Build and load tool-gateway image into kind.
 	kind load docker-image $(TOOL_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
 
+.PHONY: docker-build-fs-gateway kind-load-fs-gateway
+FS_GATEWAY_IMG ?= ghcr.io/secureai/relay-fs-gateway:latest
+
+docker-build-fs-gateway: ## Build the fs-gateway sidecar image.
+	$(CONTAINER_TOOL) build -f Dockerfile.fs-gateway -t ${FS_GATEWAY_IMG} .
+
+kind-load-fs-gateway: docker-build-fs-gateway ## Build and load fs-gateway image into kind.
+	kind load docker-image $(FS_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
+
 .PHONY: dev-up
 dev-up: kind-up install ## Bring up kind + install CRDs (controller runs locally via `make run`).
 	@echo ""

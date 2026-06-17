@@ -20,6 +20,7 @@ import (
 	"github.com/secureai/relay/internal/enforcement"
 	"github.com/secureai/relay/internal/enforcement/dnsproxy"
 	"github.com/secureai/relay/internal/enforcement/toolgateway"
+	"github.com/secureai/relay/internal/enforcement/workspace"
 	"github.com/secureai/relay/internal/policy"
 )
 
@@ -27,6 +28,7 @@ import (
 const (
 	SidecarTypeDNSProxy    = "dns-proxy"
 	SidecarTypeToolGateway = "tool-gateway"
+	SidecarTypeFSGateway   = "fs-gateway"
 	SidecarTypeEnvoy       = "envoy"
 )
 
@@ -38,6 +40,7 @@ const (
 const (
 	EnvRelaySidecarType       = "RELAY_SIDECAR_TYPE"
 	EnvRelayToolGatewayURL    = "RELAY_TOOL_GATEWAY_URL"
+	EnvRelayFSGatewayURL      = "RELAY_FS_GATEWAY_URL"
 	EnvRelayReporterURL       = "RELAY_REPORTER_URL"
 	EnvRelayReporterTokenPath = "RELAY_REPORTER_TOKEN_PATH"
 	EnvHTTPProxy              = "HTTP_PROXY"
@@ -60,6 +63,7 @@ const (
 var knownSidecarTypes = map[string]struct{}{
 	SidecarTypeDNSProxy:    {},
 	SidecarTypeToolGateway: {},
+	SidecarTypeFSGateway:   {},
 	SidecarTypeEnvoy:       {},
 }
 
@@ -162,7 +166,7 @@ func buildSidecarContainer(sc relayv1alpha1.RuntimeProfileSidecar, session *rela
 
 func sidecarCommand(sidecarType string) []string {
 	switch sidecarType {
-	case SidecarTypeDNSProxy, SidecarTypeToolGateway:
+	case SidecarTypeDNSProxy, SidecarTypeToolGateway, SidecarTypeFSGateway:
 		return nil
 	default:
 		return []string{"sleep", placeholderSidecarSleep}
@@ -182,6 +186,8 @@ func placeholderImageForType(sidecarType string) string {
 		return dnsproxy.DefaultDNSProxyImage
 	case SidecarTypeToolGateway:
 		return toolgateway.DefaultToolGatewayImage
+	case SidecarTypeFSGateway:
+		return workspace.DefaultFSGatewayImage
 	case SidecarTypeEnvoy:
 		return PlaceholderEnvoyImage
 	default:
@@ -215,6 +221,12 @@ func sidecarBaseEnv(sidecarType string, session *relayv1alpha1.AgentSession, pol
 		ctx.Policy = rules
 		env = append(env, dnsproxy.EnvForConfig(dnsproxy.BuildConfig(ctx))...)
 	}
+	if sidecarType == SidecarTypeFSGateway {
+		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))
+		ctx.Mode = mode
+		ctx.Policy = rules
+		env = append(env, workspace.EnvForConfig(workspace.BuildConfig(ctx))...)
+	}
 	if hasEnabledReportingSidecar(profile) {
 		env = append(env, reporterSidecarEnv()...)
 	}
@@ -235,6 +247,9 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, profile *relayv1alpha1.RuntimePro
 			corev1.EnvVar{Name: EnvHTTPSProxy, Value: dnsproxy.DefaultHTTPProxyURL},
 			corev1.EnvVar{Name: EnvNoProxy, Value: "localhost,127.0.0.1"},
 		)
+	}
+	if hasEnabledSidecar(profile, SidecarTypeFSGateway) {
+		env = append(env, corev1.EnvVar{Name: EnvRelayFSGatewayURL, Value: workspace.DefaultListenAddr})
 	}
 	return env
 }

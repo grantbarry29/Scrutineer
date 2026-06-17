@@ -75,6 +75,22 @@ func TestEvaluateFile_dryRunAllowsWithViolationAction(t *testing.T) {
 	}
 }
 
+func TestHasEnabledSidecar(t *testing.T) {
+	disabled := false
+	ctx := enforcement.SessionContext{
+		Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+			{Type: SidecarType, Enabled: &disabled},
+		},
+	}
+	if HasEnabledSidecar(ctx) {
+		t.Fatal("disabled sidecar should not count")
+	}
+	ctx.Sidecars[0].Enabled = nil
+	if !HasEnabledSidecar(ctx) {
+		t.Fatal("nil enabled should default to enabled")
+	}
+}
+
 func TestPathMatches_globPatterns(t *testing.T) {
 	cases := []struct {
 		pattern string

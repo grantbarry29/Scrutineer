@@ -82,7 +82,7 @@ type RuntimeProfileSidecar struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Type identifies the sidecar role. Known values: envoy, dns-proxy, tool-gateway.
+	// Type identifies the sidecar role. Known values: envoy, dns-proxy, tool-gateway, fs-gateway.
 	// Additional types may be added when enforcement backends ship.
 	// +kubebuilder:validation:MinLength=1
 	Type string `json:"type"`
