@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 audit log sink)
+> **Last updated:** 2026-06-10 (Phase 4 log/artifact collection — Phase 4 complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **audit log sink shipped**; next: **log/artifact collection** (Phase 4 roadmap).
+> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). Next: **Phase 5 approval workflows** or **Phase 7 UI** (product choice).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -41,7 +41,7 @@ Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discove
 | ~~**E**~~ | ~~**File usage metrics**~~ — **done** | `SessionUsage.fileOperations` from `type: file` decisions. |
 | ~~**F**~~ | ~~**Live file violation + usage e2e**~~ — **done** | `test/e2e/file_violation_test.go`; `kind-load-fs-gateway` in `test-e2e-images`. |
 
-After A–F: ~~Prometheus exporter~~ **done** → ~~OTel~~ **done** → ~~audit sink~~ **done** → log/artifact collection (Phase 4 roadmap bullets).
+After A–F: ~~Prometheus exporter~~ **done** → ~~OTel~~ **done** → ~~audit sink~~ **done** → ~~log/artifact collection~~ **done**.
 
 ---
 
@@ -65,7 +65,7 @@ After A–F: ~~Prometheus exporter~~ **done** → ~~OTel~~ **done** → ~~audit 
 
 **Verification:** `make test` (pass 2026-06-10)
 
-**Recently completed** (do not re-implement unless regressions): **Session timeline model**; **E2e usage metric assertions**; **Usage metrics (control-plane)**; **Phase 3b evidence loop**.
+**Recently completed** (do not re-implement unless regressions): **Log/artifact collection**; **Audit log sink**; **OpenTelemetry**; **Prometheus metrics**; file domain e2e; Phase 3b evidence loop.
 
 ---
 
@@ -518,6 +518,24 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-10). Enable with e.g. `--audit-log-otlp-endpoint=http://otel-collector:4318`.
 
+### Task: Log and artifact collection — Phase 4 — **done (2026-06-10)**
+
+**Shipped:** `internal/controller/agentsession/outputs.go` — on terminal phase, when `spec.outputs.collectLogs` / `collectArtifacts`: fetch agent pod logs → owned ConfigMap (`configmap://` URI); tar workspace path (default `<mount>/artifacts`) via pod exec → owned Secret (`secret://` URI); populate `status.artifacts`; lifecycle event + `OutputsCollected` event. Caps 512KiB each; idempotent per artifact name. RBAC: `pods/log`, `pods/exec`, ConfigMap/Secret write. Tests: `outputs_test.go`.
+
+**Verification:** `make manifests && make test` (pass 2026-06-10)
+
+### Task: External artifact storage export (S3 / object store)
+
+**Discovered:** 2026-06-10 post log/artifact collection MVP. Collection stores payloads in owned ConfigMaps/Secrets (`configmap://` / `secret://` URIs) with 512KiB caps.
+
+**Why it matters:** Enterprise retention and forensics typically need durable object storage, not etcd-sized ConfigMaps.
+
+**Scope (proposed):** Pluggable export backend; upload after collection; `status.artifacts` URIs like `s3://bucket/key`; configurable credentials via future `CredentialProfile`.
+
+**Non-goals:** Replacing in-cluster MVP path in the same task.
+
+**Verification:** `make test` + integration test with mock S3 or MinIO.
+
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
 **Shipped:** `internal/controller/job/sidecars.go` — inject enabled known sidecars; `RELAY_TOOL_GATEWAY_URL` on agent; `RuntimeProfileDrift` includes sidecars; envtest coverage.
@@ -601,68 +619,50 @@ RBAC must match kubebuilder markers and actual client calls (Jobs delete, Config
 
 ## Current Operational State
 
-Relay is in **early MVP / vertical-slice** stage. The core control-plane loop works end-to-end on a local kind cluster, but most governance is **declared and propagated**, not **enforced**.
+Relay has shipped an **end-to-end governance MVP** on Kubernetes: control-plane reconciliation, three data-plane enforcement domains (network / tool / file), runtime evidence into CRD status, and observability export (Prometheus, OTel traces, OTLP audit logs). **Not yet shipped:** operational UI, real approval gates, orchestrator adapters beyond Jobs, enterprise identity/credentials.
 
 | Area | State | Notes |
 |------|-------|-------|
-| **AgentSession CRD** | Done | `relay.secureai.dev/v1alpha1`, spec/status + `policyRefs` |
-| **AgentPolicy CRD** | Done | Reusable rules + `mode`; `spec.policyRefs`; watch → re-reconcile |
-| **ToolPolicy CRD** | Done | Tool/MCP rules; merge + watch; `maxCallsPerMinute` propagated to effective policy + env |
-| **Controller (kubernetes-job)** | Done | Reconciles to `batch/v1` Job, lifecycle phases, conditions, events |
-| **Policy propagation** | Done | Merge `policyRefs` + inline → `status.effectivePolicy` → `AGENT_POLICY_*` env |
-| **Policy enforcement** | Not started | Env vars are hooks only; no network/tool/file gates |
-| **Dev environment** | Done | Devcontainer + kind (`relay-dev`) + bootstrap scripts |
-| **E2E tests** | Done | `make test-e2e` — **12** specs against live kind cluster |
-| **Unit / envtest** | Done | Controller suite — **47** envtest specs; ~**78%** coverage |
-| **CI** | Done | `.github/workflows/test.yaml`, `e2e.yaml`, `lint.yaml` |
-| **In-cluster deploy** | Ready | `make dev-deploy` builds image + deploys manager |
-| **RuntimeProfile CRD** | Done | CRD + `runtimeProfileRef` + Job apply + watch + README/samples/e2e |
-| **Additional CRDs (Phase 2)** | **Done** | `AgentPolicy`, `ToolPolicy`, `RuntimeProfile` — control-plane complete |
-| **Additional CRDs (later)** | Not started | ApprovalPolicy, CredentialProfile, SessionTemplate, ToolGateway |
-| **Operational UI** | Not started | Vision documented in product rule |
-| **Audit / observability backend** | Not started | Status fields exist; not populated by sidecars yet |
+| **AgentSession CRD** | Done | Full spec/status including `usage`, `events`, `violations`, `artifacts` |
+| **Policy CRDs** | Done | `AgentPolicy`, `ToolPolicy`, merge + watches + effective policy |
+| **RuntimeProfile CRD** | Done | Hardening + sidecar injection (`dns-proxy`, `tool-gateway`, `fs-gateway`) |
+| **Controller (kubernetes-job)** | Done | Lifecycle, cancellation, finalizers, NetworkPolicy baseline |
+| **Policy enforcement (data plane)** | **MVP done** | Sidecar gateways + reporter → observed violations/decisions/usage |
+| **Runtime evidence loop** | Done | `POST /v1/report`, idempotent merge, live e2e (network/tool/file) |
+| **Observability export** | Done | Prometheus `:8080/metrics`; OTLP traces + audit logs (opt-in flags) |
+| **Log/artifact collection** | Done | Terminal sessions → owned ConfigMap (logs) / Secret (workspace tar); `status.artifacts` |
+| **Unit / envtest** | Done | Controller suite; `make test` pass |
+| **E2E tests** | Done | `make test-e2e` — live violation specs + usage assertions (incl. file domain) |
+| **CI / dev environment** | Done | GitHub Actions; devcontainer + kind |
+| **Operational UI** | Not started | Phase 7 |
+| **Approval workflows** | Not started | `requireHumanApproval` warns only; Phase 5 |
+| **Orchestrator adapters** | Not started | `kubernetes-job` only; Phase 6 |
+| **Enterprise platform** | Not started | Per-session identity, CredentialProfile, sandboxes; Phase 8 |
 
 ### What works today
 
-- Create `AgentSession` → controller validates → creates owned Job → tracks `Pending` → `Starting` → `Running` → `Succeeded` / `Failed` / `TimedOut` / `Denied` / `Cancelled`
-- CRD admission rejects invalid `temperature` (string + Pattern)
-- Controller validation denies bad specs (empty task, empty model fields, invalid workspace size) without creating a Job
-- Foreign Job name collision → `PhaseDenied` with `JobConflict` (no adoption of unowned Jobs)
-- `task.promptConfigMapRef` loads prompt from ConfigMap into `AGENT_TASK_PROMPT`
-- `AgentPolicy` + `ToolPolicy` CRDs + `spec.policyRefs` — merge referenced policies with inline overrides → `status.effectivePolicy`, `status.matchedPolicies`, `AGENT_POLICY_MODE` env
-- Policy CRD watches — `AgentPolicy` / `ToolPolicy` update/delete re-reconciles affected AgentSessions (same namespace)
-- Job env sync — pending Job replaced on policy drift; active Job → `PolicyPropagated=False` / `PolicyEnvDrift` warning
-- `status.policyDecisions` — merge-time audit entries (mode, matched policies, allow/deny lists, caps); max 64 per session
-- Policy fields injected as `AGENT_POLICY_*` / `RELAY_*` env vars (from effective merged policy)
-- Workspace emptyDir mount, resource limits, timeout, basic container hardening
-- Kubernetes Events on validation, Job create, running, success, failure, cancellation
-- `spec.cancelRequested: true` deletes the owned Job and reaches terminal `PhaseCancelled` with `Completed` condition
-- `status.podName` set to the newest Pod owned by the session's Job (when a Pod exists)
-- `RuntimeProfile` + `spec.runtimeProfileRef` — merge profile into Job pod template; `status.matchedRuntimeProfile`; `RuntimeProfileResolved` condition; watch + pending Job replace on profile drift
-- Sample manifests (success, failing, policy/toolpolicy/runtimeprofile refs) and README documentation
+- **Session lifecycle:** Create `AgentSession` → validate → Job → `Pending` → `Running` → terminal phases; cancel + finalizer cleanup
+- **Policy:** `policyRefs` merge → `status.effectivePolicy` → env propagation; policy CRD watches; merge + runtime `policyDecisions`
+- **Enforcement:** Enforced CIDR `NetworkPolicy`; **dns-proxy** egress; **tool-gateway** invokes; **fs-gateway** file access API
+- **Observed governance:** Reporter populates `status.violations`, runtime decisions, `status.events`, `status.usage` (network/tool/file counters)
+- **Live e2e:** Network, tool, and file violation + usage specs against kind (`make test-e2e-images`)
+- **Observability:** `relay_*` Prometheus metrics; OpenTelemetry reconcile/reporter spans; OTLP audit records (`policy.violation`, `session.phase_change`, `runtime.report`)
+- **Outputs:** When `spec.outputs.collectLogs` / `collectArtifacts` and session is terminal, controller retains agent pod logs (ConfigMap) and workspace tarball (Secret), refs in `status.artifacts`
+- **Timeline model:** `internal/observability` projection over `status.events[]` (library for future UI)
 
-### Known gaps (MVP vs schema)
+### Known gaps (MVP vs schema / roadmap)
 
-| Capability | In API/schema | Implemented in controller |
-|------------|---------------|---------------------------|
-| `task.promptConfigMapRef` | Yes | Done — loads key from same-namespace ConfigMap |
-| `status.usage` | Yes | Yes — runtime reports (network/tool decision counts + optional token deltas) |
-| `status.podName` | Yes | Done — labeled session Pods, current Job UID, newest `CreationTimestamp` (name tie-break); see `internal/controller/agentsession/pod.go` |
-| `status.violations` | Yes | Yes — via `ApplyRuntimePolicyReport` (`deny` / `dry-run` outcomes) |
-| `status.artifacts` | Yes | No — `outputs.collectArtifacts` not implemented |
-| `spec.policyRefs` / `AgentPolicy` / `ToolPolicy` | Yes | Done — same-namespace refs; merge order refs → inline; missing ref → `InvalidPolicy` |
-| `spec.runtimeProfileRef` | Yes | Done — profile merges into Job container/pod spec; `matchedRuntimeProfile`; `RuntimeProfileResolved` |
-| `PolicyPropagated` / Job env sync | Yes | Pending Job replaced on policy drift; active Job → `PolicyEnvDrift` condition + warning event |
-| `status.effectivePolicy` / `matchedPolicies` | Yes | Done — populated on reconcile |
-| `status.policyDecisions` | Yes | Done — merge-time only (`phase: merge`); replaced each reconcile; capped at 64 |
-| `policy.requireHumanApproval` | Yes | Warning event `ApprovalNotEnforced` on effective policy; does not block execution |
-| `spec.cancelRequested` | Yes | Done — deletes Job; sets `PhaseCancelled`, condition, event |
-| `PhaseCancelled` | Yes | Done — terminal via cancel reconcile path |
-| Terminal session + missing Job | — | Done — terminal phases skip `ensureJob`; `syncStatusFromJob` does not regress phase |
-| AgentSession delete | — | Done — finalizer blocks delete; owned Job removed; finalizer cleared |
-| Orchestrators beyond `kubernetes-job` | Enum reserved | Rejected at validation |
-| PVC-backed workspace | Commented future | emptyDir only |
-| Webhook validation | Generated scaffold | Not wired |
+| Capability | In API/schema | Implemented |
+|------------|---------------|-------------|
+| `status.artifacts` | Yes | **Yes** — ConfigMap/Secret refs on terminal collection (512KiB caps; in-cluster only) |
+| `status.usage` | Yes | Yes — runtime reports + token deltas |
+| `status.violations` / runtime decisions | Yes | Yes — reporter + sidecars |
+| `policy.requireHumanApproval` | Yes | Warning event only; does not block (Phase 5) |
+| FQDN egress enforcement | Partial | DNS proxy domain policy; no Cilium/Envoy FQDN |
+| FUSE / transparent file intercept | No | Explicit HTTP fs-gateway only |
+| S3 / external artifact store | No | `configmap://` / `secret://` URIs only |
+| Admission webhook | Scaffold | Controller validation only |
+| Orchestrators beyond Job | Enum reserved | Validation rejects others |
 
 ### status.podName selection semantics
 
@@ -898,10 +898,12 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 - [x] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F)*
 - [x] **Prometheus metrics** — sessions by phase, violations, approval queue proxy, reporter outcomes
 - [x] **OpenTelemetry** — reconcile + reporter traces; W3C propagation for sidecar/agent continuity
-- [x] **Audit log sink** — OTLP HTTP structured audit records *(done)*
-- [ ] **Log / artifact collection** — Implement `outputs.collectLogs` / `collectArtifacts` *(queue head)*
+- [x] **Audit log sink** — OTLP HTTP structured audit records
+- [x] **Log / artifact collection** — `spec.outputs` → ConfigMap logs + Secret workspace tar; `status.artifacts` *(Phase 4 complete)*
 
 > **Note:** *Structured session events API* moved to Phase 3b (it is the reporter's durable sink). *Session timeline model* and *Usage metrics* stay here but now follow the evidence loop.
+
+**Phase 4 is complete** for the observability roadmap slice (no UI). Next product capabilities: Phase 5 (approvals) or Phase 7 (UI shell).
 
 ---
 

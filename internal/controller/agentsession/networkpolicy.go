@@ -29,6 +29,11 @@ import (
 
 // patchStatusWithEnforcement persists status and reconciles NetworkPolicy enforcement.
 func (r *AgentSessionReconciler) patchStatusWithEnforcement(ctx context.Context, original, session *relayv1alpha1.AgentSession, profile *relayv1alpha1.RuntimeProfile) error {
+	if isTerminal(session.Status.Phase) {
+		if err := r.collectSessionOutputs(ctx, session); err != nil {
+			r.recordWarning(session, EventReasonOutputsCollectionFailed, err.Error())
+		}
+	}
 	if err := r.ensureNetworkPolicy(ctx, session, profile); err != nil {
 		return fmt.Errorf("ensure NetworkPolicy: %w", err)
 	}

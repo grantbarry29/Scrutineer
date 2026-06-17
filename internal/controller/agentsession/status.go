@@ -42,6 +42,7 @@ func (r *AgentSessionReconciler) patchStatus(ctx context.Context, original, upda
 	mergeViolationsInPlace(&desired.Violations, original.Status.Violations)
 	mergeEventsInPlace(&desired.Events, original.Status.Events)
 	mergeUsageInPlace(&desired.Usage, original.Status.Usage)
+	mergeArtifactsInPlace(&desired.Artifacts, original.Status.Artifacts)
 
 	var live relayv1alpha1.AgentSession
 	key := client.ObjectKeyFromObject(updated)
@@ -53,6 +54,7 @@ func (r *AgentSessionReconciler) patchStatus(ctx context.Context, original, upda
 	mergeViolationsInPlace(&desired.Violations, live.Status.Violations)
 	mergeEventsInPlace(&desired.Events, live.Status.Events)
 	mergeUsageInPlace(&desired.Usage, live.Status.Usage)
+	mergeArtifactsInPlace(&desired.Artifacts, live.Status.Artifacts)
 
 	if equalStatus(&live.Status, desired) {
 		return nil

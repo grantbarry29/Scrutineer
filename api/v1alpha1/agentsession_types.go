@@ -315,7 +315,7 @@ type PolicyViolation struct {
 }
 
 // ArtifactRef references an artifact produced by an AgentSession.
-// Reserved for Phase 4 log/artifact collection; the MVP controller does not populate this field.
+// Populated when spec.outputs requests log/artifact collection on terminal phases.
 type ArtifactRef struct {
 	// Name is a human-readable name of the artifact.
 	Name string `json:"name"`
@@ -412,8 +412,7 @@ type AgentSessionStatus struct {
 	// +kubebuilder:validation:MaxItems=256
 	Events []SessionEvent `json:"events,omitempty"`
 
-	// Artifacts references artifacts collected from this session.
-	// Not populated in the MVP; reserved for Phase 4 log/artifact collection.
+	// Artifacts references artifacts collected from this session when spec.outputs requests retention.
 	// +optional
 	Artifacts []ArtifactRef `json:"artifacts,omitempty"`
 }

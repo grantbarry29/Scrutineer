@@ -49,6 +49,10 @@ const (
 	EventReasonPolicyEnvSynced        = "PolicyEnvSynced"
 	// EventReasonNetworkPolicySynced — owned NetworkPolicy was created or updated for CIDR enforcement.
 	EventReasonNetworkPolicySynced = "NetworkPolicySynced"
+	// EventReasonOutputsCollected — terminal session outputs were retained (logs/artifacts).
+	EventReasonOutputsCollected = "OutputsCollected"
+	// EventReasonOutputsCollectionFailed — output collection was requested but failed (warning).
+	EventReasonOutputsCollectionFailed = "OutputsCollectionFailed"
 )
 
 // Orchestrator values supported by Relay.

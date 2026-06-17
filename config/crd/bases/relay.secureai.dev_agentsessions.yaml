@@ -572,13 +572,12 @@ spec:
             description: AgentSessionStatus defines the observed state of an AgentSession.
             properties:
               artifacts:
-                description: |-
-                  Artifacts references artifacts collected from this session.
-                  Not populated in the MVP; reserved for Phase 4 log/artifact collection.
+                description: Artifacts references artifacts collected from this session
+                  when spec.outputs requests retention.
                 items:
                   description: |-
                     ArtifactRef references an artifact produced by an AgentSession.
-                    Reserved for Phase 4 log/artifact collection; the MVP controller does not populate this field.
+                    Populated when spec.outputs requests log/artifact collection on terminal phases.
                   properties:
                     mediaType:
                       description: MediaType is the artifact's MIME type.

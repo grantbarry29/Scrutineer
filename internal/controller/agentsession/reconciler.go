@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -43,9 +45,11 @@ type AgentSessionReconciler struct {
 	client.Client
 	// APIReader is an uncached reader used to detect deletion and Job cleanup state when
 	// the cached client lags behind the apiserver (common in envtest and after kubectl delete).
-	APIReader client.Reader
-	Scheme    *runtime.Scheme
-	Recorder  record.EventRecorder
+	APIReader  client.Reader
+	Scheme     *runtime.Scheme
+	Recorder   record.EventRecorder
+	RESTConfig *rest.Config
+	clientset  kubernetes.Interface
 }
 
 // requeueAfter is how long the reconciler waits before re-polling Job state when the Job
@@ -65,7 +69,10 @@ const deletionRequeueAfter = 2 * time.Second
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
+// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main entry point for AgentSession reconciliation.
 //
@@ -591,6 +598,7 @@ func (r *AgentSessionReconciler) recordWarning(session *relayv1alpha1.AgentSessi
 
 // SetupWithManager wires the reconciler into the controller-runtime manager.
 func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.RESTConfig = mgr.GetConfig()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&relayv1alpha1.AgentSession{}).
 		Owns(&batchv1.Job{}).
