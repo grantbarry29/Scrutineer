@@ -12,6 +12,7 @@ You may obtain a copy of the License at
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/secureai/relay/internal/controller/agentsession"
 	"github.com/secureai/relay/internal/metrics"
 	"github.com/secureai/relay/internal/reporter"
+	"github.com/secureai/relay/internal/tracing"
 )
 
 var (
@@ -46,6 +48,9 @@ func main() {
 		metricsAddr          string
 		probeAddr            string
 		reporterAddr         string
+		otelEndpoint         string
+		otelServiceName      string
+		otelInsecure         bool
 		enableLeaderElection bool
 		reporterOnly         bool
 	)
@@ -53,6 +58,12 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "Address the probe endpoint binds to.")
 	flag.StringVar(&reporterAddr, "reporter-bind-address", reporter.DefaultBindAddress,
 		"Address the runtime evidence reporter endpoint binds to (POST /v1/report).")
+	flag.StringVar(&otelEndpoint, "otel-exporter-otlp-endpoint", "",
+		"OTLP HTTP endpoint for trace export (e.g. http://localhost:4318). Empty disables tracing export.")
+	flag.StringVar(&otelServiceName, "otel-service-name", "relay-controller",
+		"OpenTelemetry service.name resource attribute.")
+	flag.BoolVar(&otelInsecure, "otel-exporter-otlp-insecure", true,
+		"Disable TLS verification for the OTLP trace exporter.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. Ensures only one active controller.")
 	flag.BoolVar(&reporterOnly, "reporter-only", false,
@@ -63,6 +74,22 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	ctx := context.Background()
+	traceShutdown, err := tracing.Setup(ctx, tracing.Config{
+		ServiceName: otelServiceName,
+		Endpoint:    otelEndpoint,
+		Insecure:    otelInsecure,
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to set up OpenTelemetry tracing")
+		os.Exit(1)
+	}
+	defer func() {
+		if err := traceShutdown(context.Background()); err != nil {
+			setupLog.Error(err, "OpenTelemetry shutdown error")
+		}
+	}()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

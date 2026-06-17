@@ -19,6 +19,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	"github.com/secureai/relay/internal/tracing"
 )
 
 // Options configures the runtime reporter HTTP server.
@@ -63,7 +65,7 @@ func NewRunnable(opts Options) manager.Runnable {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle(reportPath, handler)
+	mux.Handle(reportPath, tracing.HTTPMiddleware(tracing.ReporterTracer(), "runtime.report", handler))
 
 	return &httpServer{
 		addr: bind,

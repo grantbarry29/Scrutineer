@@ -25,6 +25,7 @@ import (
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/controller/agentsession"
 	"github.com/secureai/relay/internal/metrics"
+	"github.com/secureai/relay/internal/tracing"
 )
 
 const reportPath = "/v1/report"
@@ -44,7 +45,18 @@ type Handler struct {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	result := "internal_error"
-	defer func() { metrics.ObserveRuntimeReport(result, time.Since(start)) }()
+	defer func() {
+		metrics.ObserveRuntimeReport(result, time.Since(start))
+	}()
+
+	ctx := r.Context()
+	sessionNamespace := ""
+	sessionName := ""
+	backend := ""
+	decisionCount := -1
+	defer func() {
+		tracing.SetReportSpanAttributes(ctx, sessionNamespace, sessionName, backend, result, decisionCount)
+	}()
 
 	if r.Method != http.MethodPost {
 		result = "method_not_allowed"
@@ -91,6 +103,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionKey := types.NamespacedName{Namespace: req.Session.Namespace, Name: req.Session.Name}
+	sessionNamespace = sessionKey.Namespace
+	sessionName = sessionKey.Name
+	backend = req.Backend
+	decisionCount = len(req.Decisions)
 	if h.Limiter != nil && !h.Limiter.allow(sessionKey.String(), receivedAt) {
 		result = "rate_limited"
 		w.Header().Set("Retry-After", "1")

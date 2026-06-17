@@ -34,6 +34,7 @@ import (
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/controller/job"
 	"github.com/secureai/relay/internal/policy"
+	"github.com/secureai/relay/internal/tracing"
 )
 
 // AgentSessionReconciler reconciles an AgentSession object.
@@ -79,10 +80,22 @@ const deletionRequeueAfter = 2 * time.Second
 //  9. Persist status via the status subresource.
 //
 // Reconcile is idempotent: re-running it against an unchanged cluster makes no API mutations.
-func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+	ctx, span := tracing.StartReconcileSpan(ctx, req.Namespace, req.Name)
+	var tracedSession *relayv1alpha1.AgentSession
+	defer func() {
+		phase := ""
+		if tracedSession != nil {
+			phase = string(tracedSession.Status.Phase)
+		}
+		tracing.SetReconcileSpanResult(ctx, phase, result.RequeueAfter.Seconds(), err)
+		span.End()
+	}()
+
 	logger := log.FromContext(ctx).WithValues("agentsession", req.NamespacedName)
 
 	session, err := r.getAgentSession(ctx, req.NamespacedName)
+	tracedSession = session
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil

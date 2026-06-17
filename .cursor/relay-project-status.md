@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 Prometheus metrics exporter)
+> **Last updated:** 2026-06-10 (Phase 4 OpenTelemetry tracing)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **Prometheus metrics shipped**; next: **OpenTelemetry** (Phase 4 roadmap).
+> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **OpenTelemetry shipped**; next: **audit log sink** (Phase 4 roadmap).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -41,7 +41,7 @@ Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discove
 | ~~**E**~~ | ~~**File usage metrics**~~ — **done** | `SessionUsage.fileOperations` from `type: file` decisions. |
 | ~~**F**~~ | ~~**Live file violation + usage e2e**~~ — **done** | `test/e2e/file_violation_test.go`; `kind-load-fs-gateway` in `test-e2e-images`. |
 
-After A–F: ~~Prometheus exporter~~ **done** → OTel → audit sink (Phase 4 roadmap bullets).
+After A–F: ~~Prometheus exporter~~ **done** → ~~OTel~~ **done** → audit sink (Phase 4 roadmap bullets).
 
 ---
 
@@ -506,6 +506,12 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-10). Scrape `:8080/metrics` on the controller manager.
 
+### Task: OpenTelemetry tracing — Phase 4 — **done (2026-06-10)**
+
+**Shipped:** `internal/tracing/` — OTLP HTTP export (disabled when `--otel-exporter-otlp-endpoint` empty); `agentsession.reconcile` spans with session phase/requeue attributes; `runtime.report` spans on reporter with W3C trace context extraction (sidecars can continue agent traces via `traceparent`); flags `--otel-exporter-otlp-endpoint`, `--otel-service-name`, `--otel-exporter-otlp-insecure`. Wired in `cmd/main.go`, `reconciler.go`, `reporter/server.go`, `reporter/handler.go`.
+
+**Verification:** `make test` (pass 2026-06-10). Enable with e.g. `--otel-exporter-otlp-endpoint=http://otel-collector:4318`.
+
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
 **Shipped:** `internal/controller/job/sidecars.go` — inject enabled known sidecars; `RELAY_TOOL_GATEWAY_URL` on agent; `RuntimeProfileDrift` includes sidecars; envtest coverage.
@@ -884,9 +890,9 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 - [x] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D)*
 - [x] **File usage metrics** — `SessionUsage.fileOperations` from `type: file` decisions *(slice E)*
 - [x] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F)*
-- [x] **Prometheus metrics** — sessions by phase, violations, approval queue proxy, reporter outcomes *(queue head done)*
-- [ ] **OpenTelemetry** — Traces for reconcile loop + optional agent runtime traces *(queue head)*
-- [ ] **Audit log sink** — Export to OTLP, S3, or SIEM-compatible format
+- [x] **Prometheus metrics** — sessions by phase, violations, approval queue proxy, reporter outcomes
+- [x] **OpenTelemetry** — reconcile + reporter traces; W3C propagation for sidecar/agent continuity *(done)*
+- [ ] **Audit log sink** — Export to OTLP, S3, or SIEM-compatible format *(queue head)*
 - [ ] **Log / artifact collection** — Implement `outputs.collectLogs` / `collectArtifacts`
 
 > **Note:** *Structured session events API* moved to Phase 3b (it is the reporter's durable sink). *Session timeline model* and *Usage metrics* stay here but now follow the evidence loop.
