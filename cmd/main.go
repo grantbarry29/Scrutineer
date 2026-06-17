@@ -27,6 +27,7 @@ import (
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/controller/agentsession"
+	"github.com/secureai/relay/internal/metrics"
 	"github.com/secureai/relay/internal/reporter"
 )
 
@@ -72,6 +73,11 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	if err := metrics.Register(&metrics.AgentSessionCollector{Client: mgr.GetClient()}); err != nil {
+		setupLog.Error(err, "unable to register Prometheus metrics")
 		os.Exit(1)
 	}
 

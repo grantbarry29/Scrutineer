@@ -13,6 +13,7 @@ package agentsession
 import (
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/enforcement"
+	"github.com/secureai/relay/internal/metrics"
 )
 
 // AppendRuntimeViolations appends policy violations onto session status without
@@ -41,10 +42,19 @@ func AppendRuntimeViolations(session *relayv1alpha1.AgentSession, incoming []rel
 		novel,
 		enforcement.MaxViolations,
 	)
+	metrics.ObserveNovelViolations(session.Namespace, violationTypes(novel))
 }
 
 func violationKey(v relayv1alpha1.PolicyViolation) string {
 	return v.Time.String() + "\x00" + v.Type + "\x00" + v.Target + "\x00" + v.Message
+}
+
+func violationTypes(violations []relayv1alpha1.PolicyViolation) []string {
+	out := make([]string, len(violations))
+	for i, v := range violations {
+		out[i] = v.Type
+	}
+	return out
 }
 
 // mergeViolationsInPlace appends violations from preserve that are absent from dst.

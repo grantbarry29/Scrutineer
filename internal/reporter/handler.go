@@ -24,6 +24,7 @@ import (
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/controller/agentsession"
+	"github.com/secureai/relay/internal/metrics"
 )
 
 const reportPath = "/v1/report"
@@ -41,11 +42,17 @@ type Handler struct {
 
 // ServeHTTP implements http.Handler.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	result := "internal_error"
+	defer func() { metrics.ObserveRuntimeReport(result, time.Since(start)) }()
+
 	if r.Method != http.MethodPost {
+		result = "method_not_allowed"
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	if r.URL.Path != reportPath {
+		result = "not_found"
 		http.NotFound(w, r)
 		return
 	}
@@ -60,19 +67,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxReportBytes)).Decode(&req); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
+			result = "payload_too_large"
 			writeError(w, ErrPayloadTooLarge, http.StatusRequestEntityTooLarge, "")
 			return
 		}
+		result = "bad_request"
 		writeError(w, ErrBadRequest, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
 	if _, err := h.Verifier.Verify(r.Context(), r, req.Session); err != nil {
 		status := http.StatusUnauthorized
+		result = "unauthorized"
 		if errors.Is(err, ErrForbidden) {
 			status = http.StatusForbidden
+			result = "forbidden"
 		} else if !errors.Is(err, ErrUnauthorized) {
 			status = http.StatusInternalServerError
+			result = "internal_error"
 		}
 		writeError(w, err, status, err.Error())
 		return
@@ -80,6 +92,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	sessionKey := types.NamespacedName{Namespace: req.Session.Namespace, Name: req.Session.Name}
 	if h.Limiter != nil && !h.Limiter.allow(sessionKey.String(), receivedAt) {
+		result = "rate_limited"
 		w.Header().Set("Retry-After", "1")
 		writeError(w, ErrRateLimited, http.StatusTooManyRequests, "rate limit exceeded")
 		return
@@ -88,9 +101,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var session relayv1alpha1.AgentSession
 	if err := h.Reader.Get(r.Context(), sessionKey, &session); err != nil {
 		if apierrors.IsNotFound(err) {
+			result = "not_found"
 			writeError(w, ErrNotFound, http.StatusNotFound, "AgentSession not found")
 			return
 		}
+		result = "internal_error"
 		http.Error(w, "failed to load session", http.StatusInternalServerError)
 		return
 	}
@@ -102,6 +117,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	report, err := ValidateAndNormalizeReport(req, receivedAt, effectiveMode)
 	if err != nil {
+		result = "bad_request"
 		status := http.StatusBadRequest
 		if errors.Is(err, ErrBadRequest) {
 			status = http.StatusBadRequest
@@ -112,6 +128,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if reportID := normalizeReportID(req.ReportID); reportID != "" && h.ReportIDs != nil {
 		if h.ReportIDs.contains(reportIDCacheKey(sessionKey, reportID), receivedAt) {
+			result = "duplicate"
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
@@ -120,13 +137,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hadViolations := len(session.Status.Violations) == 0 && len(report.Decisions) > 0
 	if err := agentsession.PatchRuntimePolicyReport(r.Context(), h.Writer, h.Reader, sessionKey, report); err != nil {
 		if apierrors.IsNotFound(err) {
+			result = "not_found"
 			writeError(w, ErrNotFound, http.StatusNotFound, "AgentSession not found")
 			return
 		}
 		if strings.Contains(err.Error(), "exhausted retries") || strings.Contains(err.Error(), "conflict") {
+			result = "conflict"
 			writeError(w, ErrConflict, http.StatusConflict, "status update conflict")
 			return
 		}
+		result = "internal_error"
 		http.Error(w, "failed to merge report", http.StatusInternalServerError)
 		return
 	}
@@ -144,6 +164,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.ReportIDs.mark(reportIDCacheKey(sessionKey, reportID), receivedAt)
 	}
 
+	result = "accepted"
 	w.WriteHeader(http.StatusAccepted)
 }
 

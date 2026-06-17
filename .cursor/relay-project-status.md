@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 slices E–F done: file usage metrics + live file violation e2e)
+> **Last updated:** 2026-06-10 (Phase 4 Prometheus metrics exporter)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **file domain e2e complete**; next: **Prometheus metrics exporter** (Phase 4 roadmap).
+> **Critical path:** Phase 3b **closed**. Phase 4 in progress — **Prometheus metrics shipped**; next: **OpenTelemetry** (Phase 4 roadmap).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -41,7 +41,7 @@ Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discove
 | ~~**E**~~ | ~~**File usage metrics**~~ — **done** | `SessionUsage.fileOperations` from `type: file` decisions. |
 | ~~**F**~~ | ~~**Live file violation + usage e2e**~~ — **done** | `test/e2e/file_violation_test.go`; `kind-load-fs-gateway` in `test-e2e-images`. |
 
-After A–F: Prometheus exporter, OTel, audit sink (Phase 4 roadmap bullets).
+After A–F: ~~Prometheus exporter~~ **done** → OTel → audit sink (Phase 4 roadmap bullets).
 
 ---
 
@@ -500,6 +500,12 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` (pass 2026-06-10); live spec with `make test-e2e-images && make test-e2e`.
 
+### Task: Prometheus metrics exporter — Phase 4 — **done (2026-06-10)**
+
+**Shipped:** `internal/metrics/` — `relay_agentsessions{namespace,phase}`, `relay_agentsession_violations{namespace}`, `relay_approval_queue_depth`, `relay_policy_violations_observed_total{namespace,type}`, `relay_runtime_reports_total{result}`, `relay_runtime_report_duration_seconds`; `AgentSessionCollector` on manager cache; wired in `cmd/main.go`; violation + reporter hooks. Reconcile latency: use built-in `controller_runtime_reconcile_time_seconds`.
+
+**Verification:** `make test` (pass 2026-06-10). Scrape `:8080/metrics` on the controller manager.
+
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
 **Shipped:** `internal/controller/job/sidecars.go` — inject enabled known sidecars; `RELAY_TOOL_GATEWAY_URL` on agent; `RuntimeProfileDrift` includes sidecars; envtest coverage.
@@ -878,8 +884,8 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 - [x] **FS gateway sidecar MVP** — first-party file enforcement producer *(slice D)*
 - [x] **File usage metrics** — `SessionUsage.fileOperations` from `type: file` decisions *(slice E)*
 - [x] **Live file violation + usage e2e** — fs-gateway → reporter → status *(slice F)*
-- [ ] **Prometheus metrics** — Sessions by phase, violations, approval queue depth, reconcile latency *(queue head)*
-- [ ] **OpenTelemetry** — Traces for reconcile loop + optional agent runtime traces
+- [x] **Prometheus metrics** — sessions by phase, violations, approval queue proxy, reporter outcomes *(queue head done)*
+- [ ] **OpenTelemetry** — Traces for reconcile loop + optional agent runtime traces *(queue head)*
 - [ ] **Audit log sink** — Export to OTLP, S3, or SIEM-compatible format
 - [ ] **Log / artifact collection** — Implement `outputs.collectLogs` / `collectArtifacts`
 
