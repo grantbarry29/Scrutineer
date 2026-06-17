@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/audit"
 	"github.com/secureai/relay/internal/controller/job"
 	"github.com/secureai/relay/internal/policy"
 	"github.com/secureai/relay/internal/tracing"
@@ -83,10 +84,14 @@ const deletionRequeueAfter = 2 * time.Second
 func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	ctx, span := tracing.StartReconcileSpan(ctx, req.Namespace, req.Name)
 	var tracedSession *relayv1alpha1.AgentSession
+	var initialPhase string
 	defer func() {
 		phase := ""
 		if tracedSession != nil {
 			phase = string(tracedSession.Status.Phase)
+			if phase != "" && phase != initialPhase {
+				audit.Emit(ctx, audit.SessionPhaseChange(req.Namespace, req.Name, initialPhase, phase, time.Now()))
+			}
 		}
 		tracing.SetReconcileSpanResult(ctx, phase, result.RequeueAfter.Seconds(), err)
 		span.End()
@@ -117,6 +122,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Take a working copy so we can compute a single status patch at the end.
 	original := session.DeepCopy()
+	initialPhase = string(original.Status.Phase)
 	var resolvedProfile *relayv1alpha1.RuntimeProfile
 
 	if session.Status.Phase == "" {

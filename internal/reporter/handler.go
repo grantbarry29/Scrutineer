@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/audit"
 	"github.com/secureai/relay/internal/controller/agentsession"
 	"github.com/secureai/relay/internal/metrics"
 	"github.com/secureai/relay/internal/tracing"
@@ -181,6 +182,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result = "accepted"
+	audit.Emit(ctx, audit.RuntimeReport(sessionNamespace, sessionName, backend, len(report.Decisions), receivedAt))
 	w.WriteHeader(http.StatusAccepted)
 }
 

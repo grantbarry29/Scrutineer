@@ -11,7 +11,10 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
+	"context"
+
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/audit"
 	"github.com/secureai/relay/internal/enforcement"
 	"github.com/secureai/relay/internal/metrics"
 )
@@ -43,6 +46,16 @@ func AppendRuntimeViolations(session *relayv1alpha1.AgentSession, incoming []rel
 		enforcement.MaxViolations,
 	)
 	metrics.ObserveNovelViolations(session.Namespace, violationTypes(novel))
+	for _, v := range novel {
+		audit.Emit(context.Background(), audit.PolicyViolation(
+			session.Namespace,
+			session.Name,
+			v.Type,
+			v.Target,
+			v.Message,
+			v.Time.Time,
+		))
+	}
 }
 
 func violationKey(v relayv1alpha1.PolicyViolation) string {

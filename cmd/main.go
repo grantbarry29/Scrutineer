@@ -27,6 +27,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/audit"
 	"github.com/secureai/relay/internal/controller/agentsession"
 	"github.com/secureai/relay/internal/metrics"
 	"github.com/secureai/relay/internal/reporter"
@@ -51,6 +52,8 @@ func main() {
 		otelEndpoint         string
 		otelServiceName      string
 		otelInsecure         bool
+		auditLogEndpoint     string
+		auditLogInsecure     bool
 		enableLeaderElection bool
 		reporterOnly         bool
 	)
@@ -64,6 +67,10 @@ func main() {
 		"OpenTelemetry service.name resource attribute.")
 	flag.BoolVar(&otelInsecure, "otel-exporter-otlp-insecure", true,
 		"Disable TLS verification for the OTLP trace exporter.")
+	flag.StringVar(&auditLogEndpoint, "audit-log-otlp-endpoint", "",
+		"OTLP HTTP endpoint for audit log export (e.g. http://localhost:4318/v1/logs). Empty disables audit export.")
+	flag.BoolVar(&auditLogInsecure, "audit-log-otlp-insecure", true,
+		"Disable TLS verification for the OTLP audit log exporter.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. Ensures only one active controller.")
 	flag.BoolVar(&reporterOnly, "reporter-only", false,
@@ -88,6 +95,21 @@ func main() {
 	defer func() {
 		if err := traceShutdown(context.Background()); err != nil {
 			setupLog.Error(err, "OpenTelemetry shutdown error")
+		}
+	}()
+
+	auditShutdown, err := audit.Setup(ctx, audit.Config{
+		ServiceName: otelServiceName,
+		Endpoint:    auditLogEndpoint,
+		Insecure:    auditLogInsecure,
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to set up audit log sink")
+		os.Exit(1)
+	}
+	defer func() {
+		if err := auditShutdown(context.Background()); err != nil {
+			setupLog.Error(err, "audit log shutdown error")
 		}
 	}()
 
