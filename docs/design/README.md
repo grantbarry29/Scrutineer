@@ -17,6 +17,7 @@ For *current state, queue, and roadmap*, see [`.cursor/relay-project-status.md`]
 | [`phase-4-session-events.md`](phase-4-session-events.md) | Working on `status.events[]`, timeline ingestion, or reporter event payloads. |
 | [`phase-4-session-timeline.md`](phase-4-session-timeline.md) | Working on UI timeline projection over `status.events[]` (`internal/observability`). |
 | [`phase-5-approval-workflows.md`](phase-5-approval-workflows.md) | Working on human approval gates — `ApprovalPolicy` / `ApprovalRequest` CRDs, the controller gate/resume state machine, or `requireHumanApproval` enforcement. |
+| [`phase-4-observability-export.md`](phase-4-observability-export.md) | Working on exported telemetry — Prometheus metrics, OTel trace spans, or OTLP audit logs (names, labels, attributes, flags, propagation). |
 
 ## Conventions
 

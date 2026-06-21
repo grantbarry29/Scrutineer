@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -565,17 +565,13 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Files:** `api/v1alpha1/policy_types.go`, `api/v1alpha1/agentsession_types.go`, `internal/reporter/normalize.go`, `internal/policy/decisions.go`, reporter contract doc §5.
 
-### Task: Observability export design doc (Prometheus / OTel / audit)
+### Task: Observability export design doc (Prometheus / OTel / audit) — **done (2026-06-21)**
 
-**Discovered:** 2026-06-16 audit. Prometheus metrics, OTel tracing, and the OTLP audit sink shipped (Phase 4) with **no** `docs/design/` doc, violating the design-doc convention ("each slice states status/scope/non-goals; update on ship"). `relay-design-docs.mdc` now points here.
+**Shipped:** `docs/design/phase-4-observability-export.md` — catalogs the `relay_*` Prometheus metrics (6: `agentsessions`, `agentsession_violations`, `approval_queue_depth`, `policy_violations_observed_total`, `runtime_reports_total`, `runtime_report_duration_seconds`) with types/labels/collection model + cardinality rules; OTel spans (`agentsession.reconcile`, `runtime.report`) with attributes + the W3C TraceContext/Baggage propagation contract (sidecars continue traces via `traceparent`); OTLP audit log records (`policy.violation`, `session.phase_change`, `runtime.report`) with `relay.audit.*`/`relay.session.*`/`relay.report.*` attribute namespaces; enable flags; invariants; non-goals (no in-cluster collector, opt-in, no behavior change). Indexed in `docs/design/README.md` + `relay-design-docs.mdc`.
 
-**Why it matters:** No canonical reference for metric/span/audit-record names, cardinality rules, enable flags, or the W3C trace-propagation contract used by sidecars — risks drift and duplicate work as the UI/SIEM surfaces are built.
+**Verification:** Docs-only; `go build`/`make test` unaffected.
 
-**Scope (proposed):** `docs/design/phase-4-observability-export.md` — catalog `relay_*` metrics + labels, span names/attributes, audit `Record` event types, OTLP enable flags, and non-goals (no in-cluster collector, opt-in only). Update `docs/design/README.md` + `relay-design-docs.mdc` index.
-
-**Non-goals:** Changing exported metrics/spans/records; adding new exporters.
-
-**Verification:** Docs-only; `make test` still passes.
+**Discovered follow-ups (noted in the doc):** refine `relay_approval_queue_depth` to count pending `ApprovalRequest`s (Phase 5 gate now exists); add approval-decision audit records (`approval.granted`/`approval.denied`) when consumers need them; surface `assuranceLevel` in audit/UI (tracked under *Runtime evidence integrity*).
 
 ### Phase 5 — approval workflows (ordered task cards)
 
