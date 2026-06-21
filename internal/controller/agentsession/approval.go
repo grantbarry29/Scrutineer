@@ -464,7 +464,14 @@ func (r *AgentSessionReconciler) markApprovalNotified(ctx context.Context, req *
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var latest relayv1alpha1.ApprovalRequest
 		if err := r.Get(ctx, key, &latest); err != nil {
-			return err
+			if !apierrors.IsNotFound(err) {
+				return err
+			}
+			// Cache lag: the request was just created this reconcile and the
+			// informer has not observed it yet. Fall back to the object we already
+			// hold (it carries a valid resourceVersion from Create) so the marker
+			// still persists and notification stays at-most-once.
+			latest = *req
 		}
 		if _, done := latest.Annotations[approvalNotifiedAnnotation]; done {
 			*req = latest
