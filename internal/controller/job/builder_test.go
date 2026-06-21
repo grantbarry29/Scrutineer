@@ -86,6 +86,16 @@ func TestBuild_ephemeralWorkspace(t *testing.T) {
 	}
 }
 
+func TestBuild_disablesServiceAccountTokenAutomount(t *testing.T) {
+	spec := Build(minimalSession(), &Task{}, nil, nil).Spec.Template.Spec
+	if spec.AutomountServiceAccountToken == nil {
+		t.Fatal("expected automountServiceAccountToken to be set explicitly")
+	}
+	if *spec.AutomountServiceAccountToken {
+		t.Fatal("expected automountServiceAccountToken=false on the agent pod")
+	}
+}
+
 func TestBuild_modelBaseURLEnv(t *testing.T) {
 	session := minimalSession()
 	session.Spec.Model.BaseURL = "https://openrouter.ai/api/v1"

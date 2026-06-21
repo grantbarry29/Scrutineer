@@ -62,13 +62,20 @@ func Build(session *relayv1alpha1.AgentSession, task *Task, pol *policy.Resolved
 	volumes, mounts := buildWorkspaceVolumes(&session.Spec.Workspace)
 	container.VolumeMounts = mounts
 
+	// Least privilege: never auto-mount the namespace-default ServiceAccount token
+	// into the agent pod. A compromised/prompt-injected agent must not get an
+	// apiserver-audience token for free. Enforcement sidecars that legitimately
+	// report evidence carry their own narrowly-scoped projected reporter token
+	// (audience relay-reporter), which is unaffected by this setting.
+	automountSAToken := false
 	podSpec := corev1.PodSpec{
-		RestartPolicy:      corev1.RestartPolicyNever,
-		ServiceAccountName: rt.ServiceAccountName,
-		Containers:         []corev1.Container{container},
-		Volumes:            volumes,
-		NodeSelector:       rt.NodeSelector,
-		Tolerations:        rt.Tolerations,
+		RestartPolicy:                corev1.RestartPolicyNever,
+		ServiceAccountName:           rt.ServiceAccountName,
+		AutomountServiceAccountToken: &automountSAToken,
+		Containers:                   []corev1.Container{container},
+		Volumes:                      volumes,
+		NodeSelector:                 rt.NodeSelector,
+		Tolerations:                  rt.Tolerations,
 	}
 	applyRuntimeProfileToPodSpec(&podSpec, profile)
 	injectSidecars(&podSpec, session, pol, profile)

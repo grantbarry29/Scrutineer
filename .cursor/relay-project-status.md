@@ -552,10 +552,12 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Slice 1 — assurance level (honesty first) — done (2026-06-21):** Added `EvidenceAssurance` enum (`controller` / `self-reported` / `observed`) + `assuranceLevel` field on `PolicyDecision` and `PolicyViolation`. The cooperative reporter (`internal/reporter/normalize.go`) stamps all ingested runtime decisions/violations `self-reported`, **overriding any client value** (a source can't self-attest trust). Merge-time decisions (`internal/policy/decisions.go`) stamp `controller`. `observed` reserved for future independent sources. Reporter contract §5 updated. Tests: `decisions_test.go`, `reporter/more_test.go`. Verification: `make manifests && make test` (pass 2026-06-21).
 
+**Slice 2 — pod least-privilege hardening — done (2026-06-21):** Reporter token projection was already sidecar-only (the agent never mounts the `relay-reporter` projected token; guarded by `TestBuild_reporterWiringForSidecars`). Added `automountServiceAccountToken: false` on the agent pod (`internal/controller/job/builder.go`) so a compromised agent gets no apiserver-audience SA token by default; enforcement sidecars are unaffected (they carry their own narrowly-scoped projected reporter token). Test: `TestBuild_disablesServiceAccountTokenAutomount`. Verification: `go test ./internal/controller/job/...` (pass 2026-06-21).
+
 **Remaining (hardening, later — larger, not started):**
-- Restrict reporter token projection to the sidecar container only + disable agent SA automount.
 - Surface `assuranceLevel` in future audit/UI surfaces (Phase 7).
 - Consider out-of-pod / kernel (eBPF) observation as an independent `observed` evidence source.
+- Optional `RuntimeProfile` opt-in to re-enable SA token automount for agents that legitimately need apiserver access (none in MVP).
 
 **Non-goals:** Implementing eBPF/Cilium; rewriting the reporter auth model in one pass.
 
@@ -702,7 +704,7 @@ RBAC must match kubebuilder markers and actual client calls (Jobs delete, Config
 
 Relay has shipped an **end-to-end governance MVP** on Kubernetes: control-plane reconciliation, three data-plane enforcement domains (network / tool / file), runtime evidence into CRD status, and observability export (Prometheus, OTel traces, OTLP audit logs). **Not yet shipped:** operational UI, real approval gates, orchestrator adapters beyond Jobs, enterprise identity/credentials.
 
-**Trust posture (read before extending):** data-plane enforcement and the runtime-evidence loop are **cooperative**, not adversarial-proof. Enforcement sidecars and the agent share a pod and ServiceAccount; the reporter authenticates the *pod* (TokenReview + pod→Job→session ownership) but cannot distinguish the agent container from a sidecar. A fully compromised agent could therefore tamper with or starve the data plane. To keep this honest, runtime evidence carries an `assuranceLevel` (`self-reported` for cooperative sidecar reports, stamped by the controller and not client-settable; `controller` for authoritative merge-time decisions; `observed` reserved for future independent sources). Adversarial-grade integrity still needs data-plane isolation (kernel/eBPF, separate identity/netns, or out-of-pod enforcement) — tracked under *Discovered Follow-Up Tasks → Runtime evidence integrity*. Do not describe current enforcement as tamper-proof in docs/UI.
+**Trust posture (read before extending):** data-plane enforcement and the runtime-evidence loop are **cooperative**, not adversarial-proof. Enforcement sidecars and the agent share a pod and ServiceAccount; the reporter authenticates the *pod* (TokenReview + pod→Job→session ownership) but cannot distinguish the agent container from a sidecar. A fully compromised agent could therefore tamper with or starve the data plane. To keep this honest, runtime evidence carries an `assuranceLevel` (`self-reported` for cooperative sidecar reports, stamped by the controller and not client-settable; `controller` for authoritative merge-time decisions; `observed` reserved for future independent sources). As least-privilege hardening, the agent pod runs with `automountServiceAccountToken: false` (no free apiserver token) and the projected `relay-reporter` token is mounted only into enforcement sidecars, never the agent. Adversarial-grade integrity still needs data-plane isolation (kernel/eBPF, separate identity/netns, or out-of-pod enforcement) — tracked under *Discovered Follow-Up Tasks → Runtime evidence integrity*. Do not describe current enforcement as tamper-proof in docs/UI.
 
 **Repository audit (2026-06-16):** Verified the claims in this file against the tree.
 
@@ -758,7 +760,7 @@ Gaps found during the audit (now tracked): Phase 5 had no task cards (decomposed
 | S3 / external artifact store | No | `configmap://` / `secret://` URIs only |
 | Admission webhook | Scaffold | Controller validation only |
 | Orchestrators beyond Job | Enum reserved | Validation rejects others |
-| Runtime evidence integrity | Partial | `assuranceLevel` on decisions/violations (`controller` vs `self-reported`); still cooperative — no anti-tamper / `observed` source yet (see Discovered task) |
+| Runtime evidence integrity | Partial | `assuranceLevel` on decisions/violations (`controller` vs `self-reported`); reporter token is sidecar-only + agent SA token automount disabled (least privilege); still cooperative — no anti-tamper / `observed` source yet (see Discovered task) |
 | Observability export design doc | No | Prometheus/OTel/audit shipped without a `docs/design/` doc (see Discovered task) |
 
 ### status.podName selection semantics
