@@ -20,6 +20,8 @@ const (
 	EventPolicyViolation    EventType = "policy.violation"
 	EventSessionPhaseChange EventType = "session.phase_change"
 	EventRuntimeReport      EventType = "runtime.report"
+	EventApprovalGranted    EventType = "approval.granted"
+	EventApprovalDenied     EventType = "approval.denied"
 )
 
 // Record is a structured audit entry emitted by the Relay control plane.
@@ -71,6 +73,36 @@ func SessionPhaseChange(namespace, session, fromPhase, toPhase string, at time.T
 		FromPhase: fromPhase,
 		Phase:     toPhase,
 		Message:   "session phase changed",
+	}
+}
+
+// ApprovalDecision builds a record when a human-approval gate is resolved. granted
+// selects the event type (approval.granted vs approval.denied); gatedAction is the
+// approved action type (e.g. "deploy"); actor is the approver identity (best-effort
+// self-declared, or the joined set for allOf), defaulting to relay-controller.
+func ApprovalDecision(namespace, session, gatedAction, actor, reason string, granted bool, at time.Time) Record {
+	if at.IsZero() {
+		at = time.Now()
+	}
+	eventType := EventApprovalDenied
+	verb := "denied"
+	if granted {
+		eventType = EventApprovalGranted
+		verb = "granted"
+	}
+	if actor == "" {
+		actor = "relay-controller"
+	}
+	return Record{
+		Time:      at,
+		EventType: eventType,
+		Namespace: namespace,
+		Session:   session,
+		Actor:     actor,
+		Action:    verb,
+		Type:      "approval",
+		Target:    gatedAction,
+		Message:   reason,
 	}
 }
 

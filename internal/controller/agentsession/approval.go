@@ -28,6 +28,7 @@ import (
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/approval"
+	"github.com/secureai/relay/internal/audit"
 	"github.com/secureai/relay/internal/policy"
 )
 
@@ -117,27 +118,27 @@ func (r *AgentSessionReconciler) reconcileApprovalGate(ctx context.Context, sess
 		if session.Status.Phase == relayv1alpha1.PhaseAwaitingApproval {
 			r.recordNormal(session, EventReasonApprovalGranted, fmt.Sprintf("Approval granted for action %q", gatedAction))
 		}
-		r.recordApprovalDecision(session, relayv1alpha1.PolicyDecisionAllow, gatedAction, req, "ApprovalGranted", "human approval granted")
+		r.recordApprovalDecision(ctx, session, relayv1alpha1.PolicyDecisionAllow, gatedAction, req, "ApprovalGranted", "human approval granted")
 		setCondition(session, ConditionApprovalRequired, metav1.ConditionFalse, "Approved",
 			fmt.Sprintf("ApprovalRequest %q granted", req.Name))
 		return approvalProceed, nil
 
 	case relayv1alpha1.ApprovalDecisionDenied:
 		_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateDenied, gatePolicy, "decision denied")
-		r.denyForApproval(session, gatedAction, req, "ApprovalDenied", "human approval was denied")
+		r.denyForApproval(ctx, session, gatedAction, req, "ApprovalDenied", "human approval was denied")
 		return approvalRejected, nil
 
 	default: // pending
 		if expired, onTimeout := approvalTimedOut(req, gatePolicy); expired {
 			if onTimeout == relayv1alpha1.ApprovalTimeoutAllow {
 				_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateGranted, gatePolicy, "timed out; onTimeout=allow")
-				r.recordApprovalDecision(session, relayv1alpha1.PolicyDecisionAllow, gatedAction, req, "ApprovalTimeoutAllow", "approval timed out; policy onTimeout=allow")
+				r.recordApprovalDecision(ctx, session, relayv1alpha1.PolicyDecisionAllow, gatedAction, req, "ApprovalTimeoutAllow", "approval timed out; policy onTimeout=allow")
 				setCondition(session, ConditionApprovalRequired, metav1.ConditionFalse, "ApprovalTimeoutAllow",
 					"approval timed out; policy onTimeout=allow")
 				return approvalProceed, nil
 			}
 			_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateExpired, gatePolicy, "timed out; onTimeout=deny")
-			r.denyForApproval(session, gatedAction, req, "ApprovalExpired", "approval timed out; policy onTimeout=deny")
+			r.denyForApproval(ctx, session, gatedAction, req, "ApprovalExpired", "approval timed out; policy onTimeout=deny")
 			return approvalRejected, nil
 		}
 
@@ -369,11 +370,11 @@ func approvalTimedOut(req *relayv1alpha1.ApprovalRequest, gatePolicy *relayv1alp
 }
 
 // denyForApproval marks the session terminally Denied due to an approval outcome.
-func (r *AgentSessionReconciler) denyForApproval(session *relayv1alpha1.AgentSession, action string, req *relayv1alpha1.ApprovalRequest, reason, msg string) {
+func (r *AgentSessionReconciler) denyForApproval(ctx context.Context, session *relayv1alpha1.AgentSession, action string, req *relayv1alpha1.ApprovalRequest, reason, msg string) {
 	session.Status.Phase = relayv1alpha1.PhaseDenied
 	setCompletionTime(session)
 	setCondition(session, ConditionApprovalRequired, metav1.ConditionFalse, reason, msg)
-	r.recordApprovalDecision(session, relayv1alpha1.PolicyDecisionDeny, action, req, reason, msg)
+	r.recordApprovalDecision(ctx, session, relayv1alpha1.PolicyDecisionDeny, action, req, reason, msg)
 	r.recordWarning(session, EventReasonApprovalDenied, msg)
 	if session.Status.Result == nil {
 		session.Status.Result = &relayv1alpha1.SessionResult{Outcome: "denied", Summary: msg}
@@ -381,8 +382,9 @@ func (r *AgentSessionReconciler) denyForApproval(session *relayv1alpha1.AgentSes
 }
 
 // recordApprovalDecision appends a control-plane authoritative approval decision
-// to status.policyDecisions, idempotent per (action, outcome).
-func (r *AgentSessionReconciler) recordApprovalDecision(session *relayv1alpha1.AgentSession, action relayv1alpha1.PolicyDecisionAction, target string, req *relayv1alpha1.ApprovalRequest, reason, msg string) {
+// to status.policyDecisions and mirrors it to the audit sink, idempotent per
+// (action, outcome).
+func (r *AgentSessionReconciler) recordApprovalDecision(ctx context.Context, session *relayv1alpha1.AgentSession, action relayv1alpha1.PolicyDecisionAction, target string, req *relayv1alpha1.ApprovalRequest, reason, msg string) {
 	if hasApprovalDecision(session, target, action) {
 		return
 	}
@@ -407,6 +409,10 @@ func (r *AgentSessionReconciler) recordApprovalDecision(session *relayv1alpha1.A
 		Message:        msg,
 		AssuranceLevel: relayv1alpha1.EvidenceControllerComputed,
 	}})
+	// Mirror to the audit sink for SIEM/forensics (emitted once per decision,
+	// guarded by hasApprovalDecision above).
+	audit.Emit(ctx, audit.ApprovalDecision(session.Namespace, session.Name, target, actor, reason,
+		action == relayv1alpha1.PolicyDecisionAllow, time.Now()))
 }
 
 func hasApprovalDecision(session *relayv1alpha1.AgentSession, target string, action relayv1alpha1.PolicyDecisionAction) bool {

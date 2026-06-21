@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -634,6 +634,12 @@ Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices)
 **Honesty note (fail-closed):** approvers grant sequentially via the single `spec.decidedBy`, so two grants coalesced into one reconcile record only the latest grantor; the missed approver re-submits — the gate never opens early. A list-typed multi-grant spec + authenticated identity (webhook) is future work (design doc open question #3).
 
 **Verification:** `make generate manifests` + `go build`; `go test ./internal/controller/agentsession/` (full envtest suite, pass 2026-06-21).
+
+#### Task: Phase 5 · slice 7 — approval-decision audit records — **done (2026-06-21)**
+
+**Shipped:** approval grants/denials now reach the OTLP audit sink (SIEM/forensics), not just `status.policyDecisions` + Kubernetes events. New `audit.EventApprovalGranted`/`EventApprovalDenied` (`approval.granted`/`approval.denied`) + `audit.ApprovalDecision` builder (`internal/audit/record.go`); `recordApprovalDecision` emits it once per decision (guarded by `hasApprovalDecision`), threading `ctx` through `denyForApproval`. Actor = approver (or joined `allOf` set), target = gated action, type = `approval`. Builder unit-tested (`internal/audit/sink_test.go`); observability + Phase 5 design docs updated. **Also fixed** a pre-existing at-most-once notification race (separate commit): `markApprovalNotified` read the just-created `ApprovalRequest` from cache (informer lag → NotFound → marker not persisted → duplicate notify); now falls back to the in-hand object.
+
+**Verification:** `go build`; `go test ./internal/audit/`; `go test ./internal/controller/agentsession/` (full envtest suite, pass 2026-06-21).
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 

@@ -67,4 +67,14 @@ func TestRecordBuilders(t *testing.T) {
 	if r.Backend != "dns-proxy" || r.Count != 2 {
 		t.Fatalf("report record = %+v", r)
 	}
+
+	granted := ApprovalDecision("ns", "s", "deploy", "alice", "human approval granted", true, time.Time{})
+	if granted.EventType != EventApprovalGranted || granted.Action != "granted" ||
+		granted.Actor != "alice" || granted.Target != "deploy" || granted.Type != "approval" {
+		t.Fatalf("granted record = %+v", granted)
+	}
+	denied := ApprovalDecision("ns", "s", "deploy", "", "human approval was denied", false, time.Time{})
+	if denied.EventType != EventApprovalDenied || denied.Action != "denied" || denied.Actor != "relay-controller" {
+		t.Fatalf("denied record = %+v", denied)
+	}
 }

@@ -137,7 +137,7 @@ stateDiagram-v2
 
 ## Audit trail
 
-Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope** (`action` + `scope.target`/`window`), and **expiry** — on the `ApprovalRequest.status`, mirrored into `AgentSession.status.policyDecisions` and Kubernetes events. This answers the vision's audit questions: who authorized the run and under what bounded scope.
+Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope** (`action` + `scope.target`/`window`), and **expiry** — on the `ApprovalRequest.status`, mirrored into `AgentSession.status.policyDecisions`, Kubernetes events, and (since 2026-06-21) the **OTLP audit sink** as `approval.granted`/`approval.denied` records (actor = approver or joined `allOf` set; target = gated action). This answers the vision's audit questions: who authorized the run and under what bounded scope. See [`phase-4-observability-export.md`](phase-4-observability-export.md) for the audit record catalog.
 
 ## Open questions (resolve in slice 2/3)
 
@@ -156,6 +156,7 @@ See `.cursor/relay-project-status.md` → *Discovered Follow-Up Tasks → Phase 
 4. Notification hooks (generic webhook → Slack/PagerDuty adapters). — **done (2026-06-21)** — `internal/approval` `Notifier` (noop + webhook); reconciler fires once on gate open (annotation-guarded, best-effort, retried); `--approval-webhook-url` flag. Slack/PagerDuty are future adapters over `Notifier`.
 5. Approver allowlist (best-effort `decidedBy`). — **done (2026-06-21)** — see open questions #1/#2.
 6. Multi-approver (`allOf`). — **done (2026-06-21)** — `status.approvedBy[]` accumulation; gate opens on full coverage; `ApprovalPartiallyApproved` event. See open question #3.
+7. Approval-decision audit records. — **done (2026-06-21)** — `approval.granted`/`approval.denied` OTLP records on the gate (see Audit trail above + `phase-4-observability-export.md`).
 
 ## Related
 

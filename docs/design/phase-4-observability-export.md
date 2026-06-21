@@ -56,6 +56,7 @@ Records are emitted as OTLP log records: body = human message, severity `INFO`, 
 | `policy.violation` | A novel violation is appended to status | `relay.audit.actor` (`relay-controller`), `relay.audit.action` (`violation`), `relay.audit.type`, `relay.audit.target` |
 | `session.phase_change` | An AgentSession lifecycle phase changes | `relay.audit.actor`, `relay.session.from_phase`, `relay.session.phase` |
 | `runtime.report` | Runtime evidence is merged from a backend | `relay.audit.actor`/`relay.report.backend`, `relay.audit.action` (`accepted`), `relay.audit.count` |
+| `approval.granted` / `approval.denied` | A human-approval gate is resolved | `relay.audit.actor` (approver, or joined set for `allOf`), `relay.audit.action` (`granted`/`denied`), `relay.audit.type` (`approval`), `relay.audit.target` (gated action) |
 
 **Attribute namespace:** all keys are `relay.audit.*` / `relay.session.*` / `relay.report.*` for stable SIEM routing. Record builders live in `internal/audit/record.go` (`PolicyViolation`, `SessionPhaseChange`, `RuntimeReport`).
 
@@ -81,4 +82,3 @@ Records are emitted as OTLP log records: body = human message, severity `INFO`, 
 ## Follow-ups (tracked in `.cursor/relay-project-status.md`)
 
 - Surface `assuranceLevel` on evidence in audit records / future UI (Runtime evidence integrity).
-- Approval-decision audit records (`approval.granted` / `approval.denied`) once consumers need them.
