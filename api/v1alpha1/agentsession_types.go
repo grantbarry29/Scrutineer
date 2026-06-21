@@ -90,6 +90,16 @@ type ModelSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +optional
 	MaxTokens *int32 `json:"maxTokens,omitempty"`
+
+	// BaseURL optionally overrides the provider API endpoint. Use it for
+	// OpenAI-compatible aggregators or gateways (e.g. OpenRouter
+	// "https://openrouter.ai/api/v1", LiteLLM, vLLM, Together, Azure). It is
+	// propagated to the agent as AGENT_MODEL_BASE_URL. Relay never calls the
+	// model itself, so the value is opaque and provider-agnostic; it only tells
+	// the agent runtime where to point its client. Must be an http(s) URL.
+	// +kubebuilder:validation:Pattern=`^https?://.+`
+	// +optional
+	BaseURL string `json:"baseURL,omitempty"`
 }
 
 // RuntimeSpec describes how the agent should be executed.

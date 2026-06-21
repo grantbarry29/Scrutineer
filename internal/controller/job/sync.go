@@ -22,6 +22,7 @@ var managedEnvKeys = []string{
 	EnvTaskPrompt,
 	EnvModelProvider,
 	EnvModelName,
+	EnvModelBaseURL,
 	EnvPolicyAllowedDomains,
 	EnvPolicyDeniedDomains,
 	EnvPolicyAllowedCIDRs,

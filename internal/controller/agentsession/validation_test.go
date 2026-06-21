@@ -97,6 +97,28 @@ var _ = Describe("validateSpec", func() {
 		Expect(validateSpec(session)).To(MatchError(ContainSubstring("runtimeProfileRef.name")))
 	})
 
+	It("accepts a valid model.baseURL", func() {
+		session := &relayv1alpha1.AgentSession{
+			Spec: relayv1alpha1.AgentSessionSpec{
+				Task:    relayv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   relayv1alpha1.ModelSpec{Provider: "openrouter", Name: "anthropic/claude-3.5-sonnet", BaseURL: "https://openrouter.ai/api/v1"},
+				Runtime: relayv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+			},
+		}
+		Expect(validateSpec(session)).To(Succeed())
+	})
+
+	It("rejects a non-http(s) model.baseURL", func() {
+		session := &relayv1alpha1.AgentSession{
+			Spec: relayv1alpha1.AgentSessionSpec{
+				Task:    relayv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   relayv1alpha1.ModelSpec{Provider: "openrouter", Name: "x", BaseURL: "ftp://example.com"},
+				Runtime: relayv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+			},
+		}
+		Expect(validateSpec(session)).To(MatchError(ContainSubstring("baseURL")))
+	})
+
 	It("rejects unsupported runtimeProfileRef kind", func() {
 		session := &relayv1alpha1.AgentSession{
 			Spec: relayv1alpha1.AgentSessionSpec{

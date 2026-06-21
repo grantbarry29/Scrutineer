@@ -333,21 +333,13 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
-### Task: Provider-agnostic `model.baseURL` (enables OpenRouter & OpenAI-compatible endpoints)
+### Task: Provider-agnostic `model.baseURL` (enables OpenRouter & OpenAI-compatible endpoints) — **done (2026-06-21)**
 
-**Discovered:** 2026-06-21 during an OpenRouter support discussion. Relay never calls the model — it validates `spec.model` and propagates `AGENT_MODEL_PROVIDER`/`AGENT_MODEL_NAME` to the Job (`internal/controller/job/builder.go`). `Provider` is already free-form, so `provider: openrouter` "works" as propagation today. The only provider-agnostic addition that adds value is an explicit base-URL so the agent knows where to point its OpenAI-compatible client (OpenRouter `https://openrouter.ai/api/v1`, but also LiteLLM/vLLM/Together/Azure).
+**Shipped:** Optional `ModelSpec.BaseURL` (`api/v1alpha1/agentsession_types.go`, CRD `Pattern=^https?://.+`); propagated to the agent as `AGENT_MODEL_BASE_URL` (`internal/controller/job/builder.go` + `constants.go`) and tracked in `managedEnvKeys` so a change is a policy-env drift/sync (`sync.go`). Controller defense-in-depth URL check in `validateSpec` (`validation.go`). Stays **provider-agnostic** — no provider allowlist; Relay never calls the model. Tests: `builder_test.go` (env set + empty when unset), `sync_test.go`/`builder_test.go` drift, `validation_test.go` (valid + non-http(s) rejected). README env list updated.
 
-**Why it matters:** One small, opaque field unlocks aggregators and self-hosted gateways without coupling Relay to any provider (keeps it provider-agnostic per vision). Avoids users smuggling endpoints through `runtime.env`.
+**Auth — still deferred (per user, 2026-06-21):** key delivery belongs to Phase 8 `CredentialProfile` + egress/tool-gateway brokering. An aggregator key is high blast radius → no plaintext key injection. Capturing the **routed** downstream model in evidence (so audit isn't blinded by the aggregator) is tracked under *Runtime evidence integrity*.
 
-**Scope (proposed):** Optional `model.baseURL` field (URL-validated); propagate as `AGENT_MODEL_BASE_URL`; include in policy-env drift/sync; document the OpenAI-compatible pattern. **No provider allowlist/enum** (stay opaque).
-
-**Auth — explicitly deferred (per user, 2026-06-21):** key delivery is the real governance question and belongs to Phase 8 `CredentialProfile` + egress/tool-gateway brokering. An aggregator key is high blast radius (spans all downstream providers) → do **not** ship plaintext key injection; track under *Phase 8 / CredentialProfile* and *Runtime evidence integrity* (capture the **routed** model in evidence so audit isn't blinded by the aggregator).
-
-**Non-goals:** Calling/proxying inference in the control plane; a credential broker; provider-specific logic; routing decisions.
-
-**Acceptance:** `model.baseURL` set on a session is propagated to the Job env and reflected in policy-propagation drift checks; unit/envtest coverage.
-
-**Files:** `api/v1alpha1/agentsession_types.go`, `internal/controller/job/builder.go` + `constants.go`, validation, tests.
+**Verification:** `make manifests generate` + `go build`; `go test ./internal/controller/job/... ./internal/controller/agentsession/...` (pass 2026-06-21).
 
 ### Task: Investigate AgentSession reconcile churn (repeated PolicyResolved events + status conflicts)
 

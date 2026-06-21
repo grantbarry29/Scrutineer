@@ -322,6 +322,7 @@ AGENT_TASK_DESCRIPTION
 AGENT_TASK_PROMPT
 AGENT_MODEL_PROVIDER
 AGENT_MODEL_NAME
+AGENT_MODEL_BASE_URL                 # optional; OpenAI-compatible endpoint override (e.g. OpenRouter)
 AGENT_POLICY_ALLOWED_DOMAINS         # comma-separated
 AGENT_POLICY_DENIED_DOMAINS          # comma-separated
 AGENT_POLICY_ALLOWED_CIDRS           # comma-separated

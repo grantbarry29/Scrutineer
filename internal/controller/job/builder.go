@@ -196,6 +196,7 @@ func buildEnv(session *relayv1alpha1.AgentSession, task *Task, resolved *policy.
 		{Name: EnvTaskPrompt, Value: task.Prompt},
 		{Name: EnvModelProvider, Value: session.Spec.Model.Provider},
 		{Name: EnvModelName, Value: session.Spec.Model.Name},
+		{Name: EnvModelBaseURL, Value: session.Spec.Model.BaseURL},
 		{Name: EnvPolicyAllowedDomains, Value: csv(rules.AllowedDomains)},
 		{Name: EnvPolicyDeniedDomains, Value: csv(rules.DeniedDomains)},
 		{Name: EnvPolicyAllowedCIDRs, Value: csv(rules.AllowedCIDRs)},

@@ -12,6 +12,7 @@ package agentsession
 
 import (
 	"fmt"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -58,6 +59,12 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 	}
 	if strings.TrimSpace(spec.Model.Name) == "" {
 		return fmt.Errorf("spec.model.name is required")
+	}
+	if bu := strings.TrimSpace(spec.Model.BaseURL); bu != "" {
+		u, err := url.Parse(bu)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("spec.model.baseURL %q must be an http(s) URL", spec.Model.BaseURL)
+		}
 	}
 
 	if strings.TrimSpace(spec.Workspace.Size) != "" {

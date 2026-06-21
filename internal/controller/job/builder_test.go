@@ -86,6 +86,34 @@ func TestBuild_ephemeralWorkspace(t *testing.T) {
 	}
 }
 
+func TestBuild_modelBaseURLEnv(t *testing.T) {
+	session := minimalSession()
+	session.Spec.Model.BaseURL = "https://openrouter.ai/api/v1"
+	job := Build(session, &Task{}, nil, nil)
+	env := envVarsToMap(job.Spec.Template.Spec.Containers[0].Env)
+	if env[EnvModelBaseURL] != "https://openrouter.ai/api/v1" {
+		t.Fatalf("AGENT_MODEL_BASE_URL = %q, want OpenRouter base URL", env[EnvModelBaseURL])
+	}
+
+	// Unset baseURL propagates as empty (provider default endpoint).
+	empty := envVarsToMap(Build(minimalSession(), &Task{}, nil, nil).Spec.Template.Spec.Containers[0].Env)
+	if empty[EnvModelBaseURL] != "" {
+		t.Fatalf("AGENT_MODEL_BASE_URL = %q, want empty when unset", empty[EnvModelBaseURL])
+	}
+}
+
+func TestPolicyEnvDrift_modelBaseURL(t *testing.T) {
+	base := minimalSession()
+	withURL := minimalSession()
+	withURL.Spec.Model.BaseURL = "https://openrouter.ai/api/v1"
+
+	a := Build(base, &Task{}, nil, nil)
+	b := Build(withURL, &Task{}, nil, nil)
+	if !PolicyEnvDrift(a, b) {
+		t.Fatal("expected drift when model.baseURL differs")
+	}
+}
+
 func TestBuild_policyCapEnv(t *testing.T) {
 	maxNet := int32(50)
 	maxTool := int32(10)

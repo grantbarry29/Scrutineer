@@ -34,6 +34,7 @@ const (
 	EnvTaskPrompt                  = "AGENT_TASK_PROMPT"
 	EnvModelProvider               = "AGENT_MODEL_PROVIDER"
 	EnvModelName                   = "AGENT_MODEL_NAME"
+	EnvModelBaseURL                = "AGENT_MODEL_BASE_URL"
 	EnvPolicyAllowedDomains        = "AGENT_POLICY_ALLOWED_DOMAINS"
 	EnvPolicyDeniedDomains         = "AGENT_POLICY_DENIED_DOMAINS"
 	EnvPolicyAllowedCIDRs          = "AGENT_POLICY_ALLOWED_CIDRS"
