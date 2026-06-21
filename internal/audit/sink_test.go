@@ -26,7 +26,7 @@ func TestSetup_noopWhenEndpointEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	Emit(context.Background(), PolicyViolation("ns", "s", "network", "evil.example", "denied", time.Now()))
+	Emit(context.Background(), PolicyViolation("ns", "s", "network", "evil.example", "denied", "self-reported", time.Now()))
 	if err := shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -55,16 +55,16 @@ func TestEmit_otlpSink(t *testing.T) {
 func TestRecordBuilders(t *testing.T) {
 	t.Parallel()
 
-	v := PolicyViolation("ns", "s", "tool", "kubectl", "denied", time.Time{})
-	if v.EventType != EventPolicyViolation || v.Type != "tool" {
+	v := PolicyViolation("ns", "s", "tool", "kubectl", "denied", "self-reported", time.Time{})
+	if v.EventType != EventPolicyViolation || v.Type != "tool" || v.Assurance != "self-reported" {
 		t.Fatalf("violation record = %+v", v)
 	}
 	p := SessionPhaseChange("ns", "s", "Starting", "Running", time.Time{})
 	if p.FromPhase != "Starting" || p.Phase != "Running" {
 		t.Fatalf("phase record = %+v", p)
 	}
-	r := RuntimeReport("ns", "s", "dns-proxy", 2, time.Time{})
-	if r.Backend != "dns-proxy" || r.Count != 2 {
+	r := RuntimeReport("ns", "s", "dns-proxy", 2, "self-reported", time.Time{})
+	if r.Backend != "dns-proxy" || r.Count != 2 || r.Assurance != "self-reported" {
 		t.Fatalf("report record = %+v", r)
 	}
 

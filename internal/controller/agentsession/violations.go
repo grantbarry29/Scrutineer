@@ -47,12 +47,18 @@ func AppendRuntimeViolations(session *relayv1alpha1.AgentSession, incoming []rel
 	)
 	metrics.ObserveNovelViolations(session.Namespace, violationTypes(novel))
 	for _, v := range novel {
+		assurance := v.AssuranceLevel
+		if assurance == "" {
+			// Empty is treated as self-reported (see PolicyViolation.AssuranceLevel).
+			assurance = relayv1alpha1.EvidenceSelfReported
+		}
 		audit.Emit(context.Background(), audit.PolicyViolation(
 			session.Namespace,
 			session.Name,
 			v.Type,
 			v.Target,
 			v.Message,
+			string(assurance),
 			v.Time.Time,
 		))
 	}

@@ -182,7 +182,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result = "accepted"
-	audit.Emit(ctx, audit.RuntimeReport(sessionNamespace, sessionName, backend, len(report.Decisions), receivedAt))
+	// Runtime reports come from cooperative data-plane sidecars: self-reported assurance.
+	audit.Emit(ctx, audit.RuntimeReport(sessionNamespace, sessionName, backend, len(report.Decisions),
+		string(relayv1alpha1.EvidenceSelfReported), receivedAt))
 	w.WriteHeader(http.StatusAccepted)
 }
 

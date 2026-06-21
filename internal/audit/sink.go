@@ -153,6 +153,9 @@ func (s otlpSink) emit(ctx context.Context, rec Record) {
 	if rec.Backend != "" {
 		attrs = append(attrs, otellog.String("relay.report.backend", rec.Backend))
 	}
+	if rec.Assurance != "" {
+		attrs = append(attrs, otellog.String("relay.audit.assurance", rec.Assurance))
+	}
 	if rec.Count > 0 {
 		attrs = append(attrs, otellog.Int("relay.audit.count", rec.Count))
 	}

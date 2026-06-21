@@ -53,12 +53,14 @@ Records are emitted as OTLP log records: body = human message, severity `INFO`, 
 
 | `relay.audit.event_type` | Emitted when | Key attributes (besides namespace/name) |
 |--------------------------|--------------|------------------------------------------|
-| `policy.violation` | A novel violation is appended to status | `relay.audit.actor` (`relay-controller`), `relay.audit.action` (`violation`), `relay.audit.type`, `relay.audit.target` |
+| `policy.violation` | A novel violation is appended to status | `relay.audit.actor` (`relay-controller`), `relay.audit.action` (`violation`), `relay.audit.type`, `relay.audit.target`, `relay.audit.assurance` |
 | `session.phase_change` | An AgentSession lifecycle phase changes | `relay.audit.actor`, `relay.session.from_phase`, `relay.session.phase` |
-| `runtime.report` | Runtime evidence is merged from a backend | `relay.audit.actor`/`relay.report.backend`, `relay.audit.action` (`accepted`), `relay.audit.count` |
+| `runtime.report` | Runtime evidence is merged from a backend | `relay.audit.actor`/`relay.report.backend`, `relay.audit.action` (`accepted`), `relay.audit.count`, `relay.audit.assurance` (`self-reported`) |
 | `approval.granted` / `approval.denied` | A human-approval gate is resolved | `relay.audit.actor` (approver, or joined set for `allOf`), `relay.audit.action` (`granted`/`denied`), `relay.audit.type` (`approval`), `relay.audit.target` (gated action) |
 
-**Attribute namespace:** all keys are `relay.audit.*` / `relay.session.*` / `relay.report.*` for stable SIEM routing. Record builders live in `internal/audit/record.go` (`PolicyViolation`, `SessionPhaseChange`, `RuntimeReport`).
+**Attribute namespace:** all keys are `relay.audit.*` / `relay.session.*` / `relay.report.*` for stable SIEM routing. Record builders live in `internal/audit/record.go` (`PolicyViolation`, `SessionPhaseChange`, `RuntimeReport`, `ApprovalDecision`).
+
+**Assurance:** `policy.violation` and `runtime.report` carry `relay.audit.assurance` (`controller` | `self-reported` | `observed`, mirroring `api/v1alpha1.EvidenceAssurance`) so audit consumers know how much to trust each record. Cooperative sidecar evidence is `self-reported`; an empty violation assurance is normalized to `self-reported`. See [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) §5.
 
 ## Enable flags (`cmd/main.go`)
 
@@ -81,4 +83,4 @@ Records are emitted as OTLP log records: body = human message, severity `INFO`, 
 
 ## Follow-ups (tracked in `.cursor/relay-project-status.md`)
 
-- Surface `assuranceLevel` on evidence in audit records / future UI (Runtime evidence integrity).
+- Surface `assuranceLevel` in the **future UI** evidence views (audit records now carry `relay.audit.assurance`; see Runtime evidence integrity).

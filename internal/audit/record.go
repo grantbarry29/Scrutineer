@@ -39,10 +39,16 @@ type Record struct {
 	Message   string
 	Backend   string
 	Count     int
+	// Assurance is the evidence trust level (controller | self-reported |
+	// observed), mirroring api/v1alpha1.EvidenceAssurance. Empty when the record
+	// type has no assurance notion (e.g. phase changes).
+	Assurance string
 }
 
 // PolicyViolation builds a record for a novel policy violation appended to status.
-func PolicyViolation(namespace, session, violationType, target, message string, at time.Time) Record {
+// assurance is the evidence trust level (e.g. self-reported for cooperative
+// sidecar violations); callers normalize an empty value.
+func PolicyViolation(namespace, session, violationType, target, message, assurance string, at time.Time) Record {
 	if at.IsZero() {
 		at = time.Now()
 	}
@@ -56,6 +62,7 @@ func PolicyViolation(namespace, session, violationType, target, message string, 
 		Type:      violationType,
 		Target:    target,
 		Message:   message,
+		Assurance: assurance,
 	}
 }
 
@@ -106,8 +113,10 @@ func ApprovalDecision(namespace, session, gatedAction, actor, reason string, gra
 	}
 }
 
-// RuntimeReport builds a record when runtime evidence is merged from a data-plane backend.
-func RuntimeReport(namespace, session, backend string, decisionCount int, at time.Time) Record {
+// RuntimeReport builds a record when runtime evidence is merged from a data-plane
+// backend. assurance is the evidence trust level of the report (cooperative
+// sidecars are self-reported).
+func RuntimeReport(namespace, session, backend string, decisionCount int, assurance string, at time.Time) Record {
 	if at.IsZero() {
 		at = time.Now()
 	}
@@ -121,5 +130,6 @@ func RuntimeReport(namespace, session, backend string, decisionCount int, at tim
 		Count:     decisionCount,
 		Action:    "accepted",
 		Message:   "runtime evidence report merged",
+		Assurance: assurance,
 	}
 }
