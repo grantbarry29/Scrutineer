@@ -34,5 +34,6 @@ Relay keeps canonical architecture/design docs in [`docs/design/`](../../docs/de
 | UI timeline projection over `status.events[]` (`internal/observability`) | [`docs/design/phase-4-session-timeline.md`](../../docs/design/phase-4-session-timeline.md) |
 | Human approval gates / `ApprovalPolicy` / `ApprovalRequest` / `requireHumanApproval` enforcement | [`docs/design/phase-5-approval-workflows.md`](../../docs/design/phase-5-approval-workflows.md) |
 | Observability export (Prometheus / OTel traces / OTLP audit logs) | [`docs/design/phase-4-observability-export.md`](../../docs/design/phase-4-observability-export.md) |
+| Orchestrator decoupling / `RuntimeBackend` interface / orchestrator adapters (Tekton/Argo/Temporal) | [`docs/design/phase-6-orchestrator-interface.md`](../../docs/design/phase-6-orchestrator-interface.md) |
 
 The folder index is [`docs/design/README.md`](../../docs/design/README.md). For current state/queue use `.cursor/relay-project-status.md`; for how to implement use `.cursor/relay-cursor-workflow.md`.

@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -579,6 +579,16 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `go build ./...`; `go test ./internal/metrics/` (pass 2026-06-21).
 
+### Task: Phase 6 · slice 1 — orchestrator interface design doc — **done (2026-06-21)**
+
+**Shipped:** `docs/design/phase-6-orchestrator-interface.md` — catalogs every `batchv1.Job` coupling point in the reconciler (`ensureJob`, `syncStatusFromJob`, `findPodName`, `stopRuntimeJob`, `handleDeletion`, `SetupWithManager` `Owns`, the `internal/controller/job` package); proposes a `RuntimeBackend` interface (`Name`/`Ensure`/`Observe`/`Stop`/`OwnedType`) with a normalized `Observation`/`RuntimePhase` the reconciler maps to phase/conditions (governance logic stays backend-neutral); selection via the existing `spec.runtime.orchestrator` field + a startup registry; honest treatment of the data-plane/evidence channel (sidecars are Pod-specific → non-pod backends affect assurance); invariants; a behavior-preserving migration plan (slice 2 = extract interface + make Jobs the first backend); and open questions (status field generality, drift/replace per backend, evidence channels). Indexed in `docs/design/README.md` + `relay-design-docs.mdc`.
+
+**Why design-first:** decoupling from Jobs is the largest architectural item the product vision flags; this defines the boundary before any refactor and matches the design-doc convention (Phase 5 was sequenced the same way).
+
+**Next:** slice 2 — extract `RuntimeBackend` + `kubernetes-job` implementation behind it (behavior-preserving; all existing envtests green). Promote into the queue when starting Phase 6 implementation.
+
+**Verification:** Review only (docs); `make test` unaffected.
+
 ### Phase 5 — approval workflows (ordered task cards)
 
 Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices). **Promote slice 1 into Ready for Cursor Queue when starting Phase 5.** Implement one slice at a time; do not bundle.
@@ -1046,7 +1056,7 @@ Scoped, auditable gates — not a boolean env var. Today `requireHumanApproval` 
 
 Stay orchestrator-agnostic; add backends without coupling core reconciler to Jobs.
 
-- [ ] **Orchestrator interface** — `CreateRuntime`, `GetStatus`, `Cancel` abstraction in controller
+- [ ] **Orchestrator interface** — `RuntimeBackend` (`Ensure`/`Observe`/`Stop`/`OwnedType`) abstraction in controller. **Design doc done (2026-06-21):** `docs/design/phase-6-orchestrator-interface.md`; slice 2 = behavior-preserving extraction with Jobs as the first backend.
 - [ ] **Tekton adapter** — `runtime.orchestrator: tekton`
 - [ ] **Argo Workflows adapter**
 - [ ] **Temporal adapter** (or external worker handshake)
