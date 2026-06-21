@@ -204,6 +204,61 @@ var _ = Describe("AgentSession approval gate", func() {
 		Expect(req.Status.DecidedBy).To(Equal("alice"))
 	})
 
+	It("requires every listed approver before resuming an allOf gate", func() {
+		ns := newTestNamespace()
+		policy := approvalPolicy(ns, "gate", "deploy")
+		policy.Spec.Requirement = relayv1alpha1.ApprovalRequirementAllOf
+		policy.Spec.Approvers = []relayv1alpha1.ApprovalSubject{
+			{Kind: relayv1alpha1.ApprovalSubjectUser, Name: "alice"},
+			{Kind: relayv1alpha1.ApprovalSubjectUser, Name: "bob"},
+		}
+		Expect(k8sClient.Create(testCtx, policy)).To(Succeed())
+
+		session := sessionRequiringApproval(ns, "allof-gate", "deploy")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+		waitForPhase(key, relayv1alpha1.PhaseAwaitingApproval)
+
+		// First approver grants: session stays gated and the grant is recorded.
+		Eventually(func(g Gomega) {
+			var req relayv1alpha1.ApprovalRequest
+			g.Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
+			req.Spec.Decision = relayv1alpha1.ApprovalDecisionGranted
+			req.Spec.DecidedBy = "alice"
+			g.Expect(k8sClient.Update(testCtx, &req)).To(Succeed())
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			var req relayv1alpha1.ApprovalRequest
+			g.Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
+			g.Expect(req.Status.ApprovedBy).To(ContainElement("alice"))
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		Consistently(func(g Gomega) {
+			var got relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			g.Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseAwaitingApproval))
+		}, 2*time.Second, controllerPollInterval).Should(Succeed())
+		expectJobAbsent(ns, session)
+
+		// Second approver grants: coverage is complete, the session resumes.
+		Eventually(func(g Gomega) {
+			var req relayv1alpha1.ApprovalRequest
+			g.Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
+			req.Spec.DecidedBy = "bob"
+			g.Expect(k8sClient.Update(testCtx, &req)).To(Succeed())
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		waitForJob(ns, session)
+
+		var got relayv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+		Expect(hasApprovalDecision(&got, "deploy", relayv1alpha1.PolicyDecisionAllow)).To(BeTrue())
+		var req relayv1alpha1.ApprovalRequest
+		Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
+		Expect(req.Status.ApprovedBy).To(ConsistOf("alice", "bob"))
+	})
+
 	It("denies the session terminally when the request is denied", func() {
 		ns := newTestNamespace()
 		Expect(k8sClient.Create(testCtx, approvalPolicy(ns, "gate", "deploy"))).To(Succeed())

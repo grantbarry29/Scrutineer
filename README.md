@@ -516,6 +516,7 @@ kubectl get events -n <namespace> --field-selector involvedObject.kind=AgentSess
 | `ApprovalNotified` | Normal | Approvers notified of an open gate (`--approval-webhook-url`) |
 | `ApprovalNotifyFailed` | Warning | Approval notification delivery failed (will retry) |
 | `ApprovalUnauthorized` | Warning | Grant set by a subject not listed in the policy's approvers; not honored |
+| `ApprovalPartiallyApproved` | Normal | `allOf` gate received a valid grant but still needs more approvers |
 | `PolicyResolved` | Normal | Referenced policies merged |
 | `RuntimeProfileResolved` | Normal | RuntimeProfile applied to Job template |
 | `PolicyEnvDrift` | Warning | Effective policy changed but active Job env is stale |

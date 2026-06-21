@@ -143,7 +143,7 @@ Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope*
 
 1. **Approver authn/authz:** MVP = Kubernetes RBAC on `patch ApprovalRequest spec.decision` (only authorized subjects can grant). **Slice 5 (shipped 2026-06-21)** adds best-effort identity: approvers self-declare `spec.decidedBy`, mirrored to `status.decidedBy` and used as the approval decision actor. This is **not authenticated** — capturing the real apiserver `userInfo` still needs a future validating webhook (deferred).
 2. **`approvers` matching:** **resolved (slice 5):** enforced by the gate — a grant is honored only when `spec.decidedBy` matches a listed `ApprovalPolicy.approvers[].name` (match by name; Kind advisory). Empty `approvers` ⇒ any grant accepted (RBAC is the gate). An unlisted grant keeps the session `AwaitingApproval` and emits `ApprovalUnauthorized`.
-3. **Multiple required approvers (`allOf`)** — defer to a later slice; `requirement: default` (single) for MVP.
+3. **Multiple required approvers (`allOf`)** — **resolved (slice 6, shipped 2026-06-21):** when `requirement: allOf` and `approvers` is non-empty, the gate accumulates each valid grant's `spec.decidedBy` into controller-owned `ApprovalRequest.status.approvedBy[]` and only opens once that set covers every listed approver; until then the session stays `AwaitingApproval` and emits `ApprovalPartiallyApproved`. The approval `policyDecision` actor is the joined approver set. **Fail-closed limitation:** approvers grant sequentially through the single `spec.decidedBy` field, so two grants coalesced into one reconcile record only the latest grantor — the missed approver simply re-submits; the gate never opens early. An `allOf` policy with no listed approvers degenerates to single-approver. A list-typed multi-grant spec + authenticated identity (webhook) is future work.
 4. **Per-tool runtime approval** — reuses `ApprovalRequest` but needs the agent/tool-gateway to block mid-call; separate design once gateway enforcement is adversarial-grade.
 
 ## Implementation slices (tracking)
@@ -154,6 +154,8 @@ See `.cursor/relay-project-status.md` → *Discovered Follow-Up Tasks → Phase 
 2. `ApprovalPolicy` CRD (declarative only). — **done (2026-06-21)**
 3. `ApprovalRequest` CRD + controller gate/resume + `PhaseAwaitingApproval`. — **done (2026-06-21)**
 4. Notification hooks (generic webhook → Slack/PagerDuty adapters). — **done (2026-06-21)** — `internal/approval` `Notifier` (noop + webhook); reconciler fires once on gate open (annotation-guarded, best-effort, retried); `--approval-webhook-url` flag. Slack/PagerDuty are future adapters over `Notifier`.
+5. Approver allowlist (best-effort `decidedBy`). — **done (2026-06-21)** — see open questions #1/#2.
+6. Multi-approver (`allOf`). — **done (2026-06-21)** — `status.approvedBy[]` accumulation; gate opens on full coverage; `ApprovalPartiallyApproved` event. See open question #3.
 
 ## Related
 

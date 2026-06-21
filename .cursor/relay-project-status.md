@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). **Phase 5 substantively done:** slices 1 (design doc) + 2 (`ApprovalPolicy` CRD) + 3 (`ApprovalRequest` CRD + controller gate/resume) + 4 (notification hooks) **done**. The approval gate is real and notified: a session matching an `ApprovalPolicy` blocks in `AwaitingApproval` until granted, and approvers are webhook-notified. **No queue head selected** — pick next from *Discovered Follow-Up Tasks* (e.g. provider-agnostic `model.baseURL`, observability export design doc, runtime evidence integrity hardening) or remaining Phase 5 polish (multi-approver, per-tool runtime approval, approver-identity webhook).
+> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). **Phase 5 substantively done:** slices 1 (design doc) + 2 (`ApprovalPolicy` CRD) + 3 (`ApprovalRequest` CRD + controller gate/resume) + 4 (notification hooks) + 5 (approver allowlist) + 6 (multi-approver `allOf`) **done**. The approval gate is real, notified, and supports single- or multi-approver: a session matching an `ApprovalPolicy` blocks in `AwaitingApproval` until granted, approvers are webhook-notified, and `allOf` requires every listed approver. **No queue head selected** — pick next from *Discovered Follow-Up Tasks* or remaining Phase 5 polish (per-tool runtime approval, authenticated approver-identity via webhook).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -617,7 +617,7 @@ Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices)
 
 **Verification:** `go build ./...` + `go vet`; `go test ./internal/approval/... ./internal/controller/agentsession/...` (pass 2026-06-21).
 
-**Next:** Phase 5 substantively complete (gate + notifications). Remaining Phase 5 polish (multi-approver `allOf`, per-tool runtime approval, authenticated approver-identity via webhook) tracked in `docs/design/phase-5-approval-workflows.md` open questions.
+**Next:** Phase 5 substantively complete (gate + notifications + allowlist + multi-approver). Remaining Phase 5 polish (per-tool runtime approval, authenticated approver-identity via webhook) tracked in `docs/design/phase-5-approval-workflows.md` open questions.
 
 #### Task: Phase 5 · slice 5 — approver allowlist (best-effort `decidedBy`) — **done (2026-06-21)**
 
@@ -626,6 +626,14 @@ Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices)
 **Honesty note:** `decidedBy` is **not authenticated** — the real boundary is RBAC on who may patch the `ApprovalRequest`. Authenticated capture (record apiserver `userInfo`) needs a validating webhook (deferred; design doc open question #1).
 
 **Verification:** `make manifests generate` + `go build` + `go vet`; `go test ./internal/controller/agentsession/...` (pass 2026-06-21).
+
+#### Task: Phase 5 · slice 6 — multi-approver (`allOf`) — **done (2026-06-21)**
+
+**Shipped:** `requirement: allOf` is now enforced. New controller-owned `ApprovalRequest.status.approvedBy[]` (`+listType=set`) accumulates each valid grant's `spec.decidedBy`; the gate (`approval.go` `requiresAllOf`/`remainingApprovers`/`recordApprover`) holds the session in `AwaitingApproval` and emits `ApprovalPartiallyApproved` until that set covers every listed `approvers[].name`, then finalizes the grant. The approval `policyDecisions` allow-actor is the joined approver set. An `allOf` policy with no listed approvers degenerates to single-approver. Regenerated deepcopy + CRD. Envtest: `alice` then `bob` required before the Job is created (`approval_gate_test.go`).
+
+**Honesty note (fail-closed):** approvers grant sequentially via the single `spec.decidedBy`, so two grants coalesced into one reconcile record only the latest grantor; the missed approver re-submits — the gate never opens early. A list-typed multi-grant spec + authenticated identity (webhook) is future work (design doc open question #3).
+
+**Verification:** `make generate manifests` + `go build`; `go test ./internal/controller/agentsession/` (full envtest suite, pass 2026-06-21).
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 

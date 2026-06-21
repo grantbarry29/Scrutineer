@@ -115,6 +115,16 @@ spec:
           status:
             description: ApprovalRequestStatus is owned by the controller.
             properties:
+              approvedBy:
+                description: |-
+                  ApprovedBy is the set of distinct approver identities that have granted this
+                  request. It is only populated for allOf policies (multi-approver): the gate
+                  opens once it covers every listed approver. Controller-owned and best-effort
+                  (entries come from the self-declared spec.decidedBy of each grant).
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
               decidedAt:
                 description: DecidedAt is when the decision was observed.
                 format: date-time

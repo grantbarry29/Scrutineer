@@ -55,6 +55,8 @@ const (
 	EventReasonApprovalNotifyFailed = "ApprovalNotifyFailed"
 	// EventReasonApprovalUnauthorized — a grant was set by a subject not in the policy's approvers (warning; not honored).
 	EventReasonApprovalUnauthorized = "ApprovalUnauthorized"
+	// EventReasonApprovalPartial — an allOf gate received a valid grant but still needs more approvers.
+	EventReasonApprovalPartial = "ApprovalPartiallyApproved"
 	// EventReasonPolicyResolved — referenced policies merged into effective policy.
 	EventReasonPolicyResolved         = "PolicyResolved"
 	EventReasonRuntimeProfileResolved = "RuntimeProfileResolved"

@@ -92,6 +92,25 @@ func (r *AgentSessionReconciler) reconcileApprovalGate(ctx context.Context, sess
 				fmt.Sprintf("Grant on %q is not from a listed approver", req.Name))
 			return approvalPending, nil
 		}
+		// allOf: a single grant is not enough — accumulate distinct grantors and
+		// hold the gate until every listed approver has granted. Fail-closed: a
+		// grant that is lost to a coalesced reconcile leaves the session gated.
+		if requiresAllOf(gatePolicy) {
+			if err := r.recordApprover(ctx, req, req.Spec.DecidedBy); err != nil {
+				return approvalProceed, err
+			}
+			if remaining := remainingApprovers(gatePolicy, req); len(remaining) > 0 {
+				all := approverNames(gatePolicy)
+				_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStatePending, gatePolicy,
+					fmt.Sprintf("allOf: awaiting %d more approver(s): %s", len(remaining), strings.Join(remaining, ", ")))
+				r.recordNormal(session, EventReasonApprovalPartial,
+					fmt.Sprintf("Approval %d of %d for action %q; awaiting %s",
+						len(all)-len(remaining), len(all), gatedAction, strings.Join(remaining, ", ")))
+				setCondition(session, ConditionApprovalRequired, metav1.ConditionTrue, "PartialApproval",
+					fmt.Sprintf("Awaiting %d more approver(s) on %q", len(remaining), req.Name))
+				return approvalPending, nil
+			}
+		}
 		if err := r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateGranted, gatePolicy, "decision granted"); err != nil {
 			return approvalProceed, err
 		}
@@ -182,6 +201,79 @@ func approverAllowed(gatePolicy *relayv1alpha1.ApprovalPolicy, declaredBy string
 		}
 	}
 	return false
+}
+
+// approverNames returns the distinct, sorted approver names of a policy.
+func approverNames(p *relayv1alpha1.ApprovalPolicy) []string {
+	seen := make(map[string]struct{}, len(p.Spec.Approvers))
+	var names []string
+	for _, a := range p.Spec.Approvers {
+		n := strings.TrimSpace(a.Name)
+		if n == "" {
+			continue
+		}
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// requiresAllOf reports whether the policy needs every listed approver to grant.
+// An allOf policy with no listed approvers is degenerate and falls back to the
+// single-approver path (there is no set to require all of).
+func requiresAllOf(p *relayv1alpha1.ApprovalPolicy) bool {
+	return p.Spec.Requirement == relayv1alpha1.ApprovalRequirementAllOf && len(approverNames(p)) > 0
+}
+
+// remainingApprovers returns listed approvers that have not yet granted.
+func remainingApprovers(p *relayv1alpha1.ApprovalPolicy, req *relayv1alpha1.ApprovalRequest) []string {
+	granted := make(map[string]struct{}, len(req.Status.ApprovedBy))
+	for _, n := range req.Status.ApprovedBy {
+		granted[strings.TrimSpace(n)] = struct{}{}
+	}
+	var rem []string
+	for _, n := range approverNames(p) {
+		if _, ok := granted[n]; !ok {
+			rem = append(rem, n)
+		}
+	}
+	return rem
+}
+
+// recordApprover adds a distinct grantor to status.approvedBy (idempotent). It
+// keeps the request Pending; the gate finalizes the grant only once coverage is
+// met. Syncs the in-memory req so the caller sees the updated set.
+func (r *AgentSessionReconciler) recordApprover(ctx context.Context, req *relayv1alpha1.ApprovalRequest, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	key := client.ObjectKeyFromObject(req)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var latest relayv1alpha1.ApprovalRequest
+		if err := r.Get(ctx, key, &latest); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		for _, n := range latest.Status.ApprovedBy {
+			if n == name {
+				*req = latest
+				return nil
+			}
+		}
+		latest.Status.ApprovedBy = append(latest.Status.ApprovedBy, name)
+		if err := r.Status().Update(ctx, &latest); err != nil {
+			return err
+		}
+		*req = latest
+		return nil
+	})
 }
 
 // ensureApprovalRequest creates the owned ApprovalRequest for a gated session if
@@ -295,7 +387,13 @@ func (r *AgentSessionReconciler) recordApprovalDecision(session *relayv1alpha1.A
 		return
 	}
 	actor := "relay-controller"
-	if req != nil && req.Status.DecidedBy != "" {
+	switch {
+	case req == nil:
+		// keep default
+	case action == relayv1alpha1.PolicyDecisionAllow && len(req.Status.ApprovedBy) > 0:
+		// allOf: the grant is authorized by the full set of approvers.
+		actor = strings.Join(req.Status.ApprovedBy, ",")
+	case req.Status.DecidedBy != "":
 		actor = req.Status.DecidedBy
 	}
 	AppendRuntimePolicyDecisions(session, []relayv1alpha1.PolicyDecision{{

@@ -105,6 +105,14 @@ type ApprovalRequestStatus struct {
 	// +optional
 	DecidedBy string `json:"decidedBy,omitempty"`
 
+	// ApprovedBy is the set of distinct approver identities that have granted this
+	// request. It is only populated for allOf policies (multi-approver): the gate
+	// opens once it covers every listed approver. Controller-owned and best-effort
+	// (entries come from the self-declared spec.decidedBy of each grant).
+	// +optional
+	// +listType=set
+	ApprovedBy []string `json:"approvedBy,omitempty"`
+
 	// DecidedAt is when the decision was observed.
 	// +optional
 	DecidedAt *metav1.Time `json:"decidedAt,omitempty"`
