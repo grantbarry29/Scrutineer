@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-10 (Phase 4 log/artifact collection — Phase 4 complete)
+> **Last updated:** 2026-06-16 (repository audit pass — Phase 4 verified complete; Phase 5 decomposed into task cards; evidence-integrity gap tracked)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). Next: **Phase 5 approval workflows** or **Phase 7 UI** (product choice).
+> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). Next: **Phase 5 approval workflows** (recommended — closes the biggest vision/impl gap; `requireHumanApproval` only warns today) or **Phase 7 UI**. Phase 5 is now decomposed into ordered task cards under *Discovered Follow-Up Tasks → Phase 5 approval workflows*; **queue head = Phase 5 · slice 1 (ApprovalPolicy/ApprovalRequest design doc)**.
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -536,6 +536,94 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** `make test` + integration test with mock S3 or MinIO.
 
+### Task: Runtime evidence integrity (cooperative → adversarial trust)
+
+**Discovered:** 2026-06-16 repository audit. The reporter (`internal/reporter/auth.go`) authenticates the **pod** via TokenReview + pod→Job→session ownership, but enforcement sidecars and the agent share one pod and ServiceAccount. A compromised/prompt-injected agent could forge or suppress runtime evidence, or starve the sidecar. The reporter contract (`docs/design/phase-3-runtime-reporter-contract.md` §5) names this threat but the residual gap (cooperative, not adversarial) is not surfaced to consumers.
+
+**Why it matters:** Relay is a governance/audit product; trustworthy evidence is core to the value proposition (see product vision *Trust And Threat Model → Evidence integrity*). Audit/UI consumers must not treat self-reported evidence as tamper-proof.
+
+**Scope (proposed, decompose further before building):**
+- **Honesty first (small, near-term):** add an `assuranceLevel` (e.g. `self-reported` vs `observed`) field/annotation on runtime decisions/violations so status + future UI can show how much to trust each record; default existing sidecar reports to `self-reported`.
+- **Hardening (later, larger):** restrict reporter token projection to the sidecar container only + disable agent SA automount; consider out-of-pod / kernel (eBPF) observation as an independent evidence source.
+
+**Non-goals:** Implementing eBPF/Cilium in this task; rewriting the reporter auth model in one pass.
+
+**Verification:** `make test` (unit for the assurance-level field + reporter default).
+
+**Files (likely):** `api/v1alpha1/agentsession_types.go` (decision/violation field), `internal/reporter/`, `internal/enforcement/*/report.go`, reporter contract doc §5.
+
+### Task: Observability export design doc (Prometheus / OTel / audit)
+
+**Discovered:** 2026-06-16 audit. Prometheus metrics, OTel tracing, and the OTLP audit sink shipped (Phase 4) with **no** `docs/design/` doc, violating the design-doc convention ("each slice states status/scope/non-goals; update on ship"). `relay-design-docs.mdc` now points here.
+
+**Why it matters:** No canonical reference for metric/span/audit-record names, cardinality rules, enable flags, or the W3C trace-propagation contract used by sidecars — risks drift and duplicate work as the UI/SIEM surfaces are built.
+
+**Scope (proposed):** `docs/design/phase-4-observability-export.md` — catalog `relay_*` metrics + labels, span names/attributes, audit `Record` event types, OTLP enable flags, and non-goals (no in-cluster collector, opt-in only). Update `docs/design/README.md` + `relay-design-docs.mdc` index.
+
+**Non-goals:** Changing exported metrics/spans/records; adding new exporters.
+
+**Verification:** Docs-only; `make test` still passes.
+
+### Phase 5 — approval workflows (ordered task cards)
+
+Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices). **Promote slice 1 into Ready for Cursor Queue when starting Phase 5.** Implement one slice at a time; do not bundle.
+
+#### Task: Phase 5 · slice 1 — Approval model design doc
+
+**Goal:** Decide the CRD shape and gate mechanism for scoped, auditable approvals before any code.
+
+**Scope:** `docs/design/phase-5-approval-workflows.md` — `ApprovalPolicy` (what requires approval: tool / domain / file write / deploy / credential / bounded time window) vs `ApprovalRequest` (per-action object); how the controller blocks/resumes a session (phase + condition, e.g. `PhaseAwaitingApproval` / `ApprovalRequired`); relationship to existing `requireHumanApproval` and `status.policyDecisions` (`type: approval`); audit fields (who/when/scope/expiry); notification hooks as a non-goal for slice 1.
+
+**Non-goals:** Implementing CRDs or the gate; UI; integrations.
+
+**Acceptance:** Design doc with CRD field sketches, lifecycle/state machine, invariants, non-goals; status line + `relay-design-docs.mdc` index updated.
+
+**Verification:** Review only.
+
+**Files:** `docs/design/phase-5-approval-workflows.md`, `docs/design/README.md`, `.cursor/rules/relay-design-docs.mdc`.
+
+#### Task: Phase 5 · slice 2 — ApprovalPolicy CRD (declarative only)
+
+**Goal:** Ship `ApprovalPolicy` CRD describing which actions require approval; no gate yet.
+
+**Scope:** `api/v1alpha1/approvalpolicy_types.go`; register in scheme/groupversion; CRD manifest + sample; `verify-samples`. Schema only, mirroring `AgentPolicy` conventions.
+
+**Non-goals:** Blocking execution; `ApprovalRequest`; resume logic.
+
+**Acceptance:** `make manifests` generates the CRD; `make verify-samples` passes; envtest create/validate.
+
+**Verification:** `make manifests && make test`.
+
+**Files:** `api/v1alpha1/approvalpolicy_types.go`, generated CRD/deepcopy, `config/samples/`, `config/crd/kustomization.yaml`.
+
+#### Task: Phase 5 · slice 3 — ApprovalRequest CRD + controller gate
+
+**Goal:** A session that matches an `ApprovalPolicy` is held in `PhaseAwaitingApproval` until an `ApprovalRequest` is granted, then resumes.
+
+**Scope:** `ApprovalRequest` CRD (action, scope, requestor, decision, decider, expiry); reconciler: when approval required and not yet granted, do **not** create the Job, set `PhaseAwaitingApproval` + `ApprovalRequired` condition + event; on grant, proceed; on deny/expiry, terminal `PhaseDenied`. Append `status.policyDecisions` (`type: approval`, `action: allow/deny`).
+
+**Non-goals:** External integrations (Slack/PagerDuty); per-tool runtime approval mid-execution (later slice); UI inbox.
+
+**Acceptance:** Envtest: pending approval blocks Job creation; granting resumes to Job; denial/expiry → denied. Idempotent.
+
+**Verification:** `make manifests && make test`.
+
+**Files:** `api/v1alpha1/approvalrequest_types.go`, `internal/controller/agentsession/` (gate + constants), generated manifests, envtest.
+
+#### Task: Phase 5 · slice 4 — Approval notification hooks
+
+**Goal:** Notify approvers when an `ApprovalRequest` is created (generic webhook first).
+
+**Scope:** Pluggable notifier interface; generic webhook sender on `ApprovalRequest` create; config flag/secret ref; Slack/PagerDuty as adapters later. Audit each notification.
+
+**Non-goals:** Building a UI inbox (Phase 7); credential storage (Phase 8 `CredentialProfile`).
+
+**Acceptance:** Unit test fires webhook on request create; failure is retried/logged, not fatal.
+
+**Verification:** `make test`.
+
+**Files:** `internal/approval/` (new), reconciler hook, `cmd/main.go` flag.
+
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
 **Shipped:** `internal/controller/job/sidecars.go` — inject enabled known sidecars; `RELAY_TOOL_GATEWAY_URL` on agent; `RuntimeProfileDrift` includes sidecars; envtest coverage.
@@ -621,13 +709,27 @@ RBAC must match kubebuilder markers and actual client calls (Jobs delete, Config
 
 Relay has shipped an **end-to-end governance MVP** on Kubernetes: control-plane reconciliation, three data-plane enforcement domains (network / tool / file), runtime evidence into CRD status, and observability export (Prometheus, OTel traces, OTLP audit logs). **Not yet shipped:** operational UI, real approval gates, orchestrator adapters beyond Jobs, enterprise identity/credentials.
 
+**Trust posture (read before extending):** data-plane enforcement and the runtime-evidence loop are **cooperative**, not adversarial-proof. Enforcement sidecars and the agent share a pod and ServiceAccount; the reporter authenticates the *pod* (TokenReview + pod→Job→session ownership) but cannot distinguish the agent container from a sidecar. A fully compromised agent could therefore tamper with or starve the data plane. Adversarial-grade integrity needs data-plane isolation (kernel/eBPF, separate identity/netns, or out-of-pod enforcement) — tracked under *Discovered Follow-Up Tasks → Runtime evidence integrity*. Do not describe current enforcement as tamper-proof in docs/UI.
+
+**Repository audit (2026-06-16):** Verified the claims in this file against the tree.
+
+| Check | Result |
+|-------|--------|
+| `go build ./...` / `go vet ./...` | Pass |
+| `make test` (envtest, all packages) | Pass — controller `agentsession` 73.9%, others ≥61% |
+| `make manifests generate` | No diff (CRD + RBAC in sync with markers) |
+| Phase 4 done-claims (metrics/tracing/audit/outputs) | Verified wired in `cmd/main.go` + hooks; spot-checked behavior |
+| `requireHumanApproval` | Confirmed warning-only (`reconciler.go` → `ApprovalNotEnforced`); no execution gate |
+
+Gaps found during the audit (now tracked): Phase 5 had no task cards (decomposed below); observability export shipped with no design doc; runtime-evidence integrity is cooperative-only; `relay-design-docs.mdc` index was missing the timeline/observability rows (fixed).
+
 | Area | State | Notes |
 |------|-------|-------|
 | **AgentSession CRD** | Done | Full spec/status including `usage`, `events`, `violations`, `artifacts` |
 | **Policy CRDs** | Done | `AgentPolicy`, `ToolPolicy`, merge + watches + effective policy |
 | **RuntimeProfile CRD** | Done | Hardening + sidecar injection (`dns-proxy`, `tool-gateway`, `fs-gateway`) |
 | **Controller (kubernetes-job)** | Done | Lifecycle, cancellation, finalizers, NetworkPolicy baseline |
-| **Policy enforcement (data plane)** | **MVP done** | Sidecar gateways + reporter → observed violations/decisions/usage |
+| **Policy enforcement (data plane)** | **MVP done (cooperative)** | Sidecar gateways + reporter → observed violations/decisions/usage; **not** tamper-proof vs a compromised agent (shared pod/SA) |
 | **Runtime evidence loop** | Done | `POST /v1/report`, idempotent merge, live e2e (network/tool/file) |
 | **Observability export** | Done | Prometheus `:8080/metrics`; OTLP traces + audit logs (opt-in flags) |
 | **Log/artifact collection** | Done | Terminal sessions → owned ConfigMap (logs) / Secret (workspace tar); `status.artifacts` |
@@ -663,6 +765,8 @@ Relay has shipped an **end-to-end governance MVP** on Kubernetes: control-plane 
 | S3 / external artifact store | No | `configmap://` / `secret://` URIs only |
 | Admission webhook | Scaffold | Controller validation only |
 | Orchestrators beyond Job | Enum reserved | Validation rejects others |
+| Runtime evidence integrity | No | Cooperative sidecar trust; no anti-tamper / assurance-level on evidence (see Discovered task) |
+| Observability export design doc | No | Prometheus/OTel/audit shipped without a `docs/design/` doc (see Discovered task) |
 
 ### status.podName selection semantics
 
@@ -909,13 +1013,13 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 
 ### Phase 5 — Human approval workflows
 
-Scoped, auditable gates — not a boolean env var.
+Scoped, auditable gates — not a boolean env var. Today `requireHumanApproval` only emits an `ApprovalNotEnforced` warning; this phase makes approval real. **Decomposed into ordered task cards** under *Discovered Follow-Up Tasks → Phase 5 approval workflows* (slice 1 = design doc, then ApprovalPolicy CRD, then ApprovalRequest + gate, then notifications).
 
-- [ ] **ApprovalPolicy CRD** — Define what actions require approval
-- [ ] **ApprovalRequest CRD** — Per-action approval objects (tool, domain, file write, deploy, credential use)
-- [ ] **Controller approval gate** — Block execution until approved; resume on approval
-- [ ] **Approval audit trail** — Who approved, when, scope, expiry
-- [ ] **Integration hooks** — Slack, PagerDuty, or generic webhook for approval notifications
+- [ ] **Approval model design doc** — CRD shape + gate/resume state machine *(slice 1 — queue head for Phase 5)*
+- [ ] **ApprovalPolicy CRD** — Define what actions require approval *(slice 2, declarative only)*
+- [ ] **ApprovalRequest CRD + controller gate** — Per-action approval objects; block in `PhaseAwaitingApproval`, resume on grant *(slice 3)*
+- [ ] **Approval audit trail** — Who approved, when, scope, expiry *(part of slice 3 status/decisions)*
+- [ ] **Integration hooks** — Slack, PagerDuty, or generic webhook for approval notifications *(slice 4)*
 
 ---
 

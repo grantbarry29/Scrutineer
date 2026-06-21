@@ -27,6 +27,7 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 - Relay protects enterprises from unsafe autonomous behavior: prompt-injected agents, malicious or overbroad tools, credential exfiltration, unexpected network access, unsafe file writes, runaway loops, unapproved production actions, and weak auditability.
 - Assume multi-tenant enterprise clusters over time. Design for namespace isolation, per-session identity, scoped service accounts, scoped credentials, impersonation boundaries, least privilege, and auditable delegation.
 - Do not make agents smarter, choose prompts, optimize reasoning, or become an agent SDK. Relay governs agents regardless of implementation.
+- **Evidence integrity is part of the threat model.** A governance and audit product is only trustworthy if the evidence it records cannot be forged or suppressed by the very agent it governs. Relay must be honest about its current guarantee level: today's sidecar enforcement/reporting is **cooperative** — enforcement components and the agent share a pod and ServiceAccount, so a fully compromised agent could still tamper with or starve the data plane. Adversarial-grade integrity requires isolating the data plane from the agent (separate identity/network namespace, kernel/eBPF observation the agent cannot bypass, or out-of-pod enforcement). Track the gap between *cooperative* and *adversarial* integrity explicitly; never overstate enforcement strength in docs, status, or UI.
 
 ## Policy And Enforcement Model
 
@@ -35,6 +36,7 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 - Policies should eventually be reusable, versioned, composable, explainable, and support modes such as dry-run, audit-only, and enforced.
 - Human approval should become scoped and auditable: approve one tool call, domain, file write, deployment, credential use, or bounded time window rather than a broad boolean.
 - Audit and evidence are first-class outputs. Relay should explain who authorized a run, what identity acted, what policy matched, what was allowed or denied, what changed, and what runtime evidence was observed.
+- Observed evidence should carry its **assurance level**: distinguish self-reported (cooperative sidecar/agent) evidence from independently-observed (kernel, gateway, or out-of-pod) evidence so audit consumers know how much to trust each record.
 
 ## Operational UI Vision
 
