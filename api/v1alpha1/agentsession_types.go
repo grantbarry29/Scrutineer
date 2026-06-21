@@ -16,7 +16,7 @@ import (
 )
 
 // AgentSessionPhase represents the lifecycle phase of an AgentSession.
-// +kubebuilder:validation:Enum=Pending;Validating;Starting;Running;Succeeded;Failed;Denied;TimedOut;Cancelled
+// +kubebuilder:validation:Enum=Pending;Validating;AwaitingApproval;Starting;Running;Succeeded;Failed;Denied;TimedOut;Cancelled
 type AgentSessionPhase string
 
 const (
@@ -24,6 +24,9 @@ const (
 	PhasePending AgentSessionPhase = "Pending"
 	// PhaseValidating indicates the AgentSession spec is currently being validated.
 	PhaseValidating AgentSessionPhase = "Validating"
+	// PhaseAwaitingApproval indicates the session is blocked on a human approval
+	// gate (a matching ApprovalPolicy applies) and no runtime has been created.
+	PhaseAwaitingApproval AgentSessionPhase = "AwaitingApproval"
 	// PhaseStarting indicates the underlying runtime (e.g. a Job) is being created.
 	PhaseStarting AgentSessionPhase = "Starting"
 	// PhaseRunning indicates the agent runtime is actively executing.

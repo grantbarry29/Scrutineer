@@ -1,0 +1,17 @@
+# ApprovalRequests are normally created by the controller when a gated session
+# needs approval. This sample documents the shape and is used by verify-samples.
+# An approver grants the request by setting spec.decision to "granted".
+apiVersion: relay.secureai.dev/v1alpha1
+kind: ApprovalRequest
+metadata:
+  name: deploy-session
+  namespace: default
+spec:
+  sessionRef:
+    name: deploy-session
+  policyRef: prod-deploys
+  action: deploy
+  scope:
+    target: cluster/prod
+    window: 1h
+  decision: ""

@@ -4,3 +4,4 @@ resources:
 - bases/relay.secureai.dev_toolpolicies.yaml
 - bases/relay.secureai.dev_runtimeprofiles.yaml
 - bases/relay.secureai.dev_approvalpolicies.yaml
+- bases/relay.secureai.dev_approvalrequests.yaml

@@ -20,6 +20,7 @@ const (
 	ConditionPolicyPropagated       = "PolicyPropagated"
 	ConditionRuntimeProfileResolved = "RuntimeProfileResolved"
 	ConditionRuntimeCreated         = "RuntimeCreated"
+	ConditionApprovalRequired       = "ApprovalRequired"
 	ConditionCompleted              = "Completed"
 	ConditionReady                  = "Ready"
 )
@@ -40,8 +41,14 @@ const (
 	EventReasonSessionDenied = "SessionDenied"
 	// EventReasonSessionCancelled — user set cancelRequested; Job stopped.
 	EventReasonSessionCancelled = "SessionCancelled"
-	// EventReasonApprovalNotEnforced — requireHumanApproval declared but MVP does not gate execution.
+	// EventReasonApprovalNotEnforced — requireHumanApproval declared but no ApprovalPolicy gates it.
 	EventReasonApprovalNotEnforced = "ApprovalNotEnforced"
+	// EventReasonApprovalRequested — a human approval gate is open; session is AwaitingApproval.
+	EventReasonApprovalRequested = "ApprovalRequested"
+	// EventReasonApprovalGranted — approval was granted; session may proceed.
+	EventReasonApprovalGranted = "ApprovalGranted"
+	// EventReasonApprovalDenied — approval was denied or expired; session denied.
+	EventReasonApprovalDenied = "ApprovalDenied"
 	// EventReasonPolicyResolved — referenced policies merged into effective policy.
 	EventReasonPolicyResolved         = "PolicyResolved"
 	EventReasonRuntimeProfileResolved = "RuntimeProfileResolved"

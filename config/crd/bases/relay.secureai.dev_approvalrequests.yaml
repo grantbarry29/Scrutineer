@@ -1,0 +1,145 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: approvalrequests.relay.secureai.dev
+spec:
+  group: relay.secureai.dev
+  names:
+    kind: ApprovalRequest
+    listKind: ApprovalRequestList
+    plural: approvalrequests
+    shortNames:
+    - appreq
+    - approvalreq
+    singular: approvalrequest
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.sessionRef.name
+      name: Session
+      type: string
+    - jsonPath: .spec.action
+      name: Action
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ApprovalRequest is a per-decision, controller-owned object a human grants or
+          denies to gate an AgentSession. See docs/design/phase-5-approval-workflows.md.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ApprovalRequestSpec is created by the controller when a gated AgentSession
+              needs human approval. Approvers act on it by setting spec.decision.
+            properties:
+              action:
+                description: Action is the gated action type (e.g. "deploy").
+                minLength: 1
+                type: string
+              decision:
+                default: ""
+                description: |-
+                  Decision is the human decision. Empty means pending. This is the only
+                  field approvers are expected to mutate (RBAC + future webhook enforce it).
+                enum:
+                - ""
+                - granted
+                - denied
+                type: string
+              policyRef:
+                description: PolicyRef is the ApprovalPolicy that triggered this request,
+                  if any.
+                type: string
+              scope:
+                description: Scope bounds what is being approved.
+                properties:
+                  target:
+                    description: Target is the entity being approved (deploy target,
+                      domain, tool, path).
+                    type: string
+                  window:
+                    description: |-
+                      Window is how long the approval remains valid once granted. Unset means
+                      it does not auto-expire after grant.
+                    type: string
+                type: object
+              sessionRef:
+                description: SessionRef is the AgentSession this request gates.
+                properties:
+                  name:
+                    description: Name of the AgentSession.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - action
+            - sessionRef
+            type: object
+          status:
+            description: ApprovalRequestStatus is owned by the controller.
+            properties:
+              decidedAt:
+                description: DecidedAt is when the decision was observed.
+                format: date-time
+                type: string
+              decidedBy:
+                description: |-
+                  DecidedBy records the subject that set the decision (best-effort until a
+                  validating webhook captures userInfo).
+                type: string
+              expiresAt:
+                description: ExpiresAt is when a granted approval stops being valid
+                  (DecidedAt + window).
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last generation reconciled.
+                format: int64
+                type: integer
+              reason:
+                description: Reason is a short human-readable explanation of the current
+                  state.
+                type: string
+              state:
+                description: State is the observed lifecycle state.
+                enum:
+                - Pending
+                - Granted
+                - Denied
+                - Expired
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -881,6 +881,7 @@ spec:
                 enum:
                 - Pending
                 - Validating
+                - AwaitingApproval
                 - Starting
                 - Running
                 - Succeeded
