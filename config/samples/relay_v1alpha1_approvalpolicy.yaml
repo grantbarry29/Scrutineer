@@ -1,0 +1,15 @@
+apiVersion: relay.secureai.dev/v1alpha1
+kind: ApprovalPolicy
+metadata:
+  name: prod-deploys
+  namespace: default
+spec:
+  actions:
+  - deploy
+  - credential-use
+  approvers:
+  - kind: Group
+    name: platform-oncall
+  expiresAfter: 1h
+  requirement: default
+  onTimeout: deny

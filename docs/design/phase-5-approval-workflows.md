@@ -35,7 +35,9 @@ This aligns with the product vision (*Policy And Enforcement Model*): "Human app
 
 > Field names are a design proposal; finalize during slice 2. Namespace-scoped, same-namespace references only (matches existing ref scoping).
 
-### `ApprovalPolicy` (declarative — slice 2)
+### `ApprovalPolicy` (declarative — slice 2 — **shipped 2026-06-21**)
+
+Shipped in `api/v1alpha1/approvalpolicy_types.go` (CRD `approvalpolicies`, short names `appol`/`approvalpol`). `requirement` (`default`/`allOf`, default `default`) and `onTimeout` (`deny`/`allow`, default `deny` — fail closed) are enum-validated with defaults; `actions` is required (`minItems: 1`); `approvers[].kind` is an enum (`User`/`Group`/`ServiceAccount`); `expiresAfter` is a Go duration string. No controller behavior yet (slice 3). Sample: `config/samples/relay_v1alpha1_approvalpolicy.yaml`.
 
 ```yaml
 apiVersion: relay.secureai.dev/v1alpha1
@@ -145,9 +147,9 @@ Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope*
 
 See `.cursor/relay-project-status.md` → *Discovered Follow-Up Tasks → Phase 5 approval workflows*:
 
-1. **This doc** (design).
-2. `ApprovalPolicy` CRD (declarative only).
-3. `ApprovalRequest` CRD + controller gate/resume + `PhaseAwaitingApproval`.
+1. **This doc** (design). — **done**
+2. `ApprovalPolicy` CRD (declarative only). — **done (2026-06-21)**
+3. `ApprovalRequest` CRD + controller gate/resume + `PhaseAwaitingApproval`. — next
 4. Notification hooks (generic webhook → Slack/PagerDuty adapters).
 
 ## Related

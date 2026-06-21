@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (evidence-integrity slice 1: `assuranceLevel` on decisions/violations; Phase 5 slice 1: approval design doc; 2026-06-16 audit pass — Phase 4 verified complete; Phase 5 decomposed into task cards)
+> **Last updated:** 2026-06-21 (Phase 5 slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). **Phase 5 in progress:** slice 1 (approval design doc) **done** → **queue head = Phase 5 · slice 2 (`ApprovalPolicy` CRD, declarative only)**. Phase 5 closes the biggest vision/impl gap (`requireHumanApproval` only warns today). Cards under *Discovered Follow-Up Tasks → Phase 5 approval workflows*.
+> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). **Phase 5 in progress:** slices 1 (design doc) + 2 (`ApprovalPolicy` CRD) **done** → **queue head = Phase 5 · slice 3 (`ApprovalRequest` CRD + controller gate/resume)**. Phase 5 closes the biggest vision/impl gap (`requireHumanApproval` only warns today). Cards under *Discovered Follow-Up Tasks → Phase 5 approval workflows*.
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -579,19 +579,13 @@ Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices)
 
 **Verification:** Review only (docs); `make test` unaffected.
 
-#### Task: Phase 5 · slice 2 — ApprovalPolicy CRD (declarative only)
+#### Task: Phase 5 · slice 2 — ApprovalPolicy CRD (declarative only) — **done (2026-06-21)**
 
-**Goal:** Ship `ApprovalPolicy` CRD describing which actions require approval; no gate yet.
+**Shipped:** `api/v1alpha1/approvalpolicy_types.go` — `ApprovalPolicy` CRD (`approvalpolicies`, short names `appol`/`approvalpol`). Spec: `actions` (required, `minItems: 1`), `approvers[]` (`kind` enum `User`/`Group`/`ServiceAccount` + `name`), `expiresAfter` (duration), `requirement` (`default`/`allOf`, default `default`), `onTimeout` (`deny`/`allow`, default `deny` — fail closed). Status `observedGeneration` reserved. Generated CRD + deepcopy; registered in `config/crd/kustomization.yaml`; sample `config/samples/relay_v1alpha1_approvalpolicy.yaml` + kustomization. Envtest create/validate (defaults + enum + required) in `internal/controller/agentsession/approvalpolicy_test.go`. No controller behavior (slice 3). Note: short name must avoid `ap` (collides with `agentpolicy`).
 
-**Scope:** `api/v1alpha1/approvalpolicy_types.go`; register in scheme/groupversion; CRD manifest + sample; `verify-samples`. Schema only, mirroring `AgentPolicy` conventions.
+**Next:** slice 3 — `ApprovalRequest` CRD + controller gate/resume (`PhaseAwaitingApproval`).
 
-**Non-goals:** Blocking execution; `ApprovalRequest`; resume logic.
-
-**Acceptance:** `make manifests` generates the CRD; `make verify-samples` passes; envtest create/validate.
-
-**Verification:** `make manifests && make test`.
-
-**Files:** `api/v1alpha1/approvalpolicy_types.go`, generated CRD/deepcopy, `config/samples/`, `config/crd/kustomization.yaml`.
+**Verification:** `make manifests && make test` (pass 2026-06-21); `make verify-samples` (pass 2026-06-21).
 
 #### Task: Phase 5 · slice 3 — ApprovalRequest CRD + controller gate
 
@@ -734,7 +728,7 @@ Gaps found during the audit (now tracked): Phase 5 had no task cards (decomposed
 | **E2E tests** | Done | `make test-e2e` — live violation specs + usage assertions (incl. file domain) |
 | **CI / dev environment** | Done | GitHub Actions; devcontainer + kind |
 | **Operational UI** | Not started | Phase 7 |
-| **Approval workflows** | Not started | `requireHumanApproval` warns only; Phase 5 |
+| **Approval workflows** | In progress (Phase 5) | `ApprovalPolicy` CRD shipped (declarative); `requireHumanApproval` still warns only — controller gate is slice 3 |
 | **Orchestrator adapters** | Not started | `kubernetes-job` only; Phase 6 |
 | **Enterprise platform** | Not started | Per-session identity, CredentialProfile, sandboxes; Phase 8 |
 
@@ -1013,8 +1007,8 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 Scoped, auditable gates — not a boolean env var. Today `requireHumanApproval` only emits an `ApprovalNotEnforced` warning; this phase makes approval real. **Decomposed into ordered task cards** under *Discovered Follow-Up Tasks → Phase 5 approval workflows* (slice 1 = design doc, then ApprovalPolicy CRD, then ApprovalRequest + gate, then notifications).
 
 - [x] **Approval model design doc** — CRD shape + gate/resume state machine *(slice 1 — `docs/design/phase-5-approval-workflows.md`)*
-- [ ] **ApprovalPolicy CRD** — Define what actions require approval *(slice 2, declarative only — queue head for Phase 5)*
-- [ ] **ApprovalRequest CRD + controller gate** — Per-action approval objects; block in `PhaseAwaitingApproval`, resume on grant *(slice 3)*
+- [x] **ApprovalPolicy CRD** — Define what actions require approval *(slice 2, declarative only — `api/v1alpha1/approvalpolicy_types.go`)*
+- [ ] **ApprovalRequest CRD + controller gate** — Per-action approval objects; block in `PhaseAwaitingApproval`, resume on grant *(slice 3 — queue head for Phase 5)*
 - [ ] **Approval audit trail** — Who approved, when, scope, expiry *(part of slice 3 status/decisions)*
 - [ ] **Integration hooks** — Slack, PagerDuty, or generic webhook for approval notifications *(slice 4)*
 

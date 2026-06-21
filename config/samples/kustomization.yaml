@@ -1,6 +1,7 @@
 resources:
 - relay_v1alpha1_agentpolicy.yaml
 - relay_v1alpha1_toolpolicy.yaml
+- relay_v1alpha1_approvalpolicy.yaml
 - relay_v1alpha1_runtimeprofile.yaml
 - relay_v1alpha1_runtimeprofile_sidecars.yaml
 - relay_v1alpha1_agentsession.yaml

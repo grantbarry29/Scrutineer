@@ -1,0 +1,134 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: approvalpolicies.relay.secureai.dev
+spec:
+  group: relay.secureai.dev
+  names:
+    kind: ApprovalPolicy
+    listKind: ApprovalPolicyList
+    plural: approvalpolicies
+    shortNames:
+    - appol
+    - approvalpol
+    singular: approvalpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.requirement
+      name: Requirement
+      type: string
+    - jsonPath: .spec.onTimeout
+      name: OnTimeout
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ApprovalPolicy is a reusable, scoped human-approval policy that AgentSessions
+          can be gated by. Declarative only until the Phase 5 controller gate ships.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ApprovalPolicySpec defines reusable, scoped human-approval rules for AgentSessions.
+              Declarative only in this slice — no controller gate yet (see
+              docs/design/phase-5-approval-workflows.md).
+            properties:
+              actions:
+                description: |-
+                  Actions lists the action types this policy gates. These match entries in a
+                  session's effective policy.requireHumanApproval (e.g. "deploy",
+                  "credential-use") and the action types surfaced by runtime decisions.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              approvers:
+                description: Approvers lists subjects allowed to grant requests created
+                  under this policy.
+                items:
+                  description: |-
+                    ApprovalSubject identifies who may grant approvals under an ApprovalPolicy.
+                    Advisory in this declarative slice; real enforcement (RBAC + webhook) lands
+                    with the controller gate (Phase 5 slice 3).
+                  properties:
+                    kind:
+                      description: Kind of subject.
+                      enum:
+                      - User
+                      - Group
+                      - ServiceAccount
+                      type: string
+                    name:
+                      description: Name of the subject (user name, group name, or
+                        ServiceAccount name).
+                      minLength: 1
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              expiresAfter:
+                description: |-
+                  ExpiresAfter is how long a granted approval stays valid before the session
+                  must re-request. Unset means a granted approval does not auto-expire.
+                type: string
+              onTimeout:
+                default: deny
+                description: |-
+                  OnTimeout is the outcome when no decision arrives before expiry. Defaults
+                  to deny (fail closed).
+                enum:
+                - deny
+                - allow
+                type: string
+              requirement:
+                default: default
+                description: |-
+                  Requirement is how many distinct approvers are required. Defaults to a
+                  single approver.
+                enum:
+                - default
+                - allOf
+                type: string
+            required:
+            - actions
+            type: object
+          status:
+            description: ApprovalPolicyStatus defines the observed state of an ApprovalPolicy.
+            properties:
+              observedGeneration:
+                description: ObservedGeneration is reserved for a future ApprovalPolicy
+                  controller.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
