@@ -79,11 +79,19 @@ type ApprovalRequestSpec struct {
 	// +optional
 	Scope ApprovalScope `json:"scope,omitempty"`
 
-	// Decision is the human decision. Empty means pending. This is the only
-	// field approvers are expected to mutate (RBAC + future webhook enforce it).
+	// Decision is the human decision. Empty means pending. This is the
+	// primary field approvers mutate (RBAC + future webhook enforce it).
 	// +kubebuilder:default=""
 	// +optional
 	Decision ApprovalDecision `json:"decision,omitempty"`
+
+	// DecidedBy is the approver's self-declared identity, set alongside Decision.
+	// It is best-effort and NOT authenticated — the real gate is RBAC on who may
+	// patch this object; authenticated capture needs a future validating webhook.
+	// When the matching ApprovalPolicy lists approvers, a grant is only honored if
+	// DecidedBy matches a listed approver name.
+	// +optional
+	DecidedBy string `json:"decidedBy,omitempty"`
 }
 
 // ApprovalRequestStatus is owned by the controller.

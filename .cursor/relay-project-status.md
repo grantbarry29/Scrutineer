@@ -617,7 +617,15 @@ Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices)
 
 **Verification:** `go build ./...` + `go vet`; `go test ./internal/approval/... ./internal/controller/agentsession/...` (pass 2026-06-21).
 
-**Next:** Phase 5 substantively complete (gate + notifications). Remaining Phase 5 polish (multi-approver `allOf`, per-tool runtime approval, approver-identity capture via webhook) tracked in `docs/design/phase-5-approval-workflows.md` open questions.
+**Next:** Phase 5 substantively complete (gate + notifications). Remaining Phase 5 polish (multi-approver `allOf`, per-tool runtime approval, authenticated approver-identity via webhook) tracked in `docs/design/phase-5-approval-workflows.md` open questions.
+
+#### Task: Phase 5 · slice 5 — approver allowlist (best-effort `decidedBy`) — **done (2026-06-21)**
+
+**Shipped:** `ApprovalRequest.spec.decidedBy` (approver self-declared identity, set alongside `spec.decision`). The gate (`approval.go` `approverAllowed`) honors a grant only when `decidedBy` matches a listed `ApprovalPolicy.approvers[].name` (match by name; Kind advisory); an unlisted/blank grant keeps the session `AwaitingApproval`, sets condition `ApprovalRequired=ApproverNotAuthorized`, and emits `ApprovalUnauthorized` (warning). When the policy lists no approvers, any grant is accepted (RBAC is the gate). `status.decidedBy` is recorded on decision and used as the approval `policyDecisions` actor. Envtest: unlisted grant stays gated; listed approver resumes (`approval_gate_test.go`).
+
+**Honesty note:** `decidedBy` is **not authenticated** — the real boundary is RBAC on who may patch the `ApprovalRequest`. Authenticated capture (record apiserver `userInfo`) needs a validating webhook (deferred; design doc open question #1).
+
+**Verification:** `make manifests generate` + `go build` + `go vet`; `go test ./internal/controller/agentsession/...` (pass 2026-06-21).
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 

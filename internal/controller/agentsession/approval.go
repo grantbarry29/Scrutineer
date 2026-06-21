@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -79,6 +80,18 @@ func (r *AgentSessionReconciler) reconcileApprovalGate(ctx context.Context, sess
 
 	switch req.Spec.Decision {
 	case relayv1alpha1.ApprovalDecisionGranted:
+		// Honor a grant only from a listed approver (best-effort: DecidedBy is
+		// self-declared, the real boundary is RBAC on patching the request).
+		if !approverAllowed(gatePolicy, req.Spec.DecidedBy) {
+			_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStatePending, gatePolicy,
+				"granted by an unlisted approver; awaiting an authorized decision")
+			r.recordWarning(session, EventReasonApprovalUnauthorized,
+				fmt.Sprintf("ApprovalRequest %q grant from %q is not a listed approver of policy %q; not honored",
+					req.Name, req.Spec.DecidedBy, gatePolicy.Name))
+			setCondition(session, ConditionApprovalRequired, metav1.ConditionTrue, "ApproverNotAuthorized",
+				fmt.Sprintf("Grant on %q is not from a listed approver", req.Name))
+			return approvalPending, nil
+		}
 		if err := r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateGranted, gatePolicy, "decision granted"); err != nil {
 			return approvalProceed, err
 		}
@@ -152,6 +165,25 @@ func approvalRequestName(session *relayv1alpha1.AgentSession) string {
 	return session.Name
 }
 
+// approverAllowed reports whether a self-declared approver may grant under the
+// policy. When the policy lists no approvers, any grant is accepted (RBAC is the
+// gate). Matching is by name only; Kind is advisory in this slice.
+func approverAllowed(gatePolicy *relayv1alpha1.ApprovalPolicy, declaredBy string) bool {
+	if len(gatePolicy.Spec.Approvers) == 0 {
+		return true
+	}
+	declaredBy = strings.TrimSpace(declaredBy)
+	if declaredBy == "" {
+		return false
+	}
+	for _, a := range gatePolicy.Spec.Approvers {
+		if a.Name == declaredBy {
+			return true
+		}
+	}
+	return false
+}
+
 // ensureApprovalRequest creates the owned ApprovalRequest for a gated session if
 // it does not yet exist, and returns the current object. Idempotent.
 func (r *AgentSessionReconciler) ensureApprovalRequest(ctx context.Context, session *relayv1alpha1.AgentSession, gatePolicy *relayv1alpha1.ApprovalPolicy, action string) (*relayv1alpha1.ApprovalRequest, error) {
@@ -215,6 +247,7 @@ func (r *AgentSessionReconciler) setApprovalRequestState(ctx context.Context, re
 			if decided && latest.Status.DecidedAt == nil {
 				now := metav1.Now()
 				latest.Status.DecidedAt = &now
+				latest.Status.DecidedBy = strings.TrimSpace(latest.Spec.DecidedBy)
 				if state == relayv1alpha1.ApprovalStateGranted && gatePolicy.Spec.ExpiresAfter != nil {
 					exp := metav1.NewTime(now.Add(gatePolicy.Spec.ExpiresAfter.Duration))
 					latest.Status.ExpiresAt = &exp

@@ -141,8 +141,8 @@ Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope*
 
 ## Open questions (resolve in slice 2/3)
 
-1. **Approver authn/authz:** MVP = Kubernetes RBAC on `patch ApprovalRequest spec.decision` (only authorized subjects can grant); record the patching user via a future validating webhook capturing `userInfo`. Without a webhook, `decidedBy` may be best-effort until Phase 7/8.
-2. **`approvers` matching:** enforce in MVP (webhook) or document as advisory (RBAC is the real gate) for slice 3?
+1. **Approver authn/authz:** MVP = Kubernetes RBAC on `patch ApprovalRequest spec.decision` (only authorized subjects can grant). **Slice 5 (shipped 2026-06-21)** adds best-effort identity: approvers self-declare `spec.decidedBy`, mirrored to `status.decidedBy` and used as the approval decision actor. This is **not authenticated** — capturing the real apiserver `userInfo` still needs a future validating webhook (deferred).
+2. **`approvers` matching:** **resolved (slice 5):** enforced by the gate — a grant is honored only when `spec.decidedBy` matches a listed `ApprovalPolicy.approvers[].name` (match by name; Kind advisory). Empty `approvers` ⇒ any grant accepted (RBAC is the gate). An unlisted grant keeps the session `AwaitingApproval` and emits `ApprovalUnauthorized`.
 3. **Multiple required approvers (`allOf`)** — defer to a later slice; `requirement: default` (single) for MVP.
 4. **Per-tool runtime approval** — reuses `ApprovalRequest` but needs the agent/tool-gateway to block mid-call; separate design once gateway enforcement is adversarial-grade.
 

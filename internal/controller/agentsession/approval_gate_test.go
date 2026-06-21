@@ -160,6 +160,50 @@ var _ = Describe("AgentSession approval gate", func() {
 		Expect(req.Annotations).To(HaveKey(approvalNotifiedAnnotation))
 	})
 
+	It("honors a grant only from a listed approver", func() {
+		ns := newTestNamespace()
+		policy := approvalPolicy(ns, "gate", "deploy")
+		policy.Spec.Approvers = []relayv1alpha1.ApprovalSubject{
+			{Kind: relayv1alpha1.ApprovalSubjectUser, Name: "alice"},
+		}
+		Expect(k8sClient.Create(testCtx, policy)).To(Succeed())
+
+		session := sessionRequiringApproval(ns, "approver-gate", "deploy")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+		waitForPhase(key, relayv1alpha1.PhaseAwaitingApproval)
+
+		// Grant from an unlisted approver is not honored: session stays gated.
+		Eventually(func(g Gomega) {
+			var req relayv1alpha1.ApprovalRequest
+			g.Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
+			req.Spec.Decision = relayv1alpha1.ApprovalDecisionGranted
+			req.Spec.DecidedBy = "mallory"
+			g.Expect(k8sClient.Update(testCtx, &req)).To(Succeed())
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		Consistently(func(g Gomega) {
+			var got relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			g.Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseAwaitingApproval))
+		}, 2*time.Second, controllerPollInterval).Should(Succeed())
+		expectJobAbsent(ns, session)
+
+		// A listed approver's grant resumes the session.
+		Eventually(func(g Gomega) {
+			var req relayv1alpha1.ApprovalRequest
+			g.Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
+			req.Spec.DecidedBy = "alice"
+			g.Expect(k8sClient.Update(testCtx, &req)).To(Succeed())
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		waitForJob(ns, session)
+
+		var req relayv1alpha1.ApprovalRequest
+		Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
+		Expect(req.Status.DecidedBy).To(Equal("alice"))
+	})
+
 	It("denies the session terminally when the request is denied", func() {
 		ns := newTestNamespace()
 		Expect(k8sClient.Create(testCtx, approvalPolicy(ns, "gate", "deploy"))).To(Succeed())

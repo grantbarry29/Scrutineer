@@ -53,6 +53,8 @@ const (
 	EventReasonApprovalNotified = "ApprovalNotified"
 	// EventReasonApprovalNotifyFailed — notification delivery failed (warning; will retry).
 	EventReasonApprovalNotifyFailed = "ApprovalNotifyFailed"
+	// EventReasonApprovalUnauthorized — a grant was set by a subject not in the policy's approvers (warning; not honored).
+	EventReasonApprovalUnauthorized = "ApprovalUnauthorized"
 	// EventReasonPolicyResolved — referenced policies merged into effective policy.
 	EventReasonPolicyResolved         = "PolicyResolved"
 	EventReasonRuntimeProfileResolved = "RuntimeProfileResolved"
