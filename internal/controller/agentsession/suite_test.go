@@ -83,6 +83,7 @@ var _ = BeforeSuite(func() {
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
 		Recorder:  mgr.GetEventRecorderFor("relay-test"),
+		Notifier:  testNotifier,
 	}).SetupWithManager(mgr)).To(Succeed())
 
 	go func() {

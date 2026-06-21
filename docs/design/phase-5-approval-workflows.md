@@ -153,7 +153,7 @@ See `.cursor/relay-project-status.md` → *Discovered Follow-Up Tasks → Phase 
 1. **This doc** (design). — **done**
 2. `ApprovalPolicy` CRD (declarative only). — **done (2026-06-21)**
 3. `ApprovalRequest` CRD + controller gate/resume + `PhaseAwaitingApproval`. — **done (2026-06-21)**
-4. Notification hooks (generic webhook → Slack/PagerDuty adapters). — next
+4. Notification hooks (generic webhook → Slack/PagerDuty adapters). — **done (2026-06-21)** — `internal/approval` `Notifier` (noop + webhook); reconciler fires once on gate open (annotation-guarded, best-effort, retried); `--approval-webhook-url` flag. Slack/PagerDuty are future adapters over `Notifier`.
 
 ## Related
 

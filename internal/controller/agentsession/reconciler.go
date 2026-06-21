@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/approval"
 	"github.com/secureai/relay/internal/audit"
 	"github.com/secureai/relay/internal/controller/job"
 	"github.com/secureai/relay/internal/policy"
@@ -49,7 +50,10 @@ type AgentSessionReconciler struct {
 	Scheme     *runtime.Scheme
 	Recorder   record.EventRecorder
 	RESTConfig *rest.Config
-	clientset  kubernetes.Interface
+	// Notifier delivers approval-gate notifications to an external channel. When nil,
+	// notifications are disabled (the approval gate itself is unaffected).
+	Notifier  approval.Notifier
+	clientset kubernetes.Interface
 }
 
 // requeueAfter is how long the reconciler waits before re-polling Job state when the Job

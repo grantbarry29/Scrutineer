@@ -512,6 +512,8 @@ kubectl get events -n <namespace> --field-selector involvedObject.kind=AgentSess
 | `ApprovalRequested` | Normal | Session is blocked on a human approval gate (`AwaitingApproval`) |
 | `ApprovalGranted` | Normal | Approval granted; session resumes |
 | `ApprovalDenied` | Warning | Approval denied or timed out; session `Denied` |
+| `ApprovalNotified` | Normal | Approvers notified of an open gate (`--approval-webhook-url`) |
+| `ApprovalNotifyFailed` | Warning | Approval notification delivery failed (will retry) |
 | `PolicyResolved` | Normal | Referenced policies merged |
 | `RuntimeProfileResolved` | Normal | RuntimeProfile applied to Job template |
 | `PolicyEnvDrift` | Warning | Effective policy changed but active Job env is stale |

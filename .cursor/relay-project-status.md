@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (Phase 5 slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). **Phase 5 in progress:** slices 1 (design doc) + 2 (`ApprovalPolicy` CRD) + 3 (`ApprovalRequest` CRD + controller gate/resume) **done** → **queue head = Phase 5 · slice 4 (approval notification hooks)**. The core approval gate is now real: a session matching an `ApprovalPolicy` blocks in `AwaitingApproval` until granted. Cards under *Discovered Follow-Up Tasks → Phase 5 approval workflows*.
+> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). **Phase 5 substantively done:** slices 1 (design doc) + 2 (`ApprovalPolicy` CRD) + 3 (`ApprovalRequest` CRD + controller gate/resume) + 4 (notification hooks) **done**. The approval gate is real and notified: a session matching an `ApprovalPolicy` blocks in `AwaitingApproval` until granted, and approvers are webhook-notified. **No queue head selected** — pick next from *Discovered Follow-Up Tasks* (e.g. provider-agnostic `model.baseURL`, observability export design doc, runtime evidence integrity hardening) or remaining Phase 5 polish (multi-approver, per-tool runtime approval, approver-identity webhook).
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -333,6 +333,22 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
+### Task: Provider-agnostic `model.baseURL` (enables OpenRouter & OpenAI-compatible endpoints)
+
+**Discovered:** 2026-06-21 during an OpenRouter support discussion. Relay never calls the model — it validates `spec.model` and propagates `AGENT_MODEL_PROVIDER`/`AGENT_MODEL_NAME` to the Job (`internal/controller/job/builder.go`). `Provider` is already free-form, so `provider: openrouter` "works" as propagation today. The only provider-agnostic addition that adds value is an explicit base-URL so the agent knows where to point its OpenAI-compatible client (OpenRouter `https://openrouter.ai/api/v1`, but also LiteLLM/vLLM/Together/Azure).
+
+**Why it matters:** One small, opaque field unlocks aggregators and self-hosted gateways without coupling Relay to any provider (keeps it provider-agnostic per vision). Avoids users smuggling endpoints through `runtime.env`.
+
+**Scope (proposed):** Optional `model.baseURL` field (URL-validated); propagate as `AGENT_MODEL_BASE_URL`; include in policy-env drift/sync; document the OpenAI-compatible pattern. **No provider allowlist/enum** (stay opaque).
+
+**Auth — explicitly deferred (per user, 2026-06-21):** key delivery is the real governance question and belongs to Phase 8 `CredentialProfile` + egress/tool-gateway brokering. An aggregator key is high blast radius (spans all downstream providers) → do **not** ship plaintext key injection; track under *Phase 8 / CredentialProfile* and *Runtime evidence integrity* (capture the **routed** model in evidence so audit isn't blinded by the aggregator).
+
+**Non-goals:** Calling/proxying inference in the control plane; a credential broker; provider-specific logic; routing decisions.
+
+**Acceptance:** `model.baseURL` set on a session is propagated to the Job env and reflected in policy-propagation drift checks; unit/envtest coverage.
+
+**Files:** `api/v1alpha1/agentsession_types.go`, `internal/controller/job/builder.go` + `constants.go`, validation, tests.
+
 ### Task: Investigate AgentSession reconcile churn (repeated PolicyResolved events + status conflicts)
 
 **Discovered:** 2026-06-09 during the test-hardening e2e run. Controller logs show the same `PolicyResolved` / "Merged N referenced policies" event re-emitted many times on the *same* resourceVersion for a single session, plus occasional `update AgentSession status: conflict (will requeue)` errors. Suggests the reconciler re-records events and/or re-writes status when nothing changed, causing avoidable requeues.
@@ -599,19 +615,15 @@ Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices)
 
 **Next:** slice 4 — approval notification hooks.
 
-#### Task: Phase 5 · slice 4 — Approval notification hooks
+#### Task: Phase 5 · slice 4 — Approval notification hooks — **done (2026-06-21)**
 
-**Goal:** Notify approvers when an `ApprovalRequest` is created (generic webhook first).
+**Shipped:** `internal/approval/notifier.go` — pluggable `Notifier` interface with `NoopNotifier` (default) and `WebhookNotifier` (HTTP POST JSON, bounded 5s timeout, non-2xx → error). Reconciler hook `notifyApprovalRequest` (in `approval.go`) fires once when a session opens the gate (`AwaitingApproval` pending branch), guarded by the `relay.secureai.dev/approval-notified` annotation so delivery is **at-most-once and retried** on the pending requeue until it succeeds; failures emit `ApprovalNotifyFailed` (warning) and never block the gate. Success emits `ApprovalNotified`. Enabled via `cmd/main.go` flag `--approval-webhook-url` (empty = disabled, zero behavior change). Slack/PagerDuty are future adapters over the same interface.
 
-**Scope:** Pluggable notifier interface; generic webhook sender on `ApprovalRequest` create; config flag/secret ref; Slack/PagerDuty as adapters later. Audit each notification.
+**Acceptance (met):** Package unit tests (`notifier_test.go`) cover JSON payload delivery, non-2xx error, transport error, noop. Envtest (`approval_gate_test.go`) asserts exactly-once delivery on gate open + annotation marker (idempotent across requeues).
 
-**Non-goals:** Building a UI inbox (Phase 7); credential storage (Phase 8 `CredentialProfile`).
+**Verification:** `go build ./...` + `go vet`; `go test ./internal/approval/... ./internal/controller/agentsession/...` (pass 2026-06-21).
 
-**Acceptance:** Unit test fires webhook on request create; failure is retried/logged, not fatal.
-
-**Verification:** `make test`.
-
-**Files:** `internal/approval/` (new), reconciler hook, `cmd/main.go` flag.
+**Next:** Phase 5 substantively complete (gate + notifications). Remaining Phase 5 polish (multi-approver `allOf`, per-tool runtime approval, approver-identity capture via webhook) tracked in `docs/design/phase-5-approval-workflows.md` open questions.
 
 ### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
 
@@ -726,7 +738,7 @@ Gaps found during the audit (now tracked): Phase 5 had no task cards (decomposed
 | **E2E tests** | Done | `make test-e2e` — live violation specs + usage assertions (incl. file domain) |
 | **CI / dev environment** | Done | GitHub Actions; devcontainer + kind |
 | **Operational UI** | Not started | Phase 7 |
-| **Approval workflows** | In progress (Phase 5) | `ApprovalPolicy` + `ApprovalRequest` CRDs shipped; controller gate enforces `requireHumanApproval` when a matching `ApprovalPolicy` exists (`AwaitingApproval` → grant/deny). Notifications (slice 4) + multi-approver/per-tool deferred |
+| **Approval workflows** | Substantively done (Phase 5) | `ApprovalPolicy` + `ApprovalRequest` CRDs; controller gate enforces `requireHumanApproval` when a matching `ApprovalPolicy` exists (`AwaitingApproval` → grant/deny); approvers webhook-notified (`--approval-webhook-url`). Multi-approver/per-tool/approver-identity deferred |
 | **Orchestrator adapters** | Not started | `kubernetes-job` only; Phase 6 |
 | **Enterprise platform** | Not started | Per-session identity, CredentialProfile, sandboxes; Phase 8 |
 
@@ -1008,7 +1020,7 @@ Scoped, auditable gates — not a boolean env var. Today `requireHumanApproval` 
 - [x] **ApprovalPolicy CRD** — Define what actions require approval *(slice 2, declarative only — `api/v1alpha1/approvalpolicy_types.go`)*
 - [x] **ApprovalRequest CRD + controller gate** — Per-decision approval objects; block in `PhaseAwaitingApproval`, resume on grant *(slice 3 — `approvalrequest_types.go` + `approval.go`)*
 - [x] **Approval audit trail** — Who approved, when, scope, expiry *(slice 3 — `ApprovalRequest.status` + `policyDecisions{type: approval}`)*
-- [ ] **Integration hooks** — Slack, PagerDuty, or generic webhook for approval notifications *(slice 4)*
+- [x] **Integration hooks** — generic webhook for approval notifications; Slack/PagerDuty are future adapters over the same `Notifier` *(slice 4 — `internal/approval/notifier.go` + `--approval-webhook-url`)*
 
 ---
 

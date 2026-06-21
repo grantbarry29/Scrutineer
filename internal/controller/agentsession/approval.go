@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/approval"
 	"github.com/secureai/relay/internal/policy"
 )
 
@@ -113,6 +114,7 @@ func (r *AgentSessionReconciler) reconcileApprovalGate(ctx context.Context, sess
 			r.recordNormal(session, EventReasonApprovalRequested,
 				fmt.Sprintf("Awaiting approval for action %q (ApprovalRequest %q)", gatedAction, req.Name))
 		}
+		r.notifyApprovalRequest(ctx, session, req)
 		setCondition(session, ConditionApprovalRequired, metav1.ConditionTrue, "AwaitingApproval",
 			fmt.Sprintf("Waiting on ApprovalRequest %q", req.Name))
 		return approvalPending, nil
@@ -283,6 +285,70 @@ func hasApprovalDecision(session *relayv1alpha1.AgentSession, target string, act
 		}
 	}
 	return false
+}
+
+// approvalNotifiedAnnotation marks an ApprovalRequest whose open-gate notification
+// was delivered, making notification fire at most once and retry until it succeeds.
+const approvalNotifiedAnnotation = "relay.secureai.dev/approval-notified"
+
+// notifyApprovalRequest delivers a best-effort notification for an open gate. It is
+// idempotent (guarded by an annotation) and never fails the reconcile: a delivery
+// error leaves the annotation unset so the next pending requeue retries.
+func (r *AgentSessionReconciler) notifyApprovalRequest(ctx context.Context, session *relayv1alpha1.AgentSession, req *relayv1alpha1.ApprovalRequest) {
+	if r.Notifier == nil {
+		return
+	}
+	if _, done := req.Annotations[approvalNotifiedAnnotation]; done {
+		return
+	}
+
+	err := r.Notifier.Notify(ctx, approval.Notification{
+		Namespace: req.Namespace,
+		Name:      req.Name,
+		Session:   session.Name,
+		Action:    req.Spec.Action,
+		PolicyRef: req.Spec.PolicyRef,
+		Target:    req.Spec.Scope.Target,
+		Message:   fmt.Sprintf("AgentSession %q awaits approval for action %q", session.Name, req.Spec.Action),
+	})
+	if err != nil {
+		r.recordWarning(session, EventReasonApprovalNotifyFailed,
+			fmt.Sprintf("Approval notification failed (will retry): %v", err))
+		return
+	}
+	if aErr := r.markApprovalNotified(ctx, req); aErr != nil {
+		// Delivery succeeded but the marker did not persist; a retry may re-notify.
+		// Surface it rather than silently risking a duplicate.
+		r.recordWarning(session, EventReasonApprovalNotifyFailed,
+			fmt.Sprintf("Approval notified but marker not persisted (may re-notify): %v", aErr))
+		return
+	}
+	r.recordNormal(session, EventReasonApprovalNotified,
+		fmt.Sprintf("Notified approvers for ApprovalRequest %q", req.Name))
+}
+
+// markApprovalNotified records that the open-gate notification was delivered.
+func (r *AgentSessionReconciler) markApprovalNotified(ctx context.Context, req *relayv1alpha1.ApprovalRequest) error {
+	key := client.ObjectKeyFromObject(req)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var latest relayv1alpha1.ApprovalRequest
+		if err := r.Get(ctx, key, &latest); err != nil {
+			return err
+		}
+		if _, done := latest.Annotations[approvalNotifiedAnnotation]; done {
+			*req = latest
+			return nil
+		}
+		if latest.Annotations == nil {
+			latest.Annotations = map[string]string{}
+		}
+		latest.Annotations[approvalNotifiedAnnotation] = metav1.Now().UTC().Format(time.RFC3339)
+		if err := r.Update(ctx, &latest); err != nil {
+			return err
+		}
+		*req = latest
+		return nil
+	})
 }
 
 // mapApprovalRequestToSessions enqueues the AgentSession a changed ApprovalRequest

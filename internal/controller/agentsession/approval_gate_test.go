@@ -11,6 +11,10 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
+	"context"
+	"sync"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -19,7 +23,36 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/approval"
 )
+
+// recordingNotifier captures approval notifications for assertions. Installed on
+// the suite reconciler; namespaces/names are unique per spec so calls don't collide.
+type recordingNotifier struct {
+	mu    sync.Mutex
+	calls []approval.Notification
+}
+
+func (r *recordingNotifier) Notify(_ context.Context, n approval.Notification) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, n)
+	return nil
+}
+
+func (r *recordingNotifier) countFor(name string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for _, n := range r.calls {
+		if n.Name == name {
+			count++
+		}
+	}
+	return count
+}
+
+var testNotifier = &recordingNotifier{}
 
 func approvalPolicy(ns, name string, actions ...string) *relayv1alpha1.ApprovalPolicy {
 	return &relayv1alpha1.ApprovalPolicy{
@@ -102,6 +135,29 @@ var _ = Describe("AgentSession approval gate", func() {
 		Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 		Expect(got.Status.Phase).NotTo(Equal(relayv1alpha1.PhaseAwaitingApproval))
 		Expect(hasApprovalDecision(&got, "deploy", relayv1alpha1.PolicyDecisionAllow)).To(BeTrue())
+	})
+
+	It("notifies approvers exactly once when the gate opens", func() {
+		ns := newTestNamespace()
+		Expect(k8sClient.Create(testCtx, approvalPolicy(ns, "gate", "deploy"))).To(Succeed())
+
+		session := sessionRequiringApproval(ns, "notify-me", "deploy")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+		waitForPhase(key, relayv1alpha1.PhaseAwaitingApproval)
+
+		Eventually(func() int {
+			return testNotifier.countFor(session.Name)
+		}, controllerWaitTimeout, controllerPollInterval).Should(Equal(1))
+
+		// Idempotent across subsequent reconciles (pending requeues every ~15s).
+		Consistently(func() int {
+			return testNotifier.countFor(session.Name)
+		}, 2*time.Second, controllerPollInterval).Should(Equal(1))
+
+		var req relayv1alpha1.ApprovalRequest
+		Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
+		Expect(req.Annotations).To(HaveKey(approvalNotifiedAnnotation))
 	})
 
 	It("denies the session terminally when the request is denied", func() {

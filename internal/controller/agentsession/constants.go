@@ -49,6 +49,10 @@ const (
 	EventReasonApprovalGranted = "ApprovalGranted"
 	// EventReasonApprovalDenied — approval was denied or expired; session denied.
 	EventReasonApprovalDenied = "ApprovalDenied"
+	// EventReasonApprovalNotified — approvers were notified of an open gate.
+	EventReasonApprovalNotified = "ApprovalNotified"
+	// EventReasonApprovalNotifyFailed — notification delivery failed (warning; will retry).
+	EventReasonApprovalNotifyFailed = "ApprovalNotifyFailed"
 	// EventReasonPolicyResolved — referenced policies merged into effective policy.
 	EventReasonPolicyResolved         = "PolicyResolved"
 	EventReasonRuntimeProfileResolved = "RuntimeProfileResolved"

@@ -27,6 +27,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/approval"
 	"github.com/secureai/relay/internal/audit"
 	"github.com/secureai/relay/internal/controller/agentsession"
 	"github.com/secureai/relay/internal/metrics"
@@ -56,6 +57,7 @@ func main() {
 		auditLogInsecure     bool
 		enableLeaderElection bool
 		reporterOnly         bool
+		approvalWebhookURL   string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "Address the metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "Address the probe endpoint binds to.")
@@ -75,6 +77,8 @@ func main() {
 		"Enable leader election for controller manager. Ensures only one active controller.")
 	flag.BoolVar(&reporterOnly, "reporter-only", false,
 		"Serve only the runtime evidence reporter (no AgentSession reconciler). Used for in-cluster e2e reporter deployments.")
+	flag.StringVar(&approvalWebhookURL, "approval-webhook-url", "",
+		"Webhook URL notified (HTTP POST JSON) when a session opens a human-approval gate. Empty disables notifications.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -131,11 +135,17 @@ func main() {
 	}
 
 	if !reporterOnly {
+		var notifier approval.Notifier
+		if approvalWebhookURL != "" {
+			notifier = approval.NewWebhookNotifier(approvalWebhookURL)
+			setupLog.Info("approval notifications enabled", "webhook", approvalWebhookURL)
+		}
 		if err := (&agentsession.AgentSessionReconciler{
 			Client:    mgr.GetClient(),
 			APIReader: mgr.GetAPIReader(),
 			Scheme:    mgr.GetScheme(),
 			Recorder:  mgr.GetEventRecorderFor("agentsession-controller"),
+			Notifier:  notifier,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "AgentSession")
 			os.Exit(1)
