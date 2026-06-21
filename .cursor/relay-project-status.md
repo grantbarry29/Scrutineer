@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -341,21 +341,19 @@ Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
 **Verification:** `make manifests generate` + `go build`; `go test ./internal/controller/job/... ./internal/controller/agentsession/...` (pass 2026-06-21).
 
-### Task: Investigate AgentSession reconcile churn (repeated PolicyResolved events + status conflicts)
+### Task: Investigate AgentSession reconcile churn (repeated PolicyResolved events + status conflicts) — **done (2026-06-21)**
 
-**Discovered:** 2026-06-09 during the test-hardening e2e run. Controller logs show the same `PolicyResolved` / "Merged N referenced policies" event re-emitted many times on the *same* resourceVersion for a single session, plus occasional `update AgentSession status: conflict (will requeue)` errors. Suggests the reconciler re-records events and/or re-writes status when nothing changed, causing avoidable requeues.
+**Discovered:** 2026-06-09 during the test-hardening e2e run. Controller logs show the same `PolicyResolved` / "Merged N referenced policies" event re-emitted many times on the *same* resourceVersion for a single session, plus occasional `update AgentSession status: conflict (will requeue)` errors.
 
-**Why it matters:** Event spam and status write churn hurt observability signal, add apiserver load, and can mask real changes in the UI/timeline surfaces. Not a correctness bug (tests pass) but a reconcile-discipline gap.
+**Findings:**
+- **Status writes were already idempotent** — `patchStatus` (`status.go`) unions conditions/decisions/violations/events, then short-circuits via `equalStatus` (`reflect.DeepEqual`) before `Status().Update`. `meta.SetStatusCondition` preserves `LastTransitionTime` when nothing changes, so no-op reconciles do not write. (Conflict errors are normal optimistic-concurrency requeues, not spurious writes.)
+- **Event emission was the churn** — `PolicyResolved` and `RuntimeProfileResolved` were recorded on *every* reconcile whenever policies matched / a profile applied, regardless of change, refreshing the aggregated Event's count + lastTimestamp on each requeue.
 
-**Scope (proposed):**
-- Make policy-resolution event emission idempotent (only record on actual change / transition, e.g. dedupe by resolved hash or guard with a condition).
-- Confirm status writes are no-ops when desired == observed (avoid spurious `Status().Update`).
+**Shipped:** added `conditionChanged(snapshot, current, condType)` in `reconciler.go` (compares the reconcile-start snapshot `original` vs the freshly-set condition by status/reason/message). Gated both resolution events on it — emitted once per real transition instead of every requeue. Unit test `TestConditionChanged` (`churn_test.go`) covers absent/new/identical/message/reason/status cases.
 
-**Non-goals:** New CRDs, changing the policy model, or reworking the reconcile architecture.
+**Verification:** `go build ./...`; `go test ./internal/controller/agentsession/` (full envtest suite + unit, pass 2026-06-21).
 
-**Verification:** `make test`; manually confirm event count per session drops to ~1 per real transition (e2e log inspection).
-
-**Files (likely):** `internal/controller/agentsession/reconciler.go`, `policy_decisions.go`, event-recording helpers.
+**Files:** `internal/controller/agentsession/reconciler.go`, `internal/controller/agentsession/churn_test.go`.
 
 ### Task: Raise unit coverage on data-plane producer packages — **done (2026-06-10)**
 

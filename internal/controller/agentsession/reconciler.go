@@ -183,7 +183,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid policy")
 		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	}
-	if len(resolvedPolicy.Matched) > 0 {
+	if len(resolvedPolicy.Matched) > 0 && conditionChanged(original, session, ConditionPolicyResolved) {
 		r.recordNormal(session, EventReasonPolicyResolved,
 			fmt.Sprintf("Merged %d referenced policies (mode=%s)", len(resolvedPolicy.Matched), resolvedPolicy.Mode))
 	}
@@ -199,7 +199,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.recordWarning(session, EventReasonSessionDenied, "session denied due to invalid runtime profile")
 		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	}
-	if resolvedProfile != nil {
+	if resolvedProfile != nil && conditionChanged(original, session, ConditionRuntimeProfileResolved) {
 		r.recordNormal(session, EventReasonRuntimeProfileResolved,
 			fmt.Sprintf("Applied RuntimeProfile %q to Job template", resolvedProfile.Name))
 	}
@@ -640,6 +640,23 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.mapApprovalRequestToSessions),
 		).
 		Complete(r)
+}
+
+// conditionChanged reports whether condType on current differs from the
+// reconcile-start snapshot — newly added, or its status/reason/message changed.
+// Resolution events (PolicyResolved, RuntimeProfileResolved) are gated on this so
+// they are emitted once per real transition instead of on every requeue, which
+// otherwise spams Events on a single unchanged resourceVersion.
+func conditionChanged(snapshot, current *relayv1alpha1.AgentSession, condType string) bool {
+	cur := meta.FindStatusCondition(current.Status.Conditions, condType)
+	if cur == nil {
+		return false
+	}
+	prev := meta.FindStatusCondition(snapshot.Status.Conditions, condType)
+	if prev == nil {
+		return true
+	}
+	return prev.Status != cur.Status || prev.Reason != cur.Reason || prev.Message != cur.Message
 }
 
 // setCondition upserts a condition by Type onto the AgentSession status.
