@@ -378,9 +378,11 @@ Fetch AgentSession
     ├─ resolveRuntimeProfile (optional ref) ──fail──► Denied ──► return
     │       └── matchedRuntimeProfile, RuntimeProfileResolved
     │
-    ├─ requireHumanApproval declared? ──► ApprovalNotEnforced warning event (no gate)
-    │
     ├─ cancelRequested? ──► delete Job ──► Cancelled, Completed, Ready=False ──► return
+    │
+    ├─ requireHumanApproval matches an ApprovalPolicy? ──► AwaitingApproval (create ApprovalRequest)
+    │       ├── granted ──► proceed         ├── denied / onTimeout=deny ──► Denied
+    │       └── no matching ApprovalPolicy ──► ApprovalNotEnforced warning (no gate)
     │
     ├─ already terminal? ──► patch status ──► return (no new Job)
     │
@@ -506,7 +508,10 @@ kubectl get events -n <namespace> --field-selector involvedObject.kind=AgentSess
 | `JobSucceeded` | Normal | Job completed successfully |
 | `JobFailed` | Warning | Job failed or timed out |
 | `SessionCancelled` | Normal | `spec.cancelRequested` processed |
-| `ApprovalNotEnforced` | Warning | `requireHumanApproval` declared but MVP does not gate execution |
+| `ApprovalNotEnforced` | Warning | `requireHumanApproval` declared but no `ApprovalPolicy` gates it |
+| `ApprovalRequested` | Normal | Session is blocked on a human approval gate (`AwaitingApproval`) |
+| `ApprovalGranted` | Normal | Approval granted; session resumes |
+| `ApprovalDenied` | Warning | Approval denied or timed out; session `Denied` |
 | `PolicyResolved` | Normal | Referenced policies merged |
 | `RuntimeProfileResolved` | Normal | RuntimeProfile applied to Job template |
 | `PolicyEnvDrift` | Warning | Effective policy changed but active Job env is stale |

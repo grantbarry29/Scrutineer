@@ -62,6 +62,9 @@ const deletionRequeueAfter = 2 * time.Second
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=toolpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=runtimeprofiles,verbs=get;list;watch
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/finalizers,verbs=update
@@ -197,14 +200,6 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			fmt.Sprintf("Applied RuntimeProfile %q to Job template", resolvedProfile.Name))
 	}
 
-	// Approval gate: surface declared approvals from effective policy. MVP does not block execution.
-	if len(resolvedPolicy.Rules.RequireHumanApproval) > 0 {
-		msg := fmt.Sprintf("requireHumanApproval is declared (%v) but not enforced in MVP",
-			resolvedPolicy.Rules.RequireHumanApproval)
-		logger.Info(msg)
-		r.recordWarning(session, EventReasonApprovalNotEnforced, msg)
-	}
-
 	if session.Spec.CancelRequested {
 		logger.Info("cancellation requested; stopping owned Job if present")
 		if err := r.stopRuntimeJob(ctx, session); err != nil {
@@ -219,6 +214,23 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// is handled above even when phase is already Cancelled.
 	if isTerminal(session.Status.Phase) {
 		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
+	}
+
+	// Human-approval gate: hold the session before runtime creation when a matching
+	// ApprovalPolicy requires approval. Granting resumes; denial/timeout-deny ends terminal.
+	switch outcome, gerr := r.reconcileApprovalGate(ctx, session, resolvedPolicy); {
+	case gerr != nil:
+		return ctrl.Result{}, fmt.Errorf("approval gate: %w", gerr)
+	case outcome == approvalRejected:
+		setReadyCondition(session)
+		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
+	case outcome == approvalPending:
+		session.Status.Phase = relayv1alpha1.PhaseAwaitingApproval
+		setReadyCondition(session)
+		if perr := r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile); perr != nil {
+			return ctrl.Result{}, perr
+		}
+		return ctrl.Result{RequeueAfter: approvalRecheckInterval}, nil
 	}
 
 	job, err := r.ensureJob(ctx, session, resolvedTask, resolvedPolicy, resolvedProfile)
@@ -619,6 +631,10 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&relayv1alpha1.RuntimeProfile{},
 			handler.EnqueueRequestsFromMapFunc(r.mapRuntimeProfileToSessions),
 		).
+		Watches(
+			&relayv1alpha1.ApprovalRequest{},
+			handler.EnqueueRequestsFromMapFunc(r.mapApprovalRequestToSessions),
+		).
 		Complete(r)
 }
 
@@ -659,6 +675,8 @@ func setReadyCondition(session *relayv1alpha1.AgentSession) {
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "JobTimedOut", "Underlying Job exceeded its activeDeadlineSeconds")
 	case relayv1alpha1.PhaseCancelled:
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "SessionCancelled", "Session was cancelled by user request")
+	case relayv1alpha1.PhaseAwaitingApproval:
+		setCondition(session, ConditionReady, metav1.ConditionFalse, "AwaitingApproval", "Session is blocked on a human approval gate")
 	default:
 		// Pending/Validating/Starting and any unknown phase.
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "NotReady", "Session is not ready yet")

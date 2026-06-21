@@ -191,7 +191,7 @@ sequenceDiagram
     R->>R: resolveTask (prompt / configmap)
     R->>R: resolvePolicy (merge refs + inline -> effectivePolicy, decisions)
     R->>R: resolveRuntimeProfile (optional)
-    R->>R: approval gate (declared, not enforced in MVP)
+    R->>R: approval gate (AwaitingApproval if a matching ApprovalPolicy applies)
     alt cancelRequested
         R->>API: delete owned Job; phase=Cancelled
     else terminal phase

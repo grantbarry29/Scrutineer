@@ -63,9 +63,9 @@ spec:
 
 `status`: `observedGeneration` (reserved), later usage counters.
 
-### `ApprovalRequest` (per-decision object — slice 3)
+### `ApprovalRequest` (per-decision object — slice 3 — **shipped 2026-06-21**)
 
-Created **by the controller** (owner-referenced by the `AgentSession`) when a gated session needs approval. Humans act on it by patching `spec.decision` (RBAC-scoped) or via a future UI/CLI.
+Shipped in `api/v1alpha1/approvalrequest_types.go` (CRD `approvalrequests`, short names `appreq`/`approvalreq`). Created **by the controller** (owner-referenced by the `AgentSession`) when a gated session needs approval. Humans act on it by patching `spec.decision` (RBAC-scoped) or via a future UI/CLI. `spec.decision` is enum `""`/`granted`/`denied`; `status` (controller-owned) carries `state`/`decidedBy`/`decidedAt`/`expiresAt`/`reason`. One request per session (name = session name, 1:1 for MVP).
 
 ```yaml
 apiVersion: relay.secureai.dev/v1alpha1
@@ -114,7 +114,10 @@ stateDiagram-v2
     Running --> Failed
 ```
 
-**Reconcile logic (slice 3):**
+**Reconcile logic (slice 3 — implemented):** see `internal/controller/agentsession/approval.go` (`reconcileApprovalGate`), wired in `reconciler.go` between the terminal check and `ensureJob`.
+
+> MVP semantics note: the gate is keyed on **one** `ApprovalRequest` per session (name = session name). `ApprovalPolicy.expiresAfter` is enforced as the **decision deadline** (measured from request creation): if no decision arrives before it, `onTimeout` applies (`deny` → `Denied`, `allow` → proceed). Grant-validity windows, multi-scope requests, and consume-time TOCTOU re-checks are deferred to later slices. Cancellation while `AwaitingApproval` is handled by the existing `cancelRequested` path (terminal `Cancelled`, no Job).
+
 1. After validation + policy resolve, if effective `requireHumanApproval` is non-empty **and** a matching `ApprovalPolicy` applies:
    - Do **not** create the Job.
    - Ensure an `ApprovalRequest` exists (create if missing, owner-ref the session).
@@ -149,8 +152,8 @@ See `.cursor/relay-project-status.md` → *Discovered Follow-Up Tasks → Phase 
 
 1. **This doc** (design). — **done**
 2. `ApprovalPolicy` CRD (declarative only). — **done (2026-06-21)**
-3. `ApprovalRequest` CRD + controller gate/resume + `PhaseAwaitingApproval`. — next
-4. Notification hooks (generic webhook → Slack/PagerDuty adapters).
+3. `ApprovalRequest` CRD + controller gate/resume + `PhaseAwaitingApproval`. — **done (2026-06-21)**
+4. Notification hooks (generic webhook → Slack/PagerDuty adapters). — next
 
 ## Related
 
