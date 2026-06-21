@@ -135,6 +135,9 @@ func TestValidateAndNormalizeReport_fillsAndValidates(t *testing.T) {
 		Backend: "egress-proxy",
 		Decisions: []relayv1alpha1.PolicyDecision{{
 			Time: future, Type: "network", Action: relayv1alpha1.PolicyDecisionDeny, Reason: "x",
+			// A malicious client tries to self-attest a higher assurance level;
+			// the controller-side reporter must override it.
+			AssuranceLevel: relayv1alpha1.EvidenceObserved,
 		}},
 		Violations: []relayv1alpha1.PolicyViolation{{Type: "network", Message: "m"}},
 	}, now, relayv1alpha1.PolicyModeEnforced)
@@ -150,8 +153,14 @@ func TestValidateAndNormalizeReport_fillsAndValidates(t *testing.T) {
 	if report.Decisions[0].Mode != relayv1alpha1.PolicyModeEnforced {
 		t.Fatalf("mode override = %q", report.Decisions[0].Mode)
 	}
+	if report.Decisions[0].AssuranceLevel != relayv1alpha1.EvidenceSelfReported {
+		t.Fatalf("decision assurance = %q, want self-reported (client value must be overridden)", report.Decisions[0].AssuranceLevel)
+	}
 	if report.Violations[0].Time.IsZero() {
 		t.Fatal("violation time not filled")
+	}
+	if report.Violations[0].AssuranceLevel != relayv1alpha1.EvidenceSelfReported {
+		t.Fatalf("violation assurance = %q, want self-reported", report.Violations[0].AssuranceLevel)
 	}
 }
 

@@ -91,6 +91,11 @@ func BuildMergeDecisions(resolved Resolved, now time.Time) []relayv1alpha1.Polic
 			Mode:    mode,
 		})
 	}
+	// Merge-time decisions are computed by the control plane and cannot be
+	// influenced by the agent, so they are authoritative.
+	for i := range out {
+		out[i].AssuranceLevel = relayv1alpha1.EvidenceControllerComputed
+	}
 	return out
 }
 

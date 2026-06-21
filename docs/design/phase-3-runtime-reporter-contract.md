@@ -175,6 +175,8 @@ After authentication, the reporter verifies the report targets the caller's **ow
 
 This guarantees a sidecar can only ever populate evidence for the exact session it runs in. Namespace isolation is preserved.
 
+**Residual risk — evidence is self-reported, not tamper-proof.** Ownership checks bind a report to one session, but the sidecar shares a pod and ServiceAccount with the agent, so this endpoint is **cooperative**: a fully compromised agent could still forge or suppress reports. To keep this honest for audit/UI consumers, the controller stamps every decision and violation it ingests here with `assuranceLevel: self-reported` (API field `EvidenceAssurance`), **overriding any client-supplied value** — a source must never be able to self-attest a higher trust level. Control-plane merge-time decisions are stamped `controller` (authoritative); the `observed` level is reserved for future independently-observed sources (kernel/eBPF, out-of-pod enforcement) that do not arrive through this cooperative endpoint.
+
 ```mermaid
 sequenceDiagram
     participant S as Sidecar (in pod)

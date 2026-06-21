@@ -69,6 +69,11 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		if effectiveMode != "" {
 			d.Mode = effectiveMode
 		}
+		// Evidence from the cooperative reporter endpoint is always self-reported:
+		// the sidecar shares a pod/ServiceAccount with the agent, so a client must
+		// not be able to self-attest a higher assurance level. Override any value
+		// the caller supplied.
+		d.AssuranceLevel = relayv1alpha1.EvidenceSelfReported
 		decisions = append(decisions, d)
 	}
 
@@ -79,6 +84,7 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		} else {
 			violations[i].Time = violations[i].Time.Rfc3339Copy()
 		}
+		violations[i].AssuranceLevel = relayv1alpha1.EvidenceSelfReported
 	}
 
 	events := make([]relayv1alpha1.SessionEvent, 0, len(req.Events))

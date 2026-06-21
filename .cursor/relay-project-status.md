@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-16 (repository audit pass — Phase 4 verified complete; Phase 5 decomposed into task cards; evidence-integrity gap tracked)
+> **Last updated:** 2026-06-21 (evidence-integrity slice 1: `assuranceLevel` on decisions/violations; Phase 5 slice 1: approval design doc; 2026-06-16 audit pass — Phase 4 verified complete; Phase 5 decomposed into task cards)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -13,7 +13,7 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). Next: **Phase 5 approval workflows** (recommended — closes the biggest vision/impl gap; `requireHumanApproval` only warns today) or **Phase 7 UI**. Phase 5 is now decomposed into ordered task cards under *Discovered Follow-Up Tasks → Phase 5 approval workflows*; **queue head = Phase 5 · slice 1 (ApprovalPolicy/ApprovalRequest design doc)**.
+> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). **Phase 5 in progress:** slice 1 (approval design doc) **done** → **queue head = Phase 5 · slice 2 (`ApprovalPolicy` CRD, declarative only)**. Phase 5 closes the biggest vision/impl gap (`requireHumanApproval` only warns today). Cards under *Discovered Follow-Up Tasks → Phase 5 approval workflows*.
 
 **Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
 
@@ -542,15 +542,18 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Why it matters:** Relay is a governance/audit product; trustworthy evidence is core to the value proposition (see product vision *Trust And Threat Model → Evidence integrity*). Audit/UI consumers must not treat self-reported evidence as tamper-proof.
 
-**Scope (proposed, decompose further before building):**
-- **Honesty first (small, near-term):** add an `assuranceLevel` (e.g. `self-reported` vs `observed`) field/annotation on runtime decisions/violations so status + future UI can show how much to trust each record; default existing sidecar reports to `self-reported`.
-- **Hardening (later, larger):** restrict reporter token projection to the sidecar container only + disable agent SA automount; consider out-of-pod / kernel (eBPF) observation as an independent evidence source.
+**Slice 1 — assurance level (honesty first) — done (2026-06-21):** Added `EvidenceAssurance` enum (`controller` / `self-reported` / `observed`) + `assuranceLevel` field on `PolicyDecision` and `PolicyViolation`. The cooperative reporter (`internal/reporter/normalize.go`) stamps all ingested runtime decisions/violations `self-reported`, **overriding any client value** (a source can't self-attest trust). Merge-time decisions (`internal/policy/decisions.go`) stamp `controller`. `observed` reserved for future independent sources. Reporter contract §5 updated. Tests: `decisions_test.go`, `reporter/more_test.go`. Verification: `make manifests && make test` (pass 2026-06-21).
 
-**Non-goals:** Implementing eBPF/Cilium in this task; rewriting the reporter auth model in one pass.
+**Remaining (hardening, later — larger, not started):**
+- Restrict reporter token projection to the sidecar container only + disable agent SA automount.
+- Surface `assuranceLevel` in future audit/UI surfaces (Phase 7).
+- Consider out-of-pod / kernel (eBPF) observation as an independent `observed` evidence source.
 
-**Verification:** `make test` (unit for the assurance-level field + reporter default).
+**Non-goals:** Implementing eBPF/Cilium; rewriting the reporter auth model in one pass.
 
-**Files (likely):** `api/v1alpha1/agentsession_types.go` (decision/violation field), `internal/reporter/`, `internal/enforcement/*/report.go`, reporter contract doc §5.
+**Verification:** `make test`.
+
+**Files:** `api/v1alpha1/policy_types.go`, `api/v1alpha1/agentsession_types.go`, `internal/reporter/normalize.go`, `internal/policy/decisions.go`, reporter contract doc §5.
 
 ### Task: Observability export design doc (Prometheus / OTel / audit)
 
@@ -568,19 +571,13 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices). **Promote slice 1 into Ready for Cursor Queue when starting Phase 5.** Implement one slice at a time; do not bundle.
 
-#### Task: Phase 5 · slice 1 — Approval model design doc
+#### Task: Phase 5 · slice 1 — Approval model design doc — **done (2026-06-21)**
 
-**Goal:** Decide the CRD shape and gate mechanism for scoped, auditable approvals before any code.
+**Shipped:** `docs/design/phase-5-approval-workflows.md` — `ApprovalPolicy` (declarative: actions/approvers/expiry/onTimeout) vs `ApprovalRequest` (per-decision, controller-owned, human sets `spec.decision`); controller gate/resume state machine with proposed `PhaseAwaitingApproval` phase + `ApprovalRequired` condition; relationship to existing `requireHumanApproval` + `status.policyDecisions` (`type: approval`, `assuranceLevel: controller`); audit fields (who/when/scope/expiry); open questions (approver authn via RBAC + future webhook, multi-approver, per-tool runtime approval). Index updated in `docs/design/README.md` + `relay-design-docs.mdc`.
 
-**Scope:** `docs/design/phase-5-approval-workflows.md` — `ApprovalPolicy` (what requires approval: tool / domain / file write / deploy / credential / bounded time window) vs `ApprovalRequest` (per-action object); how the controller blocks/resumes a session (phase + condition, e.g. `PhaseAwaitingApproval` / `ApprovalRequired`); relationship to existing `requireHumanApproval` and `status.policyDecisions` (`type: approval`); audit fields (who/when/scope/expiry); notification hooks as a non-goal for slice 1.
+**Next:** slice 2 — `ApprovalPolicy` CRD (declarative only).
 
-**Non-goals:** Implementing CRDs or the gate; UI; integrations.
-
-**Acceptance:** Design doc with CRD field sketches, lifecycle/state machine, invariants, non-goals; status line + `relay-design-docs.mdc` index updated.
-
-**Verification:** Review only.
-
-**Files:** `docs/design/phase-5-approval-workflows.md`, `docs/design/README.md`, `.cursor/rules/relay-design-docs.mdc`.
+**Verification:** Review only (docs); `make test` unaffected.
 
 #### Task: Phase 5 · slice 2 — ApprovalPolicy CRD (declarative only)
 
@@ -709,7 +706,7 @@ RBAC must match kubebuilder markers and actual client calls (Jobs delete, Config
 
 Relay has shipped an **end-to-end governance MVP** on Kubernetes: control-plane reconciliation, three data-plane enforcement domains (network / tool / file), runtime evidence into CRD status, and observability export (Prometheus, OTel traces, OTLP audit logs). **Not yet shipped:** operational UI, real approval gates, orchestrator adapters beyond Jobs, enterprise identity/credentials.
 
-**Trust posture (read before extending):** data-plane enforcement and the runtime-evidence loop are **cooperative**, not adversarial-proof. Enforcement sidecars and the agent share a pod and ServiceAccount; the reporter authenticates the *pod* (TokenReview + pod→Job→session ownership) but cannot distinguish the agent container from a sidecar. A fully compromised agent could therefore tamper with or starve the data plane. Adversarial-grade integrity needs data-plane isolation (kernel/eBPF, separate identity/netns, or out-of-pod enforcement) — tracked under *Discovered Follow-Up Tasks → Runtime evidence integrity*. Do not describe current enforcement as tamper-proof in docs/UI.
+**Trust posture (read before extending):** data-plane enforcement and the runtime-evidence loop are **cooperative**, not adversarial-proof. Enforcement sidecars and the agent share a pod and ServiceAccount; the reporter authenticates the *pod* (TokenReview + pod→Job→session ownership) but cannot distinguish the agent container from a sidecar. A fully compromised agent could therefore tamper with or starve the data plane. To keep this honest, runtime evidence carries an `assuranceLevel` (`self-reported` for cooperative sidecar reports, stamped by the controller and not client-settable; `controller` for authoritative merge-time decisions; `observed` reserved for future independent sources). Adversarial-grade integrity still needs data-plane isolation (kernel/eBPF, separate identity/netns, or out-of-pod enforcement) — tracked under *Discovered Follow-Up Tasks → Runtime evidence integrity*. Do not describe current enforcement as tamper-proof in docs/UI.
 
 **Repository audit (2026-06-16):** Verified the claims in this file against the tree.
 
@@ -765,7 +762,7 @@ Gaps found during the audit (now tracked): Phase 5 had no task cards (decomposed
 | S3 / external artifact store | No | `configmap://` / `secret://` URIs only |
 | Admission webhook | Scaffold | Controller validation only |
 | Orchestrators beyond Job | Enum reserved | Validation rejects others |
-| Runtime evidence integrity | No | Cooperative sidecar trust; no anti-tamper / assurance-level on evidence (see Discovered task) |
+| Runtime evidence integrity | Partial | `assuranceLevel` on decisions/violations (`controller` vs `self-reported`); still cooperative — no anti-tamper / `observed` source yet (see Discovered task) |
 | Observability export design doc | No | Prometheus/OTel/audit shipped without a `docs/design/` doc (see Discovered task) |
 
 ### status.podName selection semantics
@@ -1015,8 +1012,8 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 
 Scoped, auditable gates — not a boolean env var. Today `requireHumanApproval` only emits an `ApprovalNotEnforced` warning; this phase makes approval real. **Decomposed into ordered task cards** under *Discovered Follow-Up Tasks → Phase 5 approval workflows* (slice 1 = design doc, then ApprovalPolicy CRD, then ApprovalRequest + gate, then notifications).
 
-- [ ] **Approval model design doc** — CRD shape + gate/resume state machine *(slice 1 — queue head for Phase 5)*
-- [ ] **ApprovalPolicy CRD** — Define what actions require approval *(slice 2, declarative only)*
+- [x] **Approval model design doc** — CRD shape + gate/resume state machine *(slice 1 — `docs/design/phase-5-approval-workflows.md`)*
+- [ ] **ApprovalPolicy CRD** — Define what actions require approval *(slice 2, declarative only — queue head for Phase 5)*
 - [ ] **ApprovalRequest CRD + controller gate** — Per-action approval objects; block in `PhaseAwaitingApproval`, resume on grant *(slice 3)*
 - [ ] **Approval audit trail** — Who approved, when, scope, expiry *(part of slice 3 status/decisions)*
 - [ ] **Integration hooks** — Slack, PagerDuty, or generic webhook for approval notifications *(slice 4)*

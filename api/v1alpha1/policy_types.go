@@ -34,6 +34,31 @@ const (
 	PolicyDecisionDryRun PolicyDecisionAction = "dry-run"
 )
 
+// EvidenceAssurance describes how trustworthy an evidence record is, based on
+// who produced it relative to the agent being governed. It lets audit and UI
+// consumers tell authoritative or independently-observed evidence apart from
+// cooperative, self-reported evidence that a compromised agent could forge.
+//
+// +kubebuilder:validation:Enum=controller;self-reported;observed
+type EvidenceAssurance string
+
+const (
+	// EvidenceControllerComputed is authoritative evidence the control plane
+	// computed itself (e.g. merge-time policy decisions). The agent cannot
+	// influence it.
+	EvidenceControllerComputed EvidenceAssurance = "controller"
+	// EvidenceSelfReported is cooperative evidence reported by a data-plane
+	// component that shares a pod and ServiceAccount with the agent (today's
+	// sidecars). A fully compromised agent could forge or suppress it, so the
+	// controller-side reporter always stamps incoming runtime evidence with
+	// this level rather than trusting a client-supplied value.
+	EvidenceSelfReported EvidenceAssurance = "self-reported"
+	// EvidenceObserved is independently-observed evidence from a source the
+	// agent cannot tamper with (e.g. kernel/eBPF or out-of-pod enforcement).
+	// Reserved: the cooperative reporter never assigns it.
+	EvidenceObserved EvidenceAssurance = "observed"
+)
+
 // PolicyDecision records a structured policy evaluation for audit and future UI timelines.
 // Phase 2 populates merge-time decisions; Phase 3 enforcement backends append runtime entries.
 type PolicyDecision struct {
@@ -74,6 +99,14 @@ type PolicyDecision struct {
 	// Rule is the policy rule field that produced the decision (e.g. deniedTools).
 	// +optional
 	Rule string `json:"rule,omitempty"`
+
+	// AssuranceLevel indicates how trustworthy this decision record is.
+	// Merge-phase decisions are "controller" (authoritative). Runtime decisions
+	// reported by cooperative sidecars are stamped "self-reported" by the
+	// controller. An empty value on a runtime decision should be treated as
+	// "self-reported" by consumers (legacy records predate this field).
+	// +optional
+	AssuranceLevel EvidenceAssurance `json:"assuranceLevel,omitempty"`
 }
 
 // PolicyMode describes how policy should be interpreted at runtime.

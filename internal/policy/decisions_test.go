@@ -111,3 +111,24 @@ func TestNormalizeMode_emptyDefaultsAuditOnly(t *testing.T) {
 		t.Fatalf("mode = %q", NormalizeMode(""))
 	}
 }
+
+func TestBuildMergeDecisions_stampsControllerAssurance(t *testing.T) {
+	maxTool := int32(5)
+	resolved := Resolved{
+		Mode: relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{
+			DeniedTools:  []string{"kubectl-prod"},
+			MaxToolCalls: &maxTool,
+		},
+		Matched: []relayv1alpha1.MatchedPolicyRef{{Kind: "AgentPolicy", Name: "baseline"}},
+	}
+	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
+	if len(decisions) == 0 {
+		t.Fatal("expected merge decisions")
+	}
+	for i, d := range decisions {
+		if d.AssuranceLevel != relayv1alpha1.EvidenceControllerComputed {
+			t.Fatalf("decisions[%d] assurance = %q, want controller", i, d.AssuranceLevel)
+		}
+	}
+}

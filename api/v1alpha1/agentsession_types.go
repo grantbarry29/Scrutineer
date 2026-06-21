@@ -312,6 +312,13 @@ type PolicyViolation struct {
 	// Target is the entity the policy was applied against (domain, tool name, etc.).
 	// +optional
 	Target string `json:"target,omitempty"`
+
+	// AssuranceLevel indicates how trustworthy this violation record is.
+	// Violations reported by cooperative sidecars are stamped "self-reported"
+	// by the controller; an empty value should be treated as "self-reported".
+	// Independently-observed sources (e.g. kernel/eBPF) would be "observed".
+	// +optional
+	AssuranceLevel EvidenceAssurance `json:"assuranceLevel,omitempty"`
 }
 
 // ArtifactRef references an artifact produced by an AgentSession.

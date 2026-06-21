@@ -918,6 +918,18 @@ spec:
                       description: Actor is who or what produced the decision. Merge-time
                         uses "relay-controller".
                       type: string
+                    assuranceLevel:
+                      description: |-
+                        AssuranceLevel indicates how trustworthy this decision record is.
+                        Merge-phase decisions are "controller" (authoritative). Runtime decisions
+                        reported by cooperative sidecars are stamped "self-reported" by the
+                        controller. An empty value on a runtime decision should be treated as
+                        "self-reported" by consumers (legacy records predate this field).
+                      enum:
+                      - controller
+                      - self-reported
+                      - observed
+                      type: string
                     message:
                       description: Message is a human-readable description.
                       type: string
@@ -1059,6 +1071,17 @@ spec:
                     PolicyViolation records a single policy violation observed during a session.
                     Phase 3 enforcement reporters populate this via runtime reports (deny and dry-run outcomes).
                   properties:
+                    assuranceLevel:
+                      description: |-
+                        AssuranceLevel indicates how trustworthy this violation record is.
+                        Violations reported by cooperative sidecars are stamped "self-reported"
+                        by the controller; an empty value should be treated as "self-reported".
+                        Independently-observed sources (e.g. kernel/eBPF) would be "observed".
+                      enum:
+                      - controller
+                      - self-reported
+                      - observed
+                      type: string
                     message:
                       description: Message is a human-readable description of the
                         violation.
