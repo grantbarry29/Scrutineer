@@ -40,7 +40,7 @@ var (
 	approvalQueueDepth = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "approval_queue_depth",
-		Help:      "Running AgentSessions with at least one runtime ApprovalRequired decision (Phase 5 will refine this to pending ApprovalRequests).",
+		Help:      "ApprovalRequests awaiting a human decision (status.state Pending or unset).",
 	})
 
 	policyViolationsObserved = prometheus.NewCounterVec(prometheus.CounterOpts{

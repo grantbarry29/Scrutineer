@@ -19,8 +19,6 @@ import (
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 )
 
-const approvalRequiredReason = "ApprovalRequired"
-
 // AgentSessionCollector exposes aggregate AgentSession gauges on scrape.
 type AgentSessionCollector struct {
 	Client client.Reader
@@ -46,7 +44,6 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 
 	phaseCounts := make(map[string]map[string]int)
 	violationTotals := make(map[string]int)
-	var approvalQueue int
 
 	var list relayv1alpha1.AgentSessionList
 	if err := c.Client.List(context.Background(), &list); err == nil {
@@ -61,8 +58,16 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 			phaseCounts[session.Namespace][phase]++
 
 			violationTotals[session.Namespace] += len(session.Status.Violations)
+		}
+	}
 
-			if session.Status.Phase == relayv1alpha1.PhaseRunning && hasApprovalRequiredDecision(session.Status.PolicyDecisions) {
+	// Approval queue depth is the count of ApprovalRequests still awaiting a human
+	// decision — the true Phase 5 gate, not the prior runtime ApprovalRequired proxy.
+	var approvalQueue int
+	var reqs relayv1alpha1.ApprovalRequestList
+	if err := c.Client.List(context.Background(), &reqs); err == nil {
+		for i := range reqs.Items {
+			if isPendingApproval(reqs.Items[i].Status.State) {
 				approvalQueue++
 			}
 		}
@@ -87,11 +92,9 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 	approvalQueueDepth.Collect(ch)
 }
 
-func hasApprovalRequiredDecision(decisions []relayv1alpha1.PolicyDecision) bool {
-	for _, d := range decisions {
-		if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Reason == approvalRequiredReason {
-			return true
-		}
-	}
-	return false
+// isPendingApproval reports whether an ApprovalRequest is still awaiting a human
+// decision. An empty state is the transient window between the controller
+// creating the request and stamping it Pending, and still represents an open gate.
+func isPendingApproval(state relayv1alpha1.ApprovalState) bool {
+	return state == relayv1alpha1.ApprovalStatePending || state == ""
 }

@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -569,7 +569,13 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Verification:** Docs-only; `go build`/`make test` unaffected.
 
-**Discovered follow-ups (noted in the doc):** refine `relay_approval_queue_depth` to count pending `ApprovalRequest`s (Phase 5 gate now exists); add approval-decision audit records (`approval.granted`/`approval.denied`) when consumers need them; surface `assuranceLevel` in audit/UI (tracked under *Runtime evidence integrity*).
+**Discovered follow-ups (noted in the doc):** ~~refine `relay_approval_queue_depth`~~ (done 2026-06-21, below); add approval-decision audit records (`approval.granted`/`approval.denied`) when consumers need them; surface `assuranceLevel` in audit/UI (tracked under *Runtime evidence integrity*).
+
+### Task: Refine `relay_approval_queue_depth` to count pending ApprovalRequests — **done (2026-06-21)**
+
+**Shipped:** `AgentSessionCollector` (`internal/metrics/collector.go`) now lists `ApprovalRequest`s and counts those awaiting a human decision (`status.state` Pending or unset) instead of the prior proxy (running sessions with a runtime `ApprovalRequired` decision). Removed dead `hasApprovalRequiredDecision`/`approvalRequiredReason`; added `isPendingApproval`. Updated metric Help text, observability design doc, and tests (`TestAgentSessionCollector_updatesGauges` now drives queue depth from ApprovalRequests; granted requests excluded; added `TestIsPendingApproval`).
+
+**Verification:** `go build ./...`; `go test ./internal/metrics/` (pass 2026-06-21).
 
 ### Phase 5 — approval workflows (ordered task cards)
 

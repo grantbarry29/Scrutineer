@@ -27,12 +27,12 @@ Exposed on the controller-runtime metrics endpoint (`--metrics-bind-address`, de
 |--------|------|--------|---------|
 | `relay_agentsessions` | Gauge | `namespace`, `phase` | Current AgentSession count by lifecycle phase. |
 | `relay_agentsession_violations` | Gauge | `namespace` | Total policy violations currently recorded on sessions. |
-| `relay_approval_queue_depth` | Gauge | — | Running sessions with an `ApprovalRequired` runtime decision. *(Refine to count pending `ApprovalRequest`s now that the Phase 5 gate exists — see Follow-ups.)* |
+| `relay_approval_queue_depth` | Gauge | — | `ApprovalRequest`s awaiting a human decision (`status.state` Pending or unset). |
 | `relay_policy_violations_observed_total` | Counter | `namespace`, `type` | Novel violations appended to status (monotonic). |
 | `relay_runtime_reports_total` | Counter | `result` | `POST /v1/report` outcomes by result. |
 | `relay_runtime_report_duration_seconds` | Histogram | — | Latency of `/v1/report` handling (default buckets). |
 
-**Collection model:** the three gauges are computed on scrape by `AgentSessionCollector` (lists `AgentSession`s); the counters/histogram are updated inline (`ObserveNovelViolations`, `ObserveRuntimeReport`). Label cardinality is bounded by namespaces, the fixed phase enum, and violation `type` (`network`/`tool`/`file`/…); `result` is a small fixed set. Avoid adding unbounded labels (session name, target, domain).
+**Collection model:** the three gauges are computed on scrape by `AgentSessionCollector` — it lists `AgentSession`s (phase/violation gauges) and `ApprovalRequest`s (`approval_queue_depth`); the counters/histogram are updated inline (`ObserveNovelViolations`, `ObserveRuntimeReport`). Label cardinality is bounded by namespaces, the fixed phase enum, and violation `type` (`network`/`tool`/`file`/…); `result` is a small fixed set. Avoid adding unbounded labels (session name, target, domain).
 
 ## OpenTelemetry traces
 
@@ -80,6 +80,5 @@ Records are emitted as OTLP log records: body = human message, severity `INFO`, 
 
 ## Follow-ups (tracked in `.cursor/relay-project-status.md`)
 
-- Refine `relay_approval_queue_depth` to count pending `ApprovalRequest`s (Phase 5 gate now exists).
 - Surface `assuranceLevel` on evidence in audit records / future UI (Runtime evidence integrity).
 - Approval-decision audit records (`approval.granted` / `approval.denied`) once consumers need them.

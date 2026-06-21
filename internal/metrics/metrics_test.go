@@ -36,16 +36,23 @@ func TestAgentSessionCollector_updatesGauges(t *testing.T) {
 			Violations: []relayv1alpha1.PolicyViolation{{
 				Type: "network", Target: "evil.example",
 			}},
-			PolicyDecisions: []relayv1alpha1.PolicyDecision{{
-				Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
-				Reason: approvalRequiredReason,
-				Type:   "tool",
-				Target: "deploy",
-			}},
 		},
 	}
-	cl := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&relayv1alpha1.AgentSession{}).
-		WithLists(&relayv1alpha1.AgentSessionList{Items: []relayv1alpha1.AgentSession{session}}).
+	// One pending ApprovalRequest counts toward the queue; a granted one does not.
+	pending := relayv1alpha1.ApprovalRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: "team-a"},
+		Status:     relayv1alpha1.ApprovalRequestStatus{State: relayv1alpha1.ApprovalStatePending},
+	}
+	granted := relayv1alpha1.ApprovalRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "s2", Namespace: "team-a"},
+		Status:     relayv1alpha1.ApprovalRequestStatus{State: relayv1alpha1.ApprovalStateGranted},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&relayv1alpha1.AgentSession{}, &relayv1alpha1.ApprovalRequest{}).
+		WithLists(
+			&relayv1alpha1.AgentSessionList{Items: []relayv1alpha1.AgentSession{session}},
+			&relayv1alpha1.ApprovalRequestList{Items: []relayv1alpha1.ApprovalRequest{pending, granted}},
+		).
 		Build()
 
 	reg := prometheus.NewRegistry()
@@ -67,17 +74,21 @@ func TestAgentSessionCollector_updatesGauges(t *testing.T) {
 	}
 }
 
-func TestHasApprovalRequiredDecision(t *testing.T) {
+func TestIsPendingApproval(t *testing.T) {
 	t.Parallel()
-	if !hasApprovalRequiredDecision([]relayv1alpha1.PolicyDecision{{
-		Phase: relayv1alpha1.PolicyDecisionPhaseRuntime, Reason: approvalRequiredReason,
-	}}) {
-		t.Fatal("expected approval-required decision")
+	for _, s := range []relayv1alpha1.ApprovalState{relayv1alpha1.ApprovalStatePending, ""} {
+		if !isPendingApproval(s) {
+			t.Fatalf("state %q should be pending", s)
+		}
 	}
-	if hasApprovalRequiredDecision([]relayv1alpha1.PolicyDecision{{
-		Phase: relayv1alpha1.PolicyDecisionPhaseRuntime, Reason: "DeniedDomain",
-	}}) {
-		t.Fatal("unexpected approval-required")
+	for _, s := range []relayv1alpha1.ApprovalState{
+		relayv1alpha1.ApprovalStateGranted,
+		relayv1alpha1.ApprovalStateDenied,
+		relayv1alpha1.ApprovalStateExpired,
+	} {
+		if isPendingApproval(s) {
+			t.Fatalf("state %q should not be pending", s)
+		}
 	}
 }
 
