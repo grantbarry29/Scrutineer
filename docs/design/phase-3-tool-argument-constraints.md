@@ -1,6 +1,6 @@
 # Phase 3 — Tool/MCP Argument Constraints
 
-> **Status:** Design + control-plane schema (slice 2) + gateway evaluation (slice 3) shipped. Defines an argument-level governance layer for `ToolPolicy`/`PolicyRules`: allow/deny a tool call based on **its arguments**, not just its name. Schema + concatenate-merge + merge-time decision (`api/v1alpha1`, `internal/policy`) and per-call evaluation with **redacted** evidence (`internal/enforcement/toolgateway`) are implemented. Remaining: live e2e (slice 4). Extends [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md).
+> **Status:** Shipped (slices 1–4). An argument-level governance layer for `ToolPolicy`/`PolicyRules`: allow/deny a tool call based on **its arguments**, not just its name. Schema + concatenate-merge + merge-time decision (`api/v1alpha1`, `internal/policy`), per-call evaluation with **redacted** evidence (`internal/enforcement/toolgateway`), and a live in-cluster e2e (`test/e2e/tool_violation_test.go`) are implemented. Extends [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md).
 
 ## Problem
 
@@ -153,7 +153,7 @@ Argument values frequently contain secrets (tokens, SQL, file contents). Violati
 1. **This doc** (design). — *done*
 2. **Control-plane schema** — *done (2026-06-21)*. Added `ToolArgumentRule`/`ArgumentConstraint`/`ArgumentOperator`/`ConstraintEffect` to `ToolPolicySpec` + `PolicyRules` with kubebuilder validation; `ToolPolicyRules()` maps them; `MergeRules` concatenates with structural dedupe (`concatArgumentRules`); `BuildMergeDecisions` emits an `ArgumentRulesDeclared` summary decision; manifests + deepcopy regenerated; sample updated. No enforcement.
 3. **Gateway evaluation** — *done (2026-06-21)*. `toolgateway.ToolRequest.Arguments`, `evaluateArgumentRules` (dotted/`[i]` path resolver + operator matchers, deny-precedence, allow-allowlist), `EvaluateTool` integration (after the name gate), `GatewayConfig.ArgumentRules` + JSON propagation (`AGENT_POLICY_ARGUMENT_RULES`), sidecar `POST /v1/tools/invoke` `arguments`, and **redacted** runtime evidence (`ArgumentDenied`/`ArgumentNotAllowed`; constraint detail only, never the request value). Unit-tested.
-4. **Live e2e** — argument-denied tool call → `403` (enforced) → `status.violations` with redacted detail (extends `test/e2e/tool_violation_test.go`).
+4. **Live e2e** — *done (2026-06-21)*. `test/e2e/tool_violation_test.go` adds a spec: enforced `argumentRules` + tool-gateway sidecar + agent POST with `arguments` → in-cluster reporter → `status.violations` + runtime decision (`ArgumentDenied`, `rule=argumentRules`, `action=deny`), asserting the request value is **never** present in any decision/violation. Verified live against kind (2 of 2 tool-violation specs pass).
 
 ## Open questions
 

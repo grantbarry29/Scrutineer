@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (tool argument constraints slice 3: tool-gateway per-call argument evaluation — path resolver + operator matchers, deny-precedence/allow-allowlist, redacted evidence, JSON propagation — live e2e is slice 4; tool argument constraints slice 2: `ToolArgumentRule`/`ArgumentConstraint` schema on `ToolPolicy`+`PolicyRules`, concatenate-merge, merge-time summary decision, sample + manifests; tool/MCP argument-constraints design doc; Phase 6 slice 2b: backend returns normalized `observation`, reconciler owns status mapping via `applyObservation`/`applyRuntimePhase`; Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (tool argument constraints slice 4: live in-cluster e2e — enforced argument rule denies a tool call, redacted violation in status, verified on kind; tool argument constraints slice 3: tool-gateway per-call argument evaluation — path resolver + operator matchers, deny-precedence/allow-allowlist, redacted evidence, JSON propagation; tool argument constraints slice 2: `ToolArgumentRule`/`ArgumentConstraint` schema on `ToolPolicy`+`PolicyRules`, concatenate-merge, merge-time summary decision, sample + manifests; tool/MCP argument-constraints design doc; Phase 6 slice 2b: backend returns normalized `observation`, reconciler owns status mapping via `applyObservation`/`applyRuntimePhase`; Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -427,19 +427,25 @@ Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
 **Files:** `internal/enforcement/toolgateway/argconstraints.go` (new), `types.go`, `evaluate.go`, `report.go`, `config.go`, `runtime_env.go`, `gateway.go`, `argconstraints_test.go`.
 
-### Task: Tool argument constraints — slice 4 (live e2e)
+### Task: Tool argument constraints — slice 4 (live e2e) — **done (2026-06-21)**
 
-**Goal:** Prove the argument-rule path end-to-end in-cluster.
+**Shipped:** new spec in `test/e2e/tool_violation_test.go` ("populates a redacted argument violation…") + fixtures (`createEnforcedArgumentRuleToolPolicy`, `withArgumentDeniedToolInvokeProbe`). Enforced `argumentRules` (allow `read_file` by name, deny `path` HasPrefix `/etc/`) + tool-gateway sidecar; the agent POSTs `{"tool":"read_file","arguments":{"path":"/etc/shadow-SECRETTOKEN"}}`; the in-cluster reporter populates a runtime decision (`ArgumentDenied`, `type=tool`, `rule=argumentRules`, `action=deny`, `target=read_file`) and a violation. Asserts the request value (`SECRETTOKEN`) never appears in any decision/violation (redaction).
 
-**Scope:** Extend `test/e2e/tool_violation_test.go` — enforced `argumentRules` + tool-gateway sidecar + agent POST with arguments → `403` → in-cluster reporter → `status.violations` with redacted detail (no raw arg value). Reuses `make test-e2e-images`.
+**Verified live** against the `relay-dev` kind cluster (2026-06-21): both tool-violation specs pass (`2 Passed`), no regression. Run: `RELAY_E2E_IMG=<shell-capable relay img> go test -tags=e2e ./test/e2e/... -ginkgo.focus="Live tool violation population"`.
 
-**Non-goals:** CEL; new images beyond existing tool-gateway.
+**Files:** `test/e2e/tool_violation_test.go`, `test/e2e/fixtures_test.go`.
 
-**Acceptance criteria:** e2e asserts a redacted argument violation appears in status; existing tool e2e still passes.
+### Task: e2e live-evidence image probe assumes a shell (distroless skip)
 
-**Expected files:** `test/e2e/tool_violation_test.go`, fixtures.
+**Why:** `clusterImageRunnable` (`test/e2e/reporter_infra_test.go`) gates all live-evidence specs by running `sh -c` in a probe pod. The shipped relay + sidecar images are `distroless/static` (no shell), so the probe fails and **every** live-evidence spec **skips** unless images are rebuilt shell-capable (done ad-hoc this session via busybox variants). `make test-e2e` as documented therefore silently skips these specs in a standard build.
 
-**Verification command:** `make test-e2e-images && make test-e2e`
+**Scope:** Make the probe distroless-tolerant — e.g. check image presence on nodes (crictl/containerd) or run the image's own binary with a no-op/`--help` flag instead of `sh -c`; or build dedicated shell-capable e2e image variants in `test-e2e-images`. Keep specs skipping gracefully when images are genuinely absent.
+
+**Non-goals:** Changing production image bases; CEL.
+
+**Acceptance criteria:** `make test-e2e-images && make test-e2e` runs (not skips) the live-evidence specs against kind with the standard images.
+
+**Expected files:** `test/e2e/reporter_infra_test.go` and/or `Makefile` + a thin e2e Dockerfile.
 
 ### Task: Propagate ToolPolicy maxCallsPerMinute to runtime hooks — **done (2026-06-08)**
 
@@ -998,7 +1004,7 @@ Extract inline policy into composable, versioned CRDs without breaking AgentSess
 
 | Item | Where tracked | Notes |
 |------|---------------|-------|
-| ToolPolicy MCP **argument constraints** | **Schema + gateway eval done (2026-06-21)** (design + slices 2–3); live e2e = *Tool argument constraints* slice 4 | `argumentRules` evaluated per-call with redacted evidence |
+| ToolPolicy MCP **argument constraints** | **Done (2026-06-21)** — design + slices 2–4 (schema, gateway eval, live e2e) | `argumentRules` evaluated per-call with redacted evidence; e2e-verified |
 | Inline `spec.policy.mode` override | Not planned | Only CRD modes merge today |
 | Runtime `policyDecisions` append | **done** — slice 2 (`policy_decisions.go`) | Reporters use `AppendRuntimePolicyDecisions` |
 | Active Job env stale after policy change | `PolicyEnvDrift` condition | Documented; immutable Job template |

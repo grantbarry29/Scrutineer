@@ -109,6 +109,19 @@ func withDeniedToolInvokeProbe(tool string) agentSessionOption {
 	}
 }
 
+// withArgumentDeniedToolInvokeProbe waits for sidecars then repeatedly POSTs a tool call
+// (with arguments) that an argument rule should deny. argsJSON is the raw JSON for the
+// "arguments" object, e.g. `{"path":"/etc/shadow"}`.
+func withArgumentDeniedToolInvokeProbe(tool, argsJSON string) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		body := fmt.Sprintf(`{"tool":"%s","arguments":%s}`, tool, argsJSON)
+		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
+			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='%s' --header='Content-Type: application/json' "${RELAY_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 2; done; sleep 120`,
+			body,
+		)}
+	}
+}
+
 // withDeniedDomainEgressProbe waits for sidecars then probes a denied domain via HTTP_PROXY.
 func withDeniedDomainEgressProbe(domain string) agentSessionOption {
 	return func(s *relayv1alpha1.AgentSession) {
@@ -228,6 +241,29 @@ func createEnforcedDeniedToolPolicy(ctx context.Context, namespace, name, tool s
 		Spec: relayv1alpha1.ToolPolicySpec{
 			Mode:        relayv1alpha1.PolicyModeEnforced,
 			DeniedTools: []string{tool},
+		},
+	}
+	Expect(k8sClient.Create(ctx, tp)).To(Succeed())
+}
+
+// createEnforcedArgumentRuleToolPolicy creates an enforced ToolPolicy that allows the tool
+// by name but denies it when arg has the given prefix (an argument-level constraint).
+func createEnforcedArgumentRuleToolPolicy(ctx context.Context, namespace, name, tool, arg, denyPrefix string) {
+	GinkgoHelper()
+	tp := &relayv1alpha1.ToolPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: relayv1alpha1.ToolPolicySpec{
+			Mode:         relayv1alpha1.PolicyModeEnforced,
+			AllowedTools: []string{tool},
+			ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+				Tools: []string{tool},
+				Constraints: []relayv1alpha1.ArgumentConstraint{{
+					Arg:    arg,
+					Op:     relayv1alpha1.ArgOpHasPrefix,
+					Values: []string{denyPrefix},
+					Effect: relayv1alpha1.ConstraintEffectDeny,
+				}},
+			}},
 		},
 	}
 	Expect(k8sClient.Create(ctx, tp)).To(Succeed())

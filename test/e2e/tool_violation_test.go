@@ -13,6 +13,7 @@ You may obtain a copy of the License at
 package e2e
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	"github.com/secureai/relay/internal/enforcement/toolgateway"
 )
 
 var _ = Describe("Live tool violation population", func() {
@@ -80,6 +82,62 @@ var _ = Describe("Live tool violation population", func() {
 		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: ns, Name: got.Status.PodName}, &pod)).To(Succeed())
 		names := containerNames(pod.Spec.Containers)
 		Expect(names).To(ContainElements("agent", "tools"))
+
+		requestCancellation(ctx, key)
+		waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+	})
+
+	It("populates a redacted argument violation when tool-gateway denies a tool by argument rule", func(ctx SpecContext) {
+		const tool = "read_file"
+		// SECRETTOKEN is the request value that must never appear in evidence; "/etc/" is
+		// the policy operand that may.
+		const secretValue = "/etc/shadow-SECRETTOKEN"
+		ns := newTestNamespace("relay-e2e-arg-violation")
+		const profileName = "tool-gateway-enforced"
+		createRuntimeProfileWithToolGateway(ctx, ns, profileName)
+		createEnforcedArgumentRuleToolPolicy(ctx, ns, "deny-etc-read", tool, "path", "/etc/")
+
+		session := newAgentSession(ns, "arg-violation",
+			withRuntimeProfileRef(profileName),
+			withPolicyRef("ToolPolicy", "deny-etc-read"),
+			withArgumentDeniedToolInvokeProbe(tool, fmt.Sprintf(`{"path":"%s"}`, secretValue)),
+		)
+		key := createAgentSession(ctx, session)
+
+		expectJobForSession(ctx, ns, session)
+		waitForPhase(ctx, key, []relayv1alpha1.AgentSessionPhase{relayv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
+
+		Eventually(func(g Gomega) {
+			got := getSession(ctx, key)
+
+			var argDecisions []relayv1alpha1.PolicyDecision
+			for _, d := range got.Status.PolicyDecisions {
+				if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Reason == toolgateway.ReasonArgumentDenied {
+					argDecisions = append(argDecisions, d)
+				}
+			}
+			g.Expect(argDecisions).NotTo(BeEmpty(), "expected ArgumentDenied runtime decision; decisions=%+v", got.Status.PolicyDecisions)
+			g.Expect(argDecisions[0].Action).To(Equal(relayv1alpha1.PolicyDecisionDeny))
+			g.Expect(argDecisions[0].Type).To(Equal("tool"))
+			g.Expect(argDecisions[0].Rule).To(Equal("argumentRules"))
+			g.Expect(argDecisions[0].Target).To(Equal(tool))
+
+			// Evidence must be redacted: the request value never appears in any decision.
+			for _, d := range got.Status.PolicyDecisions {
+				g.Expect(d.Message).NotTo(ContainSubstring("SECRETTOKEN"), "decision leaks request arg value: %q", d.Message)
+			}
+
+			var argViolations []relayv1alpha1.PolicyViolation
+			for _, v := range got.Status.Violations {
+				if v.Type == "tool" && strings.Contains(v.Message, "argument") {
+					argViolations = append(argViolations, v)
+				}
+			}
+			g.Expect(argViolations).NotTo(BeEmpty(), "expected an argument violation; violations=%+v", got.Status.Violations)
+			for _, v := range got.Status.Violations {
+				g.Expect(v.Message).NotTo(ContainSubstring("SECRETTOKEN"), "violation leaks request arg value: %q", v.Message)
+			}
+		}, 90*time.Second, 2*time.Second).Should(Succeed())
 
 		requestCancellation(ctx, key)
 		waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
