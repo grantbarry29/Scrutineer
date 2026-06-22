@@ -29,6 +29,7 @@ Relay keeps canonical architecture/design docs in [`docs/design/`](../../docs/de
 | Runtime reporter / writing runtime evidence into `status` | [`docs/design/phase-3-runtime-reporter-contract.md`](../../docs/design/phase-3-runtime-reporter-contract.md) |
 | Egress / DNS governance, dns-proxy sidecar | [`docs/design/phase-3-dns-proxy-prototype.md`](../../docs/design/phase-3-dns-proxy-prototype.md) |
 | Tool / MCP governance, tool-gateway sidecar | [`docs/design/phase-3-tool-gateway-contract.md`](../../docs/design/phase-3-tool-gateway-contract.md) |
+| Argument-level tool/MCP governance (`ToolPolicy` argument rules, `ArgumentConstraint`, gateway per-call arg eval) | [`docs/design/phase-3-tool-argument-constraints.md`](../../docs/design/phase-3-tool-argument-constraints.md) |
 | File / workspace governance | [`docs/design/phase-3-file-workspace-policy.md`](../../docs/design/phase-3-file-workspace-policy.md) |
 | Structured session events / reporter event payloads | [`docs/design/phase-4-session-events.md`](../../docs/design/phase-4-session-events.md) |
 | UI timeline projection over `status.events[]` (`internal/observability`) | [`docs/design/phase-4-session-timeline.md`](../../docs/design/phase-4-session-timeline.md) |

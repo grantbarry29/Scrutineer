@@ -13,6 +13,7 @@ For *current state, queue, and roadmap*, see [`.cursor/relay-project-status.md`]
 | [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) | Implementing the runtime reporter (sidecar → controller evidence loop) or anything that writes runtime evidence into status. |
 | [`phase-3-dns-proxy-prototype.md`](phase-3-dns-proxy-prototype.md) | Working on egress/DNS governance or the dns-proxy sidecar. |
 | [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md) | Working on tool/MCP governance or the tool-gateway sidecar. |
+| [`phase-3-tool-argument-constraints.md`](phase-3-tool-argument-constraints.md) | Working on argument-level tool/MCP governance — `ToolPolicy` argument rules, the `ArgumentConstraint` schema, or gateway per-call argument evaluation. |
 | [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-policy.md) | Working on file/workspace governance (mount strategy, FS gateway, path rules). |
 | [`phase-4-session-events.md`](phase-4-session-events.md) | Working on `status.events[]`, timeline ingestion, or reporter event payloads. |
 | [`phase-4-session-timeline.md`](phase-4-session-timeline.md) | Working on UI timeline projection over `status.events[]` (`internal/observability`). |
