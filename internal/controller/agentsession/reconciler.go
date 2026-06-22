@@ -61,7 +61,7 @@ type AgentSessionReconciler struct {
 // ensureBackends lazily builds the runtime backend registry from the reconciler's deps.
 func (r *AgentSessionReconciler) ensureBackends() {
 	if r.backends == nil {
-		r.backends = defaultBackendRegistry(r.Client, r.APIReader, r.Scheme, r.Recorder)
+		r.backends = defaultBackendRegistry(r.Client, r.APIReader, r.Scheme)
 	}
 }
 
@@ -269,7 +269,8 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := backend.ensure(ctx, session, resolvedTask, resolvedPolicy, resolvedProfile); err != nil {
+	obs, err := backend.ensure(ctx, session, resolvedTask, resolvedPolicy, resolvedProfile)
+	if err != nil {
 		if errors.Is(err, ErrJobNotOwned) {
 			session.Status.Phase = relayv1alpha1.PhaseDenied
 			setCondition(session, ConditionValidated, metav1.ConditionFalse, "JobConflict", err.Error())
@@ -279,6 +280,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		return ctrl.Result{}, err
 	}
+	r.applyObservation(session, obs)
 
 	setReadyCondition(session)
 	if err := r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile); err != nil {
@@ -412,6 +414,113 @@ func (r *AgentSessionReconciler) applyCancellationStatus(session *relayv1alpha1.
 		session.Status.Result = &relayv1alpha1.SessionResult{
 			Outcome: "cancelled",
 			Summary: msg,
+		}
+	}
+}
+
+// applyObservation maps a backend's normalized observation onto the AgentSession status,
+// conditions, events, and result. The reconciler — not the backend — owns this mapping
+// so governance/status semantics stay backend-independent.
+func (r *AgentSessionReconciler) applyObservation(session *relayv1alpha1.AgentSession, obs observation) {
+	if obs.runtimeName != "" {
+		session.Status.JobName = obs.runtimeName
+	}
+
+	if obs.replaced {
+		r.recordNormal(session, EventReasonPolicyEnvSynced, "Replaced pending Job to sync policy env vars")
+	}
+	if obs.policyInSync {
+		setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
+			"Job policy env vars match effective policy")
+	} else {
+		setCondition(session, ConditionPolicyPropagated, metav1.ConditionFalse, "PolicyEnvDrift", obs.policyMessage)
+		r.recordWarning(session, EventReasonPolicyEnvDrift, obs.policyMessage)
+	}
+
+	if obs.created {
+		if session.Status.StartTime == nil {
+			now := metav1.Now()
+			session.Status.StartTime = &now
+		}
+		setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
+			fmt.Sprintf("Created Job %q", obs.runtimeName))
+		r.recordNormal(session, EventReasonJobCreated, fmt.Sprintf("Created Job %s", obs.runtimeName))
+		session.Status.Phase = relayv1alpha1.PhaseStarting
+	} else {
+		setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
+			fmt.Sprintf("Job %q exists", obs.runtimeName))
+	}
+
+	r.applyRuntimePhase(session, obs.phase)
+
+	if obs.workloadName != "" {
+		session.Status.PodName = obs.workloadName
+	}
+}
+
+// applyRuntimePhase maps a backend-neutral runtimePhase onto AgentSessionPhase, the
+// Completed condition, result, and lifecycle events. Terminal sessions are never
+// overwritten. Events fire only on a phase transition.
+func (r *AgentSessionReconciler) applyRuntimePhase(session *relayv1alpha1.AgentSession, phase runtimePhase) {
+	if isTerminal(session.Status.Phase) {
+		return
+	}
+
+	switch phase {
+	case runtimeSucceeded:
+		if session.Status.Phase != relayv1alpha1.PhaseSucceeded {
+			r.recordNormal(session, EventReasonJobSucceeded, "Job completed successfully")
+		}
+		session.Status.Phase = relayv1alpha1.PhaseSucceeded
+		setCompletionTime(session)
+		setCondition(session, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "Underlying Job completed successfully")
+		if session.Status.Result == nil {
+			session.Status.Result = &relayv1alpha1.SessionResult{
+				Outcome: "completed",
+				Summary: "Job completed successfully",
+			}
+		}
+
+	case runtimeTimedOut:
+		msg := "Underlying Job exceeded its activeDeadlineSeconds"
+		if session.Status.Phase != relayv1alpha1.PhaseTimedOut {
+			r.recordWarning(session, EventReasonJobFailed, msg)
+		}
+		session.Status.Phase = relayv1alpha1.PhaseTimedOut
+		setCompletionTime(session)
+		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobTimedOut", msg)
+		if session.Status.Result == nil {
+			session.Status.Result = &relayv1alpha1.SessionResult{
+				Outcome: "failed",
+				Summary: msg,
+			}
+		}
+
+	case runtimeFailed:
+		msg := "Underlying Job failed"
+		if session.Status.Phase != relayv1alpha1.PhaseFailed {
+			r.recordWarning(session, EventReasonJobFailed, msg)
+		}
+		session.Status.Phase = relayv1alpha1.PhaseFailed
+		setCompletionTime(session)
+		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobFailed", msg)
+		if session.Status.Result == nil {
+			session.Status.Result = &relayv1alpha1.SessionResult{
+				Outcome: "failed",
+				Summary: msg,
+			}
+		}
+
+	case runtimeRunning:
+		if session.Status.Phase != relayv1alpha1.PhaseRunning {
+			r.recordNormal(session, EventReasonJobRunning, "Job is running")
+		}
+		session.Status.Phase = relayv1alpha1.PhaseRunning
+
+	default:
+		// runtimeStarting / indeterminate: only advance a fresh session.
+		if session.Status.Phase == "" || session.Status.Phase == relayv1alpha1.PhasePending {
+			session.Status.Phase = relayv1alpha1.PhaseStarting
 		}
 	}
 }

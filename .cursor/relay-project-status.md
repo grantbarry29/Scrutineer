@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (Phase 6 slice 2b: backend returns normalized `observation`, reconciler owns status mapping via `applyObservation`/`applyRuntimePhase`; Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -333,22 +333,15 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
-### Task: Phase 6 · slice 2b — normalize `runtimeBackend` to `Observation` (restore "reconciler owns status")
+### Task: Phase 6 · slice 2b — normalize `runtimeBackend` to `observation` (reconciler owns status) — **done (2026-06-21)**
 
-**Why:** slice 2 (done 2026-06-21) extracted the `runtimeBackend` interface but kept it **transitional** — `kubernetesJobBackend.ensure`/`syncStatusFromJob` mutate AgentSession status/conditions/events/result directly. The design doc invariant is that the **reconciler**, not the backend, owns status; backends return a normalized `Observation`. This is a prerequisite for adding a clean second backend (Tekton/Argo) without each one re-implementing phase/condition mapping.
+**Shipped:** `kubernetesJobBackend.ensure` now returns a backend-neutral `observation` (`phase`/`runtimeName`/`workloadName`/`created`/`replaced`/`policyInSync`/`policyMessage`) and no longer writes to the session. The reconciler's new `applyObservation` + `applyRuntimePhase` (`reconciler.go`) own all status mapping: phase→`AgentSessionPhase`, `RuntimeCreated`/`PolicyPropagated`/`Completed` conditions, lifecycle events (`JobCreated`/`JobRunning`/`JobSucceeded`/`JobFailed`/`PolicyEnvSynced`/`PolicyEnvDrift`), `StartTime`, and `SessionResult`. The backend dropped its event recorder (holds only client/apiReader/scheme); Job-state→phase mapping is the package func `jobRuntimePhase`. This restores the design-doc invariant "reconciler — not the backend — owns status," the prerequisite for a clean second backend.
 
-**Scope:** Change `runtimeBackend.ensure`/observe to return a backend-neutral `Observation` (`Phase`, `RuntimeName`, `WorkloadName`, `Message`, `PolicyInSync`) per `docs/design/phase-6-orchestrator-interface.md`. Move phase→`AgentSessionPhase` mapping, condition/event/result writes, and `PolicyEnvDrift` surfacing back into the reconciler (an `applyObservation` helper). Keep `ErrJobNotOwned`/ownership conflict reporting.
+**Behavior-preserving:** full suite green (agentsession envtests + units). The two former `syncStatusFromJob` unit tests now exercise `applyRuntimePhase(session, jobRuntimePhase(job))`.
 
-**Non-goals:** Any new orchestrator; status-field generalization (`status.runtimeRef`); drift/replace policy changes.
+**Verification:** `go build ./...`; `go vet ./internal/controller/agentsession/...`; `KUBEBUILDER_ASSETS=… go test ./...` (all pass 2026-06-21).
 
-**Acceptance criteria:**
-- `kubernetesJobBackend` no longer writes `session.Status.*`/conditions/events; reconciler does.
-- Reconciler maps `Observation` → existing phases/conditions/events/result identically (behavior-preserving).
-- All existing agentsession envtests pass unchanged in expectations.
-
-**Expected files:** `internal/controller/agentsession/runtime_backend.go`, `reconciler.go`, `pod.go`, tests.
-
-**Verification command:** `KUBEBUILDER_ASSETS=… go test ./internal/controller/agentsession/...`
+**Files:** `internal/controller/agentsession/runtime_backend.go`, `reconciler.go`, `reconciler_test.go`.
 
 ### Task: Provider-agnostic `model.baseURL` (enables OpenRouter & OpenAI-compatible endpoints) — **done (2026-06-21)**
 
@@ -792,7 +785,7 @@ Gaps found during the audit (now tracked): Phase 5 had no task cards (decomposed
 | **CI / dev environment** | Done | GitHub Actions; devcontainer + kind |
 | **Operational UI** | Not started | Phase 7 |
 | **Approval workflows** | Substantively done (Phase 5) | `ApprovalPolicy` + `ApprovalRequest` CRDs; controller gate enforces `requireHumanApproval` when a matching `ApprovalPolicy` exists (`AwaitingApproval` → grant/deny); approvers webhook-notified (`--approval-webhook-url`). Multi-approver/per-tool/approver-identity deferred |
-| **Orchestrator adapters** | Interface extracted | `kubernetes-job` backend behind `runtimeBackend`; no second adapter yet (Phase 6) |
+| **Orchestrator adapters** | Interface + normalized observation | `kubernetes-job` backend behind `runtimeBackend`; reconciler owns status mapping; no second adapter yet (Phase 6) |
 | **Enterprise platform** | Not started | Per-session identity, CredentialProfile, sandboxes; Phase 8 |
 
 ### What works today
@@ -1081,7 +1074,7 @@ Scoped, auditable gates — not a boolean env var. Today `requireHumanApproval` 
 
 Stay orchestrator-agnostic; add backends without coupling core reconciler to Jobs.
 
-- [~] **Orchestrator interface** — `runtimeBackend` abstraction in controller. **Design doc done (2026-06-21)** (`docs/design/phase-6-orchestrator-interface.md`); **slice 2 done (2026-06-21):** interface + `backendRegistry` + `kubernetesJobBackend` extracted behind it, reconciler routes all runtime calls through it (`runtime_backend.go`), behavior-preserving. Remaining: slice 2b (normalize to `Observation` so the reconciler owns status) before a second backend.
+- [~] **Orchestrator interface** — `runtimeBackend` abstraction in controller. **Design doc done (2026-06-21)** (`docs/design/phase-6-orchestrator-interface.md`); **slices 2 + 2b done (2026-06-21):** interface + `backendRegistry` + `kubernetesJobBackend` extracted (`runtime_backend.go`); backend returns a normalized `observation` and the reconciler (`applyObservation`/`applyRuntimePhase`) owns all status mapping. Behavior-preserving. Remaining: a concrete second backend (Tekton/Argo) + optional status-field generalization.
 - [ ] **Tekton adapter** — `runtime.orchestrator: tekton`
 - [ ] **Argo Workflows adapter**
 - [ ] **Temporal adapter** (or external worker handshake)

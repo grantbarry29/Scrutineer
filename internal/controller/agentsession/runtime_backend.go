@@ -15,11 +15,9 @@ import (
 	"fmt"
 
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -28,24 +26,57 @@ import (
 	"github.com/secureai/relay/internal/policy"
 )
 
+// runtimePhase is the backend-neutral lifecycle of a runtime. The reconciler maps it onto
+// AgentSessionPhase (see applyRuntimePhase). runtimeStarting also means "indeterminate" —
+// the reconciler only advances an empty/Pending session to Starting on it.
+type runtimePhase string
+
+const (
+	runtimeStarting  runtimePhase = "Starting"
+	runtimeRunning   runtimePhase = "Running"
+	runtimeSucceeded runtimePhase = "Succeeded"
+	runtimeFailed    runtimePhase = "Failed"
+	runtimeTimedOut  runtimePhase = "TimedOut"
+)
+
+// observation is normalized runtime state returned by a backend. It carries no
+// orchestrator types; the reconciler maps it onto AgentSession status/conditions/events.
+type observation struct {
+	// phase is the observed runtime lifecycle.
+	phase runtimePhase
+	// runtimeName feeds status.jobName (e.g. the Job name). Empty if no runtime yet.
+	runtimeName string
+	// workloadName feeds status.podName (e.g. the Pod name). Empty if none yet.
+	workloadName string
+	// created reports that the runtime object was created on this reconcile (drives
+	// StartTime, the JobCreated event, and the initial Starting phase).
+	created bool
+	// replaced reports that a pending runtime was deleted+recreated to sync policy env
+	// vars (drives the PolicyEnvSynced event).
+	replaced bool
+	// policyInSync reports whether the runtime's propagated policy env matches the
+	// effective policy. False surfaces PolicyEnvDrift on the session.
+	policyInSync bool
+	// policyMessage is the drift detail when policyInSync is false.
+	policyMessage string
+}
+
 // runtimeBackend abstracts orchestrator-specific runtime mechanics (create/observe/stop)
 // behind the backend-neutral governance pipeline. See
 // docs/design/phase-6-orchestrator-interface.md.
 //
-// Slice 2 ships the kubernetes-job backend only. It is transitional: backend methods
-// still mutate AgentSession status/conditions/events directly (the normalized-Observation
-// refinement where the reconciler owns all status mapping is a tracked follow-up). The
-// value of this slice is the seam — the reconciler routes every runtime call through a
-// registry keyed by spec.runtime.orchestrator, so future backends (Tekton/Argo/Temporal)
-// plug in without touching governance logic.
+// Backends own runtime mechanics only. They return a normalized observation; the
+// reconciler — not the backend — owns AgentSession status, conditions, events, and audit.
+// Selection is by spec.runtime.orchestrator via backendRegistry, so future backends
+// (Tekton/Argo/Temporal) plug in without touching governance logic.
 type runtimeBackend interface {
 	// name is the spec.runtime.orchestrator value this backend handles.
 	name() string
 
-	// ensure creates the runtime if absent, reconciles drift, and maps observed runtime
-	// state onto the session status (jobName, podName, phase, conditions, events).
-	// Idempotent. Returns ErrJobNotOwned on an ownership conflict.
-	ensure(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) error
+	// ensure creates the runtime if absent, reconciles drift, and returns normalized
+	// observed state without mutating the session. Idempotent. Returns ErrJobNotOwned on
+	// an ownership conflict.
+	ensure(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (observation, error)
 
 	// stop terminates the runtime (cancellation/finalizer). Idempotent; NotFound is success.
 	stop(ctx context.Context, session *relayv1alpha1.AgentSession) error
@@ -64,8 +95,8 @@ type backendRegistry map[string]runtimeBackend
 
 // defaultBackendRegistry builds the registry of supported runtime backends. Slice 2
 // registers only the kubernetes-job backend.
-func defaultBackendRegistry(c client.Client, apiReader client.Reader, scheme *runtime.Scheme, rec record.EventRecorder) backendRegistry {
-	jobBackend := newKubernetesJobBackend(c, apiReader, scheme, rec)
+func defaultBackendRegistry(c client.Client, apiReader client.Reader, scheme *runtime.Scheme) backendRegistry {
+	jobBackend := newKubernetesJobBackend(c, apiReader, scheme)
 	return backendRegistry{jobBackend.name(): jobBackend}
 }
 
@@ -74,47 +105,36 @@ type kubernetesJobBackend struct {
 	client    client.Client
 	apiReader client.Reader
 	scheme    *runtime.Scheme
-	recorder  record.EventRecorder
 }
 
-func newKubernetesJobBackend(c client.Client, apiReader client.Reader, scheme *runtime.Scheme, rec record.EventRecorder) *kubernetesJobBackend {
-	return &kubernetesJobBackend{client: c, apiReader: apiReader, scheme: scheme, recorder: rec}
+func newKubernetesJobBackend(c client.Client, apiReader client.Reader, scheme *runtime.Scheme) *kubernetesJobBackend {
+	return &kubernetesJobBackend{client: c, apiReader: apiReader, scheme: scheme}
 }
 
 func (b *kubernetesJobBackend) name() string { return OrchestratorKubernetesJob }
 
 func (b *kubernetesJobBackend) ownedType() client.Object { return &batchv1.Job{} }
 
-func (b *kubernetesJobBackend) recordNormal(session *relayv1alpha1.AgentSession, reason, msg string) {
-	if b.recorder == nil {
-		return
-	}
-	b.recorder.Event(session, corev1.EventTypeNormal, reason, msg)
-}
-
-func (b *kubernetesJobBackend) recordWarning(session *relayv1alpha1.AgentSession, reason, msg string) {
-	if b.recorder == nil {
-		return
-	}
-	b.recorder.Event(session, corev1.EventTypeWarning, reason, msg)
-}
-
-// ensure drives the create→observe→pod-discovery sequence and folds the observed state
-// onto the session status, preserving the previous inline reconciler behavior.
-func (b *kubernetesJobBackend) ensure(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) error {
-	runtimeJob, err := b.ensureJob(ctx, session, task, pol, profile)
+// ensure drives create→observe→pod-discovery and returns a normalized observation. It
+// performs runtime mutations (create/delete) but never writes to session status.
+func (b *kubernetesJobBackend) ensure(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (observation, error) {
+	runtimeJob, meta, err := b.ensureJob(ctx, session, task, pol, profile)
 	if err != nil {
-		return err
+		return observation{}, err
 	}
-	b.syncStatusFromJob(ctx, session, runtimeJob)
 	podName, err := b.findPodName(ctx, session, runtimeJob)
 	if err != nil {
-		return fmt.Errorf("find pod for job %q: %w", runtimeJob.Name, err)
+		return observation{}, fmt.Errorf("find pod for job %q: %w", runtimeJob.Name, err)
 	}
-	if podName != "" {
-		session.Status.PodName = podName
-	}
-	return nil
+	return observation{
+		phase:         jobRuntimePhase(runtimeJob),
+		runtimeName:   runtimeJob.Name,
+		workloadName:  podName,
+		created:       meta.created,
+		replaced:      meta.replaced,
+		policyInSync:  meta.policyInSync,
+		policyMessage: meta.policyMessage,
+	}, nil
 }
 
 func (b *kubernetesJobBackend) getJob(ctx context.Context, key client.ObjectKey, runtimeJob *batchv1.Job) error {
@@ -172,15 +192,19 @@ func (b *kubernetesJobBackend) stop(ctx context.Context, session *relayv1alpha1.
 	return nil
 }
 
-// ensureJob fetches the Job owned by the AgentSession, creating it if it does not yet exist.
-//
-// On every successful return (whether the Job was newly created or already existed),
-// the RuntimeCreated condition is re-asserted on the AgentSession. This is required
-// because the controller's local cache may lag behind the apiserver immediately after
-// a Create — a follow-up reconcile that reads a stale cached AgentSession would
-// otherwise issue a JSON-merge-patch that overwrites the conditions array and drops
-// RuntimeCreated. Re-asserting on each reconcile keeps the condition convergent.
-func (b *kubernetesJobBackend) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (*batchv1.Job, error) {
+// ensureMeta captures non-phase facts the reconciler needs to map an ensure pass onto
+// status (without leaking Job types).
+type ensureMeta struct {
+	created       bool
+	replaced      bool
+	policyInSync  bool
+	policyMessage string
+}
+
+// ensureJob fetches the Job owned by the AgentSession, creating it if it does not yet
+// exist and reconciling policy/runtime-profile drift. It returns the live Job and an
+// ensureMeta describing what happened. It does not mutate session status.
+func (b *kubernetesJobBackend) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (*batchv1.Job, ensureMeta, error) {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 
 	desired := job.Build(session, toJobTask(task), pol, profile)
@@ -188,46 +212,44 @@ func (b *kubernetesJobBackend) ensureJob(ctx context.Context, session *relayv1al
 	var existing batchv1.Job
 	if err := b.client.Get(ctx, jobKey, &existing); err == nil {
 		if !metav1.IsControlledBy(&existing, session) {
-			return nil, fmt.Errorf("%w: Job %q", ErrJobNotOwned, existing.Name)
+			return nil, ensureMeta{}, fmt.Errorf("%w: Job %q", ErrJobNotOwned, existing.Name)
 		}
 		if job.PolicyEnvDrift(&existing, desired) || job.RuntimeProfileDrift(&existing, desired) {
 			if job.ReplaceableForSync(&existing) {
 				propagation := metav1.DeletePropagationBackground
 				if err := b.client.Delete(ctx, &existing, client.PropagationPolicy(propagation)); err != nil && !apierrors.IsNotFound(err) {
-					return nil, fmt.Errorf("delete Job %s for runtime sync: %w", jobKey, err)
+					return nil, ensureMeta{}, fmt.Errorf("delete Job %s for runtime sync: %w", jobKey, err)
 				}
-				if job.PolicyEnvDrift(&existing, desired) {
-					b.recordNormal(session, EventReasonPolicyEnvSynced, "Replaced pending Job to sync policy env vars")
+				replaced := job.PolicyEnvDrift(&existing, desired)
+				runtimeJob, created, err := b.createJob(ctx, session, desired, jobKey)
+				if err != nil {
+					return nil, ensureMeta{}, err
 				}
-			} else if job.PolicyEnvDrift(&existing, desired) {
-				msg := job.PolicyEnvDriftMessage()
-				session.Status.JobName = existing.Name
-				setCondition(session, ConditionPolicyPropagated, metav1.ConditionFalse, "PolicyEnvDrift", msg)
-				setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-					fmt.Sprintf("Job %q exists", existing.Name))
-				b.recordWarning(session, EventReasonPolicyEnvDrift, msg)
-				return &existing, nil
-			} else {
-				session.Status.JobName = existing.Name
-				setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
-					"Job policy env vars match effective policy")
-				setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-					fmt.Sprintf("Job %q exists", existing.Name))
-				return &existing, nil
+				return runtimeJob, ensureMeta{created: created, replaced: replaced, policyInSync: true}, nil
 			}
-		} else {
-			session.Status.JobName = existing.Name
-			setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
-				"Job policy env vars match effective policy")
-			setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-				fmt.Sprintf("Job %q exists", existing.Name))
-			return &existing, nil
+			if job.PolicyEnvDrift(&existing, desired) {
+				return &existing, ensureMeta{policyInSync: false, policyMessage: job.PolicyEnvDriftMessage()}, nil
+			}
+			// Non-replaceable runtime-profile-only drift: policy env is still current.
+			return &existing, ensureMeta{policyInSync: true}, nil
 		}
+		return &existing, ensureMeta{policyInSync: true}, nil
 	} else if !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("get Job %s: %w", jobKey, err)
+		return nil, ensureMeta{}, fmt.Errorf("get Job %s: %w", jobKey, err)
 	}
+
+	runtimeJob, created, err := b.createJob(ctx, session, desired, jobKey)
+	if err != nil {
+		return nil, ensureMeta{}, err
+	}
+	return runtimeJob, ensureMeta{created: created, policyInSync: true}, nil
+}
+
+// createJob creates the desired Job, resolving AlreadyExists races. created is true only
+// when this call actually created the object (false when it already existed).
+func (b *kubernetesJobBackend) createJob(ctx context.Context, session *relayv1alpha1.AgentSession, desired *batchv1.Job, jobKey client.ObjectKey) (*batchv1.Job, bool, error) {
 	if err := controllerutil.SetControllerReference(session, desired, b.scheme); err != nil {
-		return nil, fmt.Errorf("set owner reference on Job: %w", err)
+		return nil, false, fmt.Errorf("set owner reference on Job: %w", err)
 	}
 	// Allow the owned Job to be deleted while the AgentSession is still present (e.g. during
 	// finalizer cleanup or cancellation). The default blockOwnerDeletion=true deadlocks
@@ -239,94 +261,30 @@ func (b *kubernetesJobBackend) ensureJob(ctx context.Context, session *relayv1al
 		if apierrors.IsAlreadyExists(err) {
 			var got batchv1.Job
 			if gErr := b.client.Get(ctx, jobKey, &got); gErr != nil {
-				return nil, fmt.Errorf("get Job after AlreadyExists: %w", gErr)
+				return nil, false, fmt.Errorf("get Job after AlreadyExists: %w", gErr)
 			}
 			if !metav1.IsControlledBy(&got, session) {
-				return nil, fmt.Errorf("%w: Job %q", ErrJobNotOwned, got.Name)
+				return nil, false, fmt.Errorf("%w: Job %q", ErrJobNotOwned, got.Name)
 			}
-			return &got, nil
+			return &got, false, nil
 		}
-		return nil, fmt.Errorf("create Job: %w", err)
+		return nil, false, fmt.Errorf("create Job: %w", err)
 	}
-
-	session.Status.JobName = desired.Name
-	if session.Status.StartTime == nil {
-		now := metav1.Now()
-		session.Status.StartTime = &now
-	}
-	session.Status.Phase = relayv1alpha1.PhaseStarting
-	setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
-		"Job policy env vars match effective policy")
-	setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-		fmt.Sprintf("Created Job %q", desired.Name))
-	b.recordNormal(session, EventReasonJobCreated, fmt.Sprintf("Created Job %s", desired.Name))
-	return desired, nil
+	return desired, true, nil
 }
 
-// syncStatusFromJob maps the Job's status fields onto the AgentSession status.
-func (b *kubernetesJobBackend) syncStatusFromJob(ctx context.Context, session *relayv1alpha1.AgentSession, runtimeJob *batchv1.Job) {
-	if runtimeJob == nil {
-		return
-	}
-	session.Status.JobName = runtimeJob.Name
-	if isTerminal(session.Status.Phase) {
-		return
-	}
-
+// jobRuntimePhase maps a Job's status fields onto the backend-neutral runtimePhase.
+func jobRuntimePhase(runtimeJob *batchv1.Job) runtimePhase {
 	switch {
 	case runtimeJob.Status.Succeeded > 0:
-		if session.Status.Phase != relayv1alpha1.PhaseSucceeded {
-			b.recordNormal(session, EventReasonJobSucceeded, "Job completed successfully")
-		}
-		session.Status.Phase = relayv1alpha1.PhaseSucceeded
-		setCompletionTime(session)
-		setCondition(session, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "Underlying Job completed successfully")
-		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
-				Outcome: "completed",
-				Summary: "Job completed successfully",
-			}
-		}
-
+		return runtimeSucceeded
 	case job.TimedOut(runtimeJob):
-		msg := "Underlying Job exceeded its activeDeadlineSeconds"
-		if session.Status.Phase != relayv1alpha1.PhaseTimedOut {
-			b.recordWarning(session, EventReasonJobFailed, msg)
-		}
-		session.Status.Phase = relayv1alpha1.PhaseTimedOut
-		setCompletionTime(session)
-		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobTimedOut", msg)
-		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
-				Outcome: "failed",
-				Summary: msg,
-			}
-		}
-
+		return runtimeTimedOut
 	case runtimeJob.Status.Failed > 0 && job.BackoffExhausted(runtimeJob):
-		msg := "Underlying Job failed"
-		if session.Status.Phase != relayv1alpha1.PhaseFailed {
-			b.recordWarning(session, EventReasonJobFailed, msg)
-		}
-		session.Status.Phase = relayv1alpha1.PhaseFailed
-		setCompletionTime(session)
-		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobFailed", msg)
-		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
-				Outcome: "failed",
-				Summary: msg,
-			}
-		}
-
+		return runtimeFailed
 	case runtimeJob.Status.Active > 0:
-		if session.Status.Phase != relayv1alpha1.PhaseRunning {
-			b.recordNormal(session, EventReasonJobRunning, "Job is running")
-		}
-		session.Status.Phase = relayv1alpha1.PhaseRunning
-
+		return runtimeRunning
 	default:
-		if session.Status.Phase == "" || session.Status.Phase == relayv1alpha1.PhasePending {
-			session.Status.Phase = relayv1alpha1.PhaseStarting
-		}
+		return runtimeStarting
 	}
 }

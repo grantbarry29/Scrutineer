@@ -11,7 +11,6 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
-	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -40,9 +39,6 @@ func testReconciler() *AgentSessionReconciler {
 	}
 }
 
-func testJobBackend() *kubernetesJobBackend {
-	return newKubernetesJobBackend(k8sClient, mgr.GetAPIReader(), mgr.GetScheme(), mgr.GetEventRecorderFor("relay-test"))
-}
 
 var _ = Describe("AgentSession reconciler", func() {
 
@@ -751,7 +747,7 @@ var _ = Describe("AgentSession reconciler", func() {
 					}},
 				},
 			}
-			testJobBackend().syncStatusFromJob(context.Background(), session, job)
+			testReconciler().applyRuntimePhase(session, jobRuntimePhase(job))
 			Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseTimedOut))
 			completed := getCondition(session, ConditionCompleted)
 			Expect(completed).NotTo(BeNil())
@@ -937,7 +933,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				},
 			}
 
-			testJobBackend().syncStatusFromJob(testCtx, session, job)
+			testReconciler().applyRuntimePhase(session, jobRuntimePhase(job))
 			Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
 		})
 	})
