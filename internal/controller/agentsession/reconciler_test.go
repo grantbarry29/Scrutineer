@@ -40,6 +40,10 @@ func testReconciler() *AgentSessionReconciler {
 	}
 }
 
+func testJobBackend() *kubernetesJobBackend {
+	return newKubernetesJobBackend(k8sClient, mgr.GetAPIReader(), mgr.GetScheme(), mgr.GetEventRecorderFor("relay-test"))
+}
+
 var _ = Describe("AgentSession reconciler", func() {
 
 	Context("validation and denial", func() {
@@ -747,7 +751,7 @@ var _ = Describe("AgentSession reconciler", func() {
 					}},
 				},
 			}
-			testReconciler().syncStatusFromJob(context.Background(), session, job)
+			testJobBackend().syncStatusFromJob(context.Background(), session, job)
 			Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseTimedOut))
 			completed := getCondition(session, ConditionCompleted)
 			Expect(completed).NotTo(BeNil())
@@ -933,7 +937,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				},
 			}
 
-			testReconciler().syncStatusFromJob(testCtx, session, job)
+			testJobBackend().syncStatusFromJob(testCtx, session, job)
 			Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
 		})
 	})

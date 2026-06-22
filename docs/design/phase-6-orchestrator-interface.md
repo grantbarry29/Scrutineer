@@ -1,6 +1,6 @@
 # Phase 6 — Orchestrator Backend Interface
 
-> **Status:** Design (Phase 6 · slice 1). No runtime behavior change yet. Defines the `RuntimeBackend` boundary that decouples the AgentSession reconciler from Kubernetes Jobs so other execution backends (Tekton, Argo, Temporal, external workers) can be governed without rewriting the controller. The selector field (`spec.runtime.orchestrator`) already exists; this doc defines the interface the controller will call through.
+> **Status:** Slice 1 (design) + slice 2 (extraction) shipped. The AgentSession reconciler now calls Kubernetes Jobs only through a `runtimeBackend` interface selected from a registry keyed by `spec.runtime.orchestrator` (`internal/controller/agentsession/runtime_backend.go`). This decouples the controller from Jobs so other execution backends (Tekton, Argo, Temporal, external workers) can be governed without rewriting governance logic. Slice 2 is transitional — the backend still mutates session status directly; slice 2b normalizes to `Observation` (see migration plan).
 
 ## Purpose
 
@@ -123,15 +123,16 @@ Enforcement sidecars and the reporter token are injected by `internal/controller
 
 - Governance order is fixed and backend-independent: validate → resolve → **approval gate** → runtime. A backend is only ever invoked for an approved, non-terminal session.
 - `Ensure`/`Stop`/`Observe` are idempotent; the reconciler may call them every pass.
-- The reconciler — not the backend — owns AgentSession status, conditions, events, and audit. Backends return normalized `Observation` only.
+- The reconciler — not the backend — owns AgentSession status, conditions, events, and audit. Backends return normalized `Observation` only. *(Target invariant; temporarily relaxed in slice 2 where `kubernetesJobBackend` mutates status directly — restored in slice 2b.)*
 - Ownership/GC stays owner-reference based where the backend uses `Owns()`; `blockOwnerDeletion=false` semantics (so the session can finalize) are preserved.
 - No backend may weaken the evidence-integrity story silently; assurance level must reflect the backend's real channel.
 
 ## Migration plan (slices)
 
-1. **This doc** (design). — *current*
-2. **Extract `Backend` + `kubernetes-job` implementation** — wrap existing `ensureJob`/`syncStatusFromJob`/`stopRuntimeJob`/`findPodName` behind the interface with a one-entry registry; **behavior-preserving**, all existing envtests green. No new orchestrators.
-3. **Generalize Job/Pod-specific status fields** (open question below) only if a second backend needs it.
+1. **This doc** (design). — *done*
+2. **Extract `runtimeBackend` + `kubernetes-job` implementation** — *done*. The reconciler now routes runtime calls (`ensure`/`stop`/`runtimeGone`/`ownedType`) through a `backendRegistry` keyed by `spec.runtime.orchestrator`; the `kubernetesJobBackend` (in `internal/controller/agentsession/runtime_backend.go`) holds the moved `ensureJob`/`syncStatusFromJob`/`findPodName`/Job-stop/Job-observe logic. Behavior-preserving; all existing envtests green. **Transitional deviation from the target above:** the backend still mutates AgentSession status/conditions/events directly rather than returning a normalized `Observation` that the reconciler maps — see follow-up in slice 2b. The interface signatures (`ensure(session, …) error`) reflect this; `Observe`/`EnsureInput`/`Observation` from the target shape are deferred.
+3. **Slice 2b — normalize to `Observation`** — refactor `kubernetesJobBackend` to return normalized runtime state (`Phase`/`RuntimeName`/`WorkloadName`/`PolicyInSync`) and move phase/condition/event/result mapping back into the reconciler so the reconciler — not the backend — owns AgentSession status (restores the invariant above). Prerequisite for a clean second backend.
+4. **Generalize Job/Pod-specific status fields** (open question below) only if a second backend needs it.
 4+. **Adapters** — Tekton, then Argo/Temporal, each its own slice with its own evidence/assurance declaration.
 
 ## Open questions

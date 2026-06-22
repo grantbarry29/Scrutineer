@@ -36,13 +36,13 @@ import (
 //
 // MVP sets Job backoffLimit=0, so a single Pod per Job is typical. The same rules apply when
 // backoffLimit>0 (multiple Pods per Job UID) or when manual tests inject extra labeled Pods.
-func (r *AgentSessionReconciler) findPodName(ctx context.Context, session *relayv1alpha1.AgentSession, runtimeJob *batchv1.Job) (string, error) {
+func (b *kubernetesJobBackend) findPodName(ctx context.Context, session *relayv1alpha1.AgentSession, runtimeJob *batchv1.Job) (string, error) {
 	if runtimeJob == nil {
 		return "", nil
 	}
 
 	var pods corev1.PodList
-	if err := r.List(ctx, &pods,
+	if err := b.client.List(ctx, &pods,
 		client.InNamespace(session.Namespace),
 		client.MatchingLabels{job.LabelSessionRef: session.Name},
 	); err != nil {

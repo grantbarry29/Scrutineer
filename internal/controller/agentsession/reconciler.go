@@ -37,7 +37,6 @@ import (
 	"github.com/secureai/relay/internal/approval"
 	"github.com/secureai/relay/internal/audit"
 	"github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/policy"
 	"github.com/secureai/relay/internal/tracing"
 )
 
@@ -54,6 +53,31 @@ type AgentSessionReconciler struct {
 	// notifications are disabled (the approval gate itself is unaffected).
 	Notifier  approval.Notifier
 	clientset kubernetes.Interface
+	// backends maps spec.runtime.orchestrator → runtime backend. Lazily built from the
+	// reconciler's client/scheme/recorder so direct (non-manager) test construction works.
+	backends backendRegistry
+}
+
+// ensureBackends lazily builds the runtime backend registry from the reconciler's deps.
+func (r *AgentSessionReconciler) ensureBackends() {
+	if r.backends == nil {
+		r.backends = defaultBackendRegistry(r.Client, r.APIReader, r.Scheme, r.Recorder)
+	}
+}
+
+// runtimeBackendFor selects the backend for a session's orchestrator. An empty
+// orchestrator defaults to kubernetes-job (validateSpec enforces accepted values).
+func (r *AgentSessionReconciler) runtimeBackendFor(session *relayv1alpha1.AgentSession) (runtimeBackend, error) {
+	r.ensureBackends()
+	orchestrator := session.Spec.Runtime.Orchestrator
+	if orchestrator == "" {
+		orchestrator = OrchestratorKubernetesJob
+	}
+	backend, ok := r.backends[orchestrator]
+	if !ok {
+		return nil, fmt.Errorf("no runtime backend registered for orchestrator %q", orchestrator)
+	}
+	return backend, nil
 }
 
 // requeueAfter is how long the reconciler waits before re-polling Job state when the Job
@@ -205,8 +229,12 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if session.Spec.CancelRequested {
-		logger.Info("cancellation requested; stopping owned Job if present")
-		if err := r.stopRuntimeJob(ctx, session); err != nil {
+		logger.Info("cancellation requested; stopping owned runtime if present")
+		backend, err := r.runtimeBackendFor(session)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := backend.stop(ctx, session); err != nil {
 			return ctrl.Result{}, fmt.Errorf("stop runtime Job: %w", err)
 		}
 		r.applyCancellationStatus(session)
@@ -237,8 +265,11 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{RequeueAfter: approvalRecheckInterval}, nil
 	}
 
-	job, err := r.ensureJob(ctx, session, resolvedTask, resolvedPolicy, resolvedProfile)
+	backend, err := r.runtimeBackendFor(session)
 	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := backend.ensure(ctx, session, resolvedTask, resolvedPolicy, resolvedProfile); err != nil {
 		if errors.Is(err, ErrJobNotOwned) {
 			session.Status.Phase = relayv1alpha1.PhaseDenied
 			setCondition(session, ConditionValidated, metav1.ConditionFalse, "JobConflict", err.Error())
@@ -247,15 +278,6 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 		}
 		return ctrl.Result{}, err
-	}
-
-	r.syncStatusFromJob(ctx, session, job)
-	podName, err := r.findPodName(ctx, session, job)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("find pod for job %q: %w", job.Name, err)
-	}
-	if podName != "" {
-		session.Status.PodName = podName
 	}
 
 	setReadyCondition(session)
@@ -283,38 +305,32 @@ func (r *AgentSessionReconciler) getAgentSession(ctx context.Context, key client
 	return &session, nil
 }
 
-func (r *AgentSessionReconciler) getJob(ctx context.Context, key client.ObjectKey, job *batchv1.Job) error {
-	if r.APIReader != nil {
-		if err := r.APIReader.Get(ctx, key, job); err == nil || !apierrors.IsNotFound(err) {
-			return err
-		}
-	}
-	return r.Get(ctx, key, job)
-}
-
-// handleDeletion runs finalizer cleanup: delete the owned Job, wait until it is gone,
+// handleDeletion runs finalizer cleanup: stop the owned runtime, wait until it is gone,
 // then remove the Relay finalizer so the AgentSession object can be removed.
 func (r *AgentSessionReconciler) handleDeletion(ctx context.Context, session *relayv1alpha1.AgentSession) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(session, AgentSessionFinalizer) {
 		return ctrl.Result{}, nil
 	}
 
-	// Always issue a delete for the deterministic Job name so cleanup does not depend on
+	backend, err := r.runtimeBackendFor(session)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Always issue a stop for the deterministic runtime so cleanup does not depend on
 	// a prior successful cache read (create vs delete races in tests and slow caches).
-	if err := r.stopRuntimeJob(ctx, session); err != nil {
+	if err := backend.stop(ctx, session); err != nil {
 		return ctrl.Result{}, fmt.Errorf("stop runtime Job: %w", err)
 	}
 
-	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
-	var job batchv1.Job
-	if err := r.getJob(ctx, jobKey, &job); err == nil {
-		// Delete accepted but the Job object may linger (e.g. envtest without GC). Once
-		// deletionTimestamp is set, owned-runtime cleanup is done for finalizer purposes.
-		if job.DeletionTimestamp.IsZero() {
-			return ctrl.Result{RequeueAfter: deletionRequeueAfter}, nil
-		}
-	} else if !apierrors.IsNotFound(err) {
-		return ctrl.Result{}, fmt.Errorf("get Job %s: %w", jobKey, err)
+	// Stop accepted but the runtime object may linger (e.g. envtest without GC). Once it is
+	// gone (or deleting), owned-runtime cleanup is done for finalizer purposes.
+	gone, err := backend.runtimeGone(ctx, session)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !gone {
+		return ctrl.Result{RequeueAfter: deletionRequeueAfter}, nil
 	}
 
 	if err := r.removeFinalizer(ctx, session); err != nil {
@@ -374,38 +390,6 @@ func (r *AgentSessionReconciler) removeFinalizer(ctx context.Context, session *r
 	})
 }
 
-// stopRuntimeJob deletes the deterministic Job for the AgentSession. A missing Job is
-// treated as already stopped. Delete is issued without a prior Get so cleanup is not
-// skipped when the cache has not observed the Job yet.
-func (r *AgentSessionReconciler) stopRuntimeJob(ctx context.Context, session *relayv1alpha1.AgentSession) error {
-	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
-
-	var existing batchv1.Job
-	if err := r.Get(ctx, jobKey, &existing); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("get Job %s: %w", jobKey, err)
-	}
-
-	// Clear blockOwnerDeletion so the Job can be removed while the AgentSession still exists.
-	if needsBlockOwnerDeletionPatch(&existing) {
-		setBlockOwnerDeletion(&existing, false)
-		if err := r.Update(ctx, &existing); err != nil {
-			return fmt.Errorf("patch Job owner reference %s: %w", jobKey, err)
-		}
-	}
-
-	policy := metav1.DeletePropagationBackground
-	if err := r.Delete(ctx, &existing, client.PropagationPolicy(policy)); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("delete Job %s: %w", jobKey, err)
-	}
-	return nil
-}
-
 func needsBlockOwnerDeletionPatch(job *batchv1.Job) bool {
 	for _, ref := range job.OwnerReferences {
 		if ref.BlockOwnerDeletion != nil && *ref.BlockOwnerDeletion {
@@ -428,165 +412,6 @@ func (r *AgentSessionReconciler) applyCancellationStatus(session *relayv1alpha1.
 		session.Status.Result = &relayv1alpha1.SessionResult{
 			Outcome: "cancelled",
 			Summary: msg,
-		}
-	}
-}
-
-// ensureJob fetches the Job owned by the AgentSession, creating it if it does not yet exist.
-//
-// On every successful return (whether the Job was newly created or already existed),
-// the RuntimeCreated condition is re-asserted on the AgentSession. This is required
-// because the controller's local cache may lag behind the apiserver immediately after
-// a Create — a follow-up reconcile that reads a stale cached AgentSession would
-// otherwise issue a JSON-merge-patch that overwrites the conditions array and drops
-// RuntimeCreated. Re-asserting on each reconcile keeps the condition convergent.
-func (r *AgentSessionReconciler) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (*batchv1.Job, error) {
-	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
-
-	desired := job.Build(session, toJobTask(task), pol, profile)
-
-	var existing batchv1.Job
-	if err := r.Get(ctx, jobKey, &existing); err == nil {
-		if !metav1.IsControlledBy(&existing, session) {
-			return nil, fmt.Errorf("%w: Job %q", ErrJobNotOwned, existing.Name)
-		}
-		if job.PolicyEnvDrift(&existing, desired) || job.RuntimeProfileDrift(&existing, desired) {
-			if job.ReplaceableForSync(&existing) {
-				policy := metav1.DeletePropagationBackground
-				if err := r.Delete(ctx, &existing, client.PropagationPolicy(policy)); err != nil && !apierrors.IsNotFound(err) {
-					return nil, fmt.Errorf("delete Job %s for runtime sync: %w", jobKey, err)
-				}
-				if job.PolicyEnvDrift(&existing, desired) {
-					r.recordNormal(session, EventReasonPolicyEnvSynced, "Replaced pending Job to sync policy env vars")
-				}
-			} else if job.PolicyEnvDrift(&existing, desired) {
-				msg := job.PolicyEnvDriftMessage()
-				session.Status.JobName = existing.Name
-				setCondition(session, ConditionPolicyPropagated, metav1.ConditionFalse, "PolicyEnvDrift", msg)
-				setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-					fmt.Sprintf("Job %q exists", existing.Name))
-				r.recordWarning(session, EventReasonPolicyEnvDrift, msg)
-				return &existing, nil
-			} else {
-				session.Status.JobName = existing.Name
-				setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
-					"Job policy env vars match effective policy")
-				setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-					fmt.Sprintf("Job %q exists", existing.Name))
-				return &existing, nil
-			}
-		} else {
-			session.Status.JobName = existing.Name
-			setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
-				"Job policy env vars match effective policy")
-			setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-				fmt.Sprintf("Job %q exists", existing.Name))
-			return &existing, nil
-		}
-	} else if !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("get Job %s: %w", jobKey, err)
-	}
-	if err := controllerutil.SetControllerReference(session, desired, r.Scheme); err != nil {
-		return nil, fmt.Errorf("set owner reference on Job: %w", err)
-	}
-	// Allow the owned Job to be deleted while the AgentSession is still present (e.g. during
-	// finalizer cleanup or cancellation). The default blockOwnerDeletion=true deadlocks
-	// deletion: the session cannot finish until the Job is gone, but the Job cannot be
-	// removed until the session is gone.
-	setBlockOwnerDeletion(desired, false)
-
-	if err := r.Create(ctx, desired); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			var got batchv1.Job
-			if gErr := r.Get(ctx, jobKey, &got); gErr != nil {
-				return nil, fmt.Errorf("get Job after AlreadyExists: %w", gErr)
-			}
-			if !metav1.IsControlledBy(&got, session) {
-				return nil, fmt.Errorf("%w: Job %q", ErrJobNotOwned, got.Name)
-			}
-			return &got, nil
-		}
-		return nil, fmt.Errorf("create Job: %w", err)
-	}
-
-	session.Status.JobName = desired.Name
-	if session.Status.StartTime == nil {
-		now := metav1.Now()
-		session.Status.StartTime = &now
-	}
-	session.Status.Phase = relayv1alpha1.PhaseStarting
-	setCondition(session, ConditionPolicyPropagated, metav1.ConditionTrue, "EnvCurrent",
-		"Job policy env vars match effective policy")
-	setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
-		fmt.Sprintf("Created Job %q", desired.Name))
-	r.recordNormal(session, EventReasonJobCreated, fmt.Sprintf("Created Job %s", desired.Name))
-	return desired, nil
-}
-
-// syncStatusFromJob maps the Job's status fields onto the AgentSession status.
-func (r *AgentSessionReconciler) syncStatusFromJob(ctx context.Context, session *relayv1alpha1.AgentSession, runtimeJob *batchv1.Job) {
-	if runtimeJob == nil {
-		return
-	}
-	session.Status.JobName = runtimeJob.Name
-	if isTerminal(session.Status.Phase) {
-		return
-	}
-
-	switch {
-	case runtimeJob.Status.Succeeded > 0:
-		if session.Status.Phase != relayv1alpha1.PhaseSucceeded {
-			r.recordNormal(session, EventReasonJobSucceeded, "Job completed successfully")
-		}
-		session.Status.Phase = relayv1alpha1.PhaseSucceeded
-		setCompletionTime(session)
-		setCondition(session, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "Underlying Job completed successfully")
-		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
-				Outcome: "completed",
-				Summary: "Job completed successfully",
-			}
-		}
-
-	case job.TimedOut(runtimeJob):
-		msg := "Underlying Job exceeded its activeDeadlineSeconds"
-		if session.Status.Phase != relayv1alpha1.PhaseTimedOut {
-			r.recordWarning(session, EventReasonJobFailed, msg)
-		}
-		session.Status.Phase = relayv1alpha1.PhaseTimedOut
-		setCompletionTime(session)
-		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobTimedOut", msg)
-		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
-				Outcome: "failed",
-				Summary: msg,
-			}
-		}
-
-	case runtimeJob.Status.Failed > 0 && job.BackoffExhausted(runtimeJob):
-		msg := "Underlying Job failed"
-		if session.Status.Phase != relayv1alpha1.PhaseFailed {
-			r.recordWarning(session, EventReasonJobFailed, msg)
-		}
-		session.Status.Phase = relayv1alpha1.PhaseFailed
-		setCompletionTime(session)
-		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobFailed", msg)
-		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
-				Outcome: "failed",
-				Summary: msg,
-			}
-		}
-
-	case runtimeJob.Status.Active > 0:
-		if session.Status.Phase != relayv1alpha1.PhaseRunning {
-			r.recordNormal(session, EventReasonJobRunning, "Job is running")
-		}
-		session.Status.Phase = relayv1alpha1.PhaseRunning
-
-	default:
-		if session.Status.Phase == "" || session.Status.Phase == relayv1alpha1.PhasePending {
-			session.Status.Phase = relayv1alpha1.PhaseStarting
 		}
 	}
 }
@@ -615,10 +440,15 @@ func (r *AgentSessionReconciler) recordWarning(session *relayv1alpha1.AgentSessi
 // SetupWithManager wires the reconciler into the controller-runtime manager.
 func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.RESTConfig = mgr.GetConfig()
-	return ctrl.NewControllerManagedBy(mgr).
+	r.ensureBackends()
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&relayv1alpha1.AgentSession{}).
-		Owns(&batchv1.Job{}).
-		Owns(&networkingv1.NetworkPolicy{}).
+		Owns(&networkingv1.NetworkPolicy{})
+	// Watch each backend's runtime object so completions trigger reconciles.
+	for _, backend := range r.backends {
+		builder = builder.Owns(backend.ownedType())
+	}
+	return builder.
 		Watches(
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.mapPodToSessions),
