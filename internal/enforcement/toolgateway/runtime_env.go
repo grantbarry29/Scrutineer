@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package toolgateway
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -57,6 +58,7 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 			RequireHumanApproval: splitCSV(os.Getenv(EnvPolicyRequireApproval)),
 			MaxToolCalls:         int32Env(os.Getenv(EnvPolicyMaxToolCalls)),
 			MaxCallsPerMinute:    int32Env(os.Getenv(EnvPolicyMaxToolCallsPerMinute)),
+			ArgumentRules:        argumentRulesEnv(os.Getenv(EnvPolicyArgumentRules)),
 		},
 	}
 	if env.ListenHost == "" {
@@ -98,6 +100,18 @@ func splitCSV(raw string) []string {
 		}
 	}
 	return out
+}
+
+func argumentRulesEnv(raw string) []relayv1alpha1.ToolArgumentRule {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var rules []relayv1alpha1.ToolArgumentRule
+	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
+		return nil
+	}
+	return rules
 }
 
 func int32Env(raw string) *int32 {

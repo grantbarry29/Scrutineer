@@ -18,10 +18,12 @@ import (
 )
 
 const (
-	ReasonAllowed           = "Allowed"
-	ReasonDeniedTools       = "DeniedTools"
-	ReasonNotInAllowedTools = "NotInAllowedTools"
-	ReasonApprovalRequired  = "ApprovalRequired"
+	ReasonAllowed            = "Allowed"
+	ReasonDeniedTools        = "DeniedTools"
+	ReasonNotInAllowedTools  = "NotInAllowedTools"
+	ReasonApprovalRequired   = "ApprovalRequired"
+	ReasonArgumentDenied     = "ArgumentDenied"
+	ReasonArgumentNotAllowed = "ArgumentNotAllowed"
 )
 
 // DefaultListenAddr is the in-pod URL agents use when a tool-gateway sidecar is injected.
@@ -35,6 +37,7 @@ func HasToolPolicy(rules relayv1alpha1.PolicyRules) bool {
 	return len(rules.AllowedTools) > 0 ||
 		len(rules.DeniedTools) > 0 ||
 		len(rules.RequireHumanApproval) > 0 ||
+		len(rules.ArgumentRules) > 0 ||
 		rules.MaxToolCalls != nil ||
 		rules.MaxCallsPerMinute != nil
 }
@@ -82,6 +85,12 @@ func EvaluateTool(ctx enforcement.SessionContext, req ToolRequest) ToolAuthoriza
 	if containsString(rules.RequireHumanApproval, tool) {
 		// Approval workflows are Phase 5; surface as would-deny under restrictive modes.
 		return authorize(ctx.Mode, true, ReasonApprovalRequired)
+	}
+	// Argument constraints apply only to calls that passed the name gate.
+	if reason, match := evaluateArgumentRules(rules.ArgumentRules, req); reason != "" {
+		auth := authorize(ctx.Mode, true, reason)
+		auth.ArgMatch = match
+		return auth
 	}
 	return ToolAuthorization{
 		Evaluation: enforcement.Evaluation{

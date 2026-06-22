@@ -16,16 +16,19 @@ Relay governs MCP and tool calls through a **tool gateway** data-plane component
 | `server` | MCP server / provider id (optional) |
 | `method` | MCP method name when distinct from tool (optional) |
 | `requestID` | Correlation id for logs and traces (optional) |
+| `arguments` | Decoded tool-call argument object, evaluated against argument rules (optional). Values are never copied into status/events/logs. |
 
 ## Authorization (`toolgateway.EvaluateTool`)
 
-Evaluates `allowedTools`, `deniedTools`, and `requireHumanApproval` against effective policy mode:
+Evaluates `allowedTools`, `deniedTools`, `requireHumanApproval`, then **argument rules** against effective policy mode:
 
 | Mode | Denied / not-allowed tool | Allowed tool |
 |------|---------------------------|--------------|
 | `enforced` | Block (`deny`) | Allow |
 | `dry-run` | Allow through, record `dry-run` | Allow |
 | `audit-only` | Allow through, record `audit` | Allow |
+
+**Argument rules** (`ToolPolicy.spec.argumentRules`) are evaluated only for calls that pass the name gate: a `Deny`-effect constraint match blocks (`ArgumentDenied`); `Allow`-effect constraints act as an allowlist (`ArgumentNotAllowed` if none match). Mode semantics match the table above. Evidence is **redacted** — decisions/violations carry the matched constraint (arg path, operator, effect, policy operands) but never the request's argument value. Rules propagate to the sidecar as JSON via `AGENT_POLICY_ARGUMENT_RULES`. See [`phase-3-tool-argument-constraints.md`](phase-3-tool-argument-constraints.md).
 
 **Not enforced in slice 6:** `maxToolCalls`, `maxCallsPerMinute` (rate limits need gateway state). Human approval is surfaced as `ApprovalRequired` but full gates are Phase 5.
 

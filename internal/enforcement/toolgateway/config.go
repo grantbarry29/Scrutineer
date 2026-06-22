@@ -11,11 +11,13 @@ You may obtain a copy of the License at
 package toolgateway
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
+	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/enforcement"
 )
 
@@ -28,6 +30,9 @@ const (
 	EnvPolicyMaxToolCalls          = "AGENT_POLICY_MAX_TOOL_CALLS"
 	EnvPolicyMaxToolCallsPerMinute = "AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE"
 	EnvPolicyMode                  = "AGENT_POLICY_MODE"
+	// EnvPolicyArgumentRules carries JSON-encoded argument rules. Unlike the CSV policy
+	// vars, argument rules are structured, so they propagate as a JSON document.
+	EnvPolicyArgumentRules = "AGENT_POLICY_ARGUMENT_RULES"
 )
 
 // BuildConfig renders desired gateway configuration for a session, or nil when not applicable.
@@ -44,6 +49,7 @@ func BuildConfig(ctx enforcement.SessionContext) *GatewayConfig {
 		RequireApproval:   append([]string(nil), ctx.Policy.RequireHumanApproval...),
 		MaxToolCalls:      ctx.Policy.MaxToolCalls,
 		MaxCallsPerMinute: ctx.Policy.MaxCallsPerMinute,
+		ArgumentRules:     append([]relayv1alpha1.ToolArgumentRule(nil), ctx.Policy.ArgumentRules...),
 		ListenHost:        DefaultListenHost,
 		ListenAddr:        DefaultListenAddr,
 	}
@@ -66,6 +72,11 @@ func EnvForConfig(cfg *GatewayConfig) []corev1.EnvVar {
 	}
 	if cfg.MaxCallsPerMinute != nil {
 		env = append(env, corev1.EnvVar{Name: EnvPolicyMaxToolCallsPerMinute, Value: strconv.FormatInt(int64(*cfg.MaxCallsPerMinute), 10)})
+	}
+	if len(cfg.ArgumentRules) > 0 {
+		if raw, err := json.Marshal(cfg.ArgumentRules); err == nil {
+			env = append(env, corev1.EnvVar{Name: EnvPolicyArgumentRules, Value: string(raw)})
+		}
 	}
 	return env
 }

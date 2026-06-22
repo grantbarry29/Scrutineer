@@ -33,13 +33,32 @@ type ToolRequest struct {
 	// RequestID correlates gateway logs with agent/runtime traces.
 	// +optional
 	RequestID string
+	// Arguments is the decoded tool-call argument object, evaluated against argument
+	// rules. Values are never copied into status/events/logs (redaction invariant).
+	// +optional
+	Arguments map[string]any
+}
+
+// ArgConstraintMatch describes the argument constraint that produced an argument-level
+// decision. It carries only policy-defined fields (path, operator, effect, policy
+// operands) — never the request's argument value — so it is safe to record in evidence.
+type ArgConstraintMatch struct {
+	Arg          string
+	Op           relayv1alpha1.ArgumentOperator
+	Effect       relayv1alpha1.ConstraintEffect
+	PolicyValues []string
 }
 
 // ToolAuthorization is the gateway-neutral allow/deny outcome for a ToolRequest.
 type ToolAuthorization struct {
 	enforcement.Evaluation
-	// Reason is a machine-readable code (DeniedTools, NotInAllowedTools, Allowed).
+	// Reason is a machine-readable code (DeniedTools, NotInAllowedTools, Allowed,
+	// ArgumentDenied, ArgumentNotAllowed).
 	Reason string
+	// ArgMatch is set for argument-level decisions to describe the matched constraint
+	// (redacted; no request value).
+	// +optional
+	ArgMatch *ArgConstraintMatch
 }
 
 // GatewayConfig is desired gateway configuration derived from session policy.
@@ -53,6 +72,8 @@ type GatewayConfig struct {
 	MaxToolCalls      *int32                   `json:"maxToolCalls,omitempty"`
 	MaxCallsPerMinute *int32                   `json:"maxCallsPerMinute,omitempty"`
 	RequireApproval   []string                 `json:"requireHumanApproval,omitempty"`
+	// ArgumentRules constrain tool calls by their arguments (evaluated per-call).
+	ArgumentRules []relayv1alpha1.ToolArgumentRule `json:"argumentRules,omitempty"`
 	// ListenHost is the HTTP bind address (127.0.0.1:19090).
 	ListenHost string `json:"listenHost"`
 	// ListenAddr is the in-pod URL agents should target (contract default).

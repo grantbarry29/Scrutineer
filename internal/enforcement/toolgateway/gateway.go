@@ -30,10 +30,11 @@ type Gateway struct {
 }
 
 type invokeRequest struct {
-	Tool      string `json:"tool"`
-	Server    string `json:"server,omitempty"`
-	Method    string `json:"method,omitempty"`
-	RequestID string `json:"requestId,omitempty"`
+	Tool      string         `json:"tool"`
+	Server    string         `json:"server,omitempty"`
+	Method    string         `json:"method,omitempty"`
+	RequestID string         `json:"requestId,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
 type invokeResponse struct {
@@ -63,6 +64,7 @@ func (g *Gateway) handleInvoke(w http.ResponseWriter, r *http.Request) {
 		Server:    strings.TrimSpace(req.Server),
 		Method:    strings.TrimSpace(req.Method),
 		RequestID: strings.TrimSpace(req.RequestID),
+		Arguments: req.Arguments,
 	}
 
 	ctx := g.Env.SessionContext()

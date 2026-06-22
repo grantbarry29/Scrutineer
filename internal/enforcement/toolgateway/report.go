@@ -62,6 +62,10 @@ func formatToolMessage(ctx enforcement.SessionContext, req ToolRequest, auth Too
 		return fmt.Sprintf("tool %q is not in allowedTools (mode=%s)", tool, ctx.Mode)
 	case ReasonApprovalRequired:
 		return fmt.Sprintf("tool %q requires human approval (not enforced in MVP; mode=%s)", tool, ctx.Mode)
+	case ReasonArgumentDenied:
+		return fmt.Sprintf("tool %q denied by argument rule (%s; mode=%s)", tool, argMatchDetail(auth.ArgMatch), ctx.Mode)
+	case ReasonArgumentNotAllowed:
+		return fmt.Sprintf("tool %q arguments not in allowlist (%s; mode=%s)", tool, argMatchDetail(auth.ArgMatch), ctx.Mode)
 	case ReasonAllowed:
 		return fmt.Sprintf("tool %q allowed (mode=%s)", tool, ctx.Mode)
 	default:
@@ -77,6 +81,8 @@ func ruleFieldForReason(reason string) string {
 		return "allowedTools"
 	case ReasonApprovalRequired:
 		return "requireHumanApproval"
+	case ReasonArgumentDenied, ReasonArgumentNotAllowed:
+		return "argumentRules"
 	default:
 		return ""
 	}
