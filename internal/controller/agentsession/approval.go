@@ -292,6 +292,7 @@ func (r *AgentSessionReconciler) ensureApprovalRequest(ctx context.Context, sess
 		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
 		Spec: relayv1alpha1.ApprovalRequestSpec{
 			SessionRef: relayv1alpha1.ApprovalSessionRef{Name: session.Name},
+			Trigger:    relayv1alpha1.ApprovalTriggerSession,
 			PolicyRef:  gatePolicy.Name,
 			Action:     action,
 			Scope:      relayv1alpha1.ApprovalScope{Window: gatePolicy.Spec.ExpiresAfter},
@@ -341,9 +342,11 @@ func (r *AgentSessionReconciler) setApprovalRequestState(ctx context.Context, re
 				now := metav1.Now()
 				latest.Status.DecidedAt = &now
 				latest.Status.DecidedBy = strings.TrimSpace(latest.Spec.DecidedBy)
-				if state == relayv1alpha1.ApprovalStateGranted && gatePolicy.Spec.ExpiresAfter != nil {
-					exp := metav1.NewTime(now.Add(gatePolicy.Spec.ExpiresAfter.Duration))
-					latest.Status.ExpiresAt = &exp
+				if state == relayv1alpha1.ApprovalStateGranted {
+					if win := approvalValidityWindow(gatePolicy, &latest); win > 0 {
+						exp := metav1.NewTime(now.Add(win))
+						latest.Status.ExpiresAt = &exp
+					}
 				}
 			}
 		}
@@ -356,6 +359,20 @@ func (r *AgentSessionReconciler) setApprovalRequestState(ctx context.Context, re
 		*req = latest
 		return nil
 	})
+}
+
+// approvalValidityWindow is how long a granted approval stays valid. It prefers
+// the matching ApprovalPolicy's expiresAfter (session gates and policy-backed
+// runtime holds) and falls back to the request's own scope.window (runtime holds
+// with no matching policy). Zero means it does not auto-expire. nil-policy safe.
+func approvalValidityWindow(gatePolicy *relayv1alpha1.ApprovalPolicy, req *relayv1alpha1.ApprovalRequest) time.Duration {
+	if gatePolicy != nil && gatePolicy.Spec.ExpiresAfter != nil {
+		return gatePolicy.Spec.ExpiresAfter.Duration
+	}
+	if req != nil && req.Spec.Scope.Window != nil {
+		return req.Spec.Scope.Window.Duration
+	}
+	return 0
 }
 
 // approvalTimedOut reports whether a still-pending request has exceeded the

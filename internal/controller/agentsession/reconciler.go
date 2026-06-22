@@ -265,6 +265,12 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{RequeueAfter: approvalRecheckInterval}, nil
 	}
 
+	// Mid-execution per-tool approvals: resolve any runtime ApprovalRequests for
+	// this session (decision -> state -> audit) without gating the session phase.
+	if err := r.reconcileRuntimeApprovals(ctx, session); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconcile runtime approvals: %w", err)
+	}
+
 	backend, err := r.runtimeBackendFor(session)
 	if err != nil {
 		return ctrl.Result{}, err

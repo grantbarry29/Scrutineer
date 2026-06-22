@@ -1,6 +1,6 @@
 # Phase 5 — Per-Tool Runtime Approval (mid-execution human gate)
 
-> **Status:** Design. No code yet. Defines a **mid-execution** human-approval gate: a running agent's tool/MCP call is **held** until a human grants a scoped, time-bounded approval, then allowed (or denied). It reuses the `ApprovalRequest` CRD and the approver/`allOf`/audit machinery from [`phase-5-approval-workflows.md`](phase-5-approval-workflows.md) and extends the tool-gateway + reporter contracts. Implementation is later slices. Resolves open question #4 of the approval-workflows design.
+> **Status:** Design + **controller runtime variant shipped** (impl slice 1). Defines a **mid-execution** human-approval gate: a running agent's tool/MCP call is **held** until a human grants a scoped, time-bounded approval, then allowed (or denied). It reuses the `ApprovalRequest` CRD and the approver/`allOf`/audit machinery from [`phase-5-approval-workflows.md`](phase-5-approval-workflows.md) and extends the tool-gateway + reporter contracts. The reporter approval channel + gateway hold-and-ask + live e2e are later slices. Resolves open question #4 of the approval-workflows design.
 
 ## Purpose
 
@@ -123,8 +123,8 @@ Each held call records, on grant/deny/timeout: a runtime `policyDecision` (`type
 
 ## Migration plan (slices)
 
-1. **This doc** (design).
-2. **Controller: runtime `ApprovalRequest` variant** — `spec.trigger=runtime` + `requestId` + `argDigest`; generalize the gate reconcile to resolve decision→state→audit for runtime requests without touching session phase. (`make test`)
+1. **This doc** (design). — **done**
+2. **Controller: runtime `ApprovalRequest` variant** — `spec.trigger=runtime` + `requestId` + `scope.argDigest`; the reconciler resolves decision→state→audit for runtime requests **without touching session phase** (`reconcileRuntimeApprovals` in `internal/controller/agentsession/approval_runtime.go`), reusing the approver-allowlist/`allOf`/`onTimeout` machinery; expiry window is nil-policy-safe (policy `expiresAfter` → request `scope.window`); the human decision is mirrored to the audit sink. — **done (2026-06-21)**
 3. **Reporter: approval channel** — `POST /v1/approvals` (idempotent create/lookup) + `GET /v1/approvals/{id}`, reusing TokenReview + ownership auth; controller is sole CRD writer. (`make test`)
 4. **Tool gateway: hold-and-ask** — reorder `EvaluateTool`, add the long-poll/`202` blocking model, call the approval channel, allow/deny the call; emit redacted runtime approval evidence. (`make test`)
 5. **Live e2e** — a `requireHumanApproval` tool call is held; a `kubectl patch` grant releases it; status shows a redacted runtime approval decision. (`make test-e2e`)

@@ -85,9 +85,22 @@ spec:
                 description: PolicyRef is the ApprovalPolicy that triggered this request,
                   if any.
                 type: string
+              requestId:
+                description: |-
+                  RequestID correlates a runtime hold with the data-plane call that raised it
+                  and is the idempotency key the reporter uses to avoid creating duplicate
+                  requests for the same tool call. Empty for session gates.
+                type: string
               scope:
                 description: Scope bounds what is being approved.
                 properties:
+                  argDigest:
+                    description: |-
+                      ArgDigest is a redacted fingerprint (e.g. sha256) of the tool-call
+                      arguments a runtime approval is scoped to. It NEVER carries raw argument
+                      values — only a digest — so evidence stays redaction-safe. Empty for
+                      session gates.
+                    type: string
                   target:
                     description: Target is the entity being approved (deploy target,
                       domain, tool, path).
@@ -95,7 +108,8 @@ spec:
                   window:
                     description: |-
                       Window is how long the approval remains valid once granted. Unset means
-                      it does not auto-expire after grant.
+                      it does not auto-expire after grant. For runtime holds with no matching
+                      ApprovalPolicy, this supplies the post-grant validity window.
                     type: string
                 type: object
               sessionRef:
@@ -108,6 +122,16 @@ spec:
                 required:
                 - name
                 type: object
+              trigger:
+                default: session
+                description: |-
+                  Trigger distinguishes a pre-execution session gate (default) from a
+                  mid-execution per-tool-call hold. Empty is treated as "session" for
+                  backward compatibility.
+                enum:
+                - session
+                - runtime
+                type: string
             required:
             - action
             - sessionRef

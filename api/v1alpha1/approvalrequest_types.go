@@ -41,6 +41,22 @@ const (
 	ApprovalStateExpired ApprovalState = "Expired"
 )
 
+// ApprovalTrigger distinguishes a pre-execution session gate from a
+// mid-execution per-tool-call hold. See docs/design/phase-5-runtime-tool-approval.md.
+//
+// +kubebuilder:validation:Enum=session;runtime
+type ApprovalTrigger string
+
+const (
+	// ApprovalTriggerSession gates whether the AgentSession may start at all
+	// (pre-execution). This is the default and the original behavior.
+	ApprovalTriggerSession ApprovalTrigger = "session"
+	// ApprovalTriggerRuntime holds a specific tool/MCP call mid-execution until a
+	// scoped, time-bounded human grant. The controller resolves its lifecycle
+	// without gating the session phase.
+	ApprovalTriggerRuntime ApprovalTrigger = "runtime"
+)
+
 // ApprovalScope bounds what is being approved so a grant is not an open-ended
 // blanket allowance.
 type ApprovalScope struct {
@@ -49,9 +65,17 @@ type ApprovalScope struct {
 	Target string `json:"target,omitempty"`
 
 	// Window is how long the approval remains valid once granted. Unset means
-	// it does not auto-expire after grant.
+	// it does not auto-expire after grant. For runtime holds with no matching
+	// ApprovalPolicy, this supplies the post-grant validity window.
 	// +optional
 	Window *metav1.Duration `json:"window,omitempty"`
+
+	// ArgDigest is a redacted fingerprint (e.g. sha256) of the tool-call
+	// arguments a runtime approval is scoped to. It NEVER carries raw argument
+	// values — only a digest — so evidence stays redaction-safe. Empty for
+	// session gates.
+	// +optional
+	ArgDigest string `json:"argDigest,omitempty"`
 }
 
 // ApprovalSessionRef references the AgentSession this request gates (same namespace).
@@ -66,6 +90,19 @@ type ApprovalSessionRef struct {
 type ApprovalRequestSpec struct {
 	// SessionRef is the AgentSession this request gates.
 	SessionRef ApprovalSessionRef `json:"sessionRef"`
+
+	// Trigger distinguishes a pre-execution session gate (default) from a
+	// mid-execution per-tool-call hold. Empty is treated as "session" for
+	// backward compatibility.
+	// +kubebuilder:default=session
+	// +optional
+	Trigger ApprovalTrigger `json:"trigger,omitempty"`
+
+	// RequestID correlates a runtime hold with the data-plane call that raised it
+	// and is the idempotency key the reporter uses to avoid creating duplicate
+	// requests for the same tool call. Empty for session gates.
+	// +optional
+	RequestID string `json:"requestId,omitempty"`
 
 	// PolicyRef is the ApprovalPolicy that triggered this request, if any.
 	// +optional
@@ -146,6 +183,12 @@ type ApprovalRequest struct {
 
 	Spec   ApprovalRequestSpec   `json:"spec,omitempty"`
 	Status ApprovalRequestStatus `json:"status,omitempty"`
+}
+
+// IsRuntime reports whether this request holds a single mid-execution tool call
+// (vs. gating session start). Empty trigger means session for backward compat.
+func (s ApprovalRequestSpec) IsRuntime() bool {
+	return s.Trigger == ApprovalTriggerRuntime
 }
 
 // ApprovalRequestList contains a list of ApprovalRequest.
