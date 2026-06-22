@@ -26,6 +26,7 @@ Full detail: [`.cursor/relay-cursor-workflow.md`](../relay-cursor-workflow.md).
 5. Explain as you go; update status when done.
 6. End with **### Out-of-scope future work noticed** (every item must show **Already tracked** or confirm a new task card was added **in the same session**).
 7. **No lost work:** every out-of-scope item MUST land in **`relay-project-status.md`** as a **Discovered Follow-Up Tasks** card (or roadmap bullet) — not chat-only, not a one-line queue hint. Edit the status file before finishing; missing tracking leaves project holes.
+8. **End-of-Task Handoff Protocol:** when a task is finished, (a) commit it with a short, apt message (don't push unless asked), then (b) offer 2–4 next-task options with a recommendation, (c) in the selectable option box (`AskQuestion`). Full detail in `relay-cursor-workflow.md` → *End-of-Task Handoff Protocol*.
 
 Scope boundaries and out-of-scope handling: see **Out-of-Scope Future Work Handling** in [`.cursor/relay-cursor-workflow.md`](../relay-cursor-workflow.md).
 

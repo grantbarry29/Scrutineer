@@ -33,6 +33,19 @@ When asked to implement a Relay task, Cursor must:
 9. If follow-up work is discovered, follow **Out-of-Scope Future Work Handling**; add tasks to the status file; do not implement unless asked.
 10. If architecture is ambiguous, stop, offer 2–3 options, recommend one, wait for confirmation.
 11. Preserve Kubernetes controller discipline: idempotent reconciliation, owner references, status subresources, conditions, events, least-privilege RBAC.
+12. When the task is finished, run the **End-of-Task Handoff Protocol** below (commit, then offer selectable next-task options).
+
+---
+
+## End-of-Task Handoff Protocol
+
+Whenever you finish a task (work is complete, verification passed, status file updated), do all three of the following, in order:
+
+1. **Commit it.** Create a git commit with a short but aptly descriptive message summarizing the change (imperative mood, focused on the "what/why"). Only commit when the work is complete and verified (tests pass or the user accepted incomplete work); follow the git safety rules. **Do not push** unless the user explicitly asks.
+2. **Offer next-task options.** Directly present the user with **2–4** candidate next tasks, drawn from **Ready for Cursor Queue** / **Discovered Follow-Up Tasks** / roadmap in `relay-project-status.md`. **Include a clear recommendation** (mark it and say why in one line).
+3. **Make them selectable.** Put those options in the Cursor selectable option box (the `AskQuestion` tool / option card), not just inline prose, so the user can pick one in one click. Put the recommended option first and label it `(Recommended)`.
+
+Keep it to 2–4 options. If there is genuinely only one sensible next step, still offer it plus an "other / you decide" choice. This protocol does not replace the **### Out-of-scope future work noticed** summary requirement — do both.
 
 ---
 
