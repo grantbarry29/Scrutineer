@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -552,7 +552,7 @@ Phase 2 roadmap mentioned argument-level MCP governance; initial `ToolPolicy` sl
 
 **Slice 2 — pod least-privilege hardening — done (2026-06-21):** Reporter token projection was already sidecar-only (the agent never mounts the `relay-reporter` projected token; guarded by `TestBuild_reporterWiringForSidecars`). Added `automountServiceAccountToken: false` on the agent pod (`internal/controller/job/builder.go`) so a compromised agent gets no apiserver-audience SA token by default; enforcement sidecars are unaffected (they carry their own narrowly-scoped projected reporter token). Test: `TestBuild_disablesServiceAccountTokenAutomount`. Verification: `go test ./internal/controller/job/...` (pass 2026-06-21).
 
-**Slice 3 — assurance in audit records — done (2026-06-21):** `policy.violation` and `runtime.report` OTLP audit records now carry `relay.audit.assurance` (`internal/audit` `Record.Assurance` + `relay.audit.assurance` attribute). Violations use their `AssuranceLevel` (empty → `self-reported`); runtime reports are stamped `self-reported` (cooperative sidecars). Builder tests in `internal/audit/sink_test.go`; observability doc updated. So SIEM/audit consumers now see trust level per record (UI surfacing still Phase 7).
+**Slice 3 — assurance in audit records — done (2026-06-21):** `policy.violation`, `runtime.report`, and `approval.granted`/`approval.denied` OTLP audit records now carry `relay.audit.assurance` (`internal/audit` `Record.Assurance` + `relay.audit.assurance` attribute). Violations use their `AssuranceLevel` (empty → `self-reported`); runtime reports are `self-reported` (cooperative sidecars); approval decisions are `controller` (control-plane authoritative). Builder tests in `internal/audit/sink_test.go`; observability doc updated. So SIEM/audit consumers now see trust level per record (UI surfacing still Phase 7).
 
 **Remaining (hardening, later — larger, not started):**
 - Surface `assuranceLevel` in the future **UI** evidence views (Phase 7) — audit records already carry it.
@@ -794,7 +794,7 @@ Gaps found during the audit (now tracked): Phase 5 had no task cards (decomposed
 | S3 / external artifact store | No | `configmap://` / `secret://` URIs only |
 | Admission webhook | Scaffold | Controller validation only |
 | Orchestrators beyond Job | Enum reserved | Validation rejects others |
-| Runtime evidence integrity | Partial | `assuranceLevel` on decisions/violations (`controller` vs `self-reported`), now also on `policy.violation`/`runtime.report` audit records (`relay.audit.assurance`); reporter token is sidecar-only + agent SA token automount disabled (least privilege); still cooperative — no anti-tamper / `observed` source yet (see Discovered task) |
+| Runtime evidence integrity | Partial | `assuranceLevel` on decisions/violations (`controller` vs `self-reported`), now also on `policy.violation`/`runtime.report`/`approval.*` audit records (`relay.audit.assurance`); reporter token is sidecar-only + agent SA token automount disabled (least privilege); still cooperative — no anti-tamper / `observed` source yet (see Discovered task) |
 | Observability export design doc | No | Prometheus/OTel/audit shipped without a `docs/design/` doc (see Discovered task) |
 
 ### status.podName selection semantics

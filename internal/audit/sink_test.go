@@ -70,7 +70,8 @@ func TestRecordBuilders(t *testing.T) {
 
 	granted := ApprovalDecision("ns", "s", "deploy", "alice", "human approval granted", true, time.Time{})
 	if granted.EventType != EventApprovalGranted || granted.Action != "granted" ||
-		granted.Actor != "alice" || granted.Target != "deploy" || granted.Type != "approval" {
+		granted.Actor != "alice" || granted.Target != "deploy" || granted.Type != "approval" ||
+		granted.Assurance != "controller" {
 		t.Fatalf("granted record = %+v", granted)
 	}
 	denied := ApprovalDecision("ns", "s", "deploy", "", "human approval was denied", false, time.Time{})

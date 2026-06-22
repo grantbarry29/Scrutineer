@@ -110,6 +110,9 @@ func ApprovalDecision(namespace, session, gatedAction, actor, reason string, gra
 		Type:      "approval",
 		Target:    gatedAction,
 		Message:   reason,
+		// Approval gates are resolved by the control plane: authoritative evidence
+		// (mirrors api/v1alpha1.EvidenceControllerComputed).
+		Assurance: "controller",
 	}
 }
 
