@@ -209,8 +209,10 @@ Platform teams can publish baseline governance once; sessions reference policies
 
 1. `spec.policyRefs` in list order (recommended: `AgentPolicy` entries, then `ToolPolicy`)
 2. `spec.policy` inline overrides last (wins on conflict)
-3. List fields are unioned; numeric caps take the **minimum** (strictest)
+3. List fields are unioned; numeric caps take the **minimum** (strictest); `argumentRules` are **concatenated** (constraints only tighten)
 4. Effective **mode** = strictest across matched policies (`enforced` > `dry-run` > `audit-only`)
+
+**Tool argument rules (`ToolPolicy.spec.argumentRules`):** constrain a tool call by its **arguments**, not just its name — applied only to calls that already pass `allowedTools`/`deniedTools`. Each rule binds tools (`"*"` = any) to `constraints` (dotted arg path + operator + `Allow`/`Deny` effect); a `Deny` match blocks, `Allow` constraints act as an allowlist. Declared + propagated only — per-call enforcement is the tool gateway's job (Phase 3). See [`docs/design/phase-3-tool-argument-constraints.md`](docs/design/phase-3-tool-argument-constraints.md) and `config/samples/relay_v1alpha1_toolpolicy.yaml`.
 
 **Status written on reconcile:**
 

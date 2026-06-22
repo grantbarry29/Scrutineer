@@ -57,6 +57,86 @@ spec:
                 items:
                   type: string
                 type: array
+              argumentRules:
+                description: |-
+                  ArgumentRules constrain tool calls by their arguments (e.g. restrict read_file to
+                  /workspace), applied only after name-level allow/deny. Declared and propagated
+                  policy; enforcement is Phase 3 (tool gateway). See
+                  docs/design/phase-3-tool-argument-constraints.md.
+                items:
+                  description: |-
+                    ToolArgumentRule constrains the arguments of matching tool calls. It applies only to
+                    calls that already passed name-level allow/deny. Enforcement is the tool gateway's job
+                    (Phase 3); this models declared + propagated policy.
+                  properties:
+                    constraints:
+                      description: |-
+                        Constraints are ANDed: every constraint must pass for the call to be allowed by
+                        this rule.
+                      items:
+                        description: |-
+                          ArgumentConstraint matches one tool-argument value and declares whether a match allows
+                          or denies the call. v1 uses structured matchers (not an expression language). See
+                          docs/design/phase-3-tool-argument-constraints.md.
+                        properties:
+                          arg:
+                            description: |-
+                              Arg is a dotted path into the tool's argument object (e.g. "path", "args[0]",
+                              "options.recursive").
+                            minLength: 1
+                            type: string
+                          effect:
+                            default: Deny
+                            description: |-
+                              Effect declares what a match means. Deny (default) blocks the call; Allow makes the
+                              constraint an allowlist gate (call permitted only if it matches).
+                            enum:
+                            - Allow
+                            - Deny
+                            type: string
+                          op:
+                            description: Op is the comparison operator.
+                            enum:
+                            - Equals
+                            - NotEquals
+                            - In
+                            - NotIn
+                            - Matches
+                            - NotMatches
+                            - HasPrefix
+                            - NotHasPrefix
+                            - Exists
+                            - NotExists
+                            type: string
+                          values:
+                            description: |-
+                              Values holds the operands: regular expressions for Matches/NotMatches, literals
+                              otherwise. Ignored for Exists/NotExists.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - arg
+                        - op
+                        type: object
+                      minItems: 1
+                      type: array
+                    server:
+                      description: Server optionally scopes the rule to a single MCP
+                        server / provider id.
+                      type: string
+                    tools:
+                      description: Tools lists tool identifiers this rule applies
+                        to. "*" matches any tool.
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                  required:
+                  - constraints
+                  - tools
+                  type: object
+                type: array
               deniedTools:
                 description: DeniedTools lists tool/MCP identifiers the agent must
                   not invoke.

@@ -40,6 +40,86 @@ type ToolPolicySpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MaxCallsPerMinute *int32 `json:"maxCallsPerMinute,omitempty"`
+
+	// ArgumentRules constrain tool calls by their arguments (e.g. restrict read_file to
+	// /workspace), applied only after name-level allow/deny. Declared and propagated
+	// policy; enforcement is Phase 3 (tool gateway). See
+	// docs/design/phase-3-tool-argument-constraints.md.
+	// +optional
+	ArgumentRules []ToolArgumentRule `json:"argumentRules,omitempty"`
+}
+
+// ArgumentOperator is the comparison applied to a tool-argument value.
+//
+// +kubebuilder:validation:Enum=Equals;NotEquals;In;NotIn;Matches;NotMatches;HasPrefix;NotHasPrefix;Exists;NotExists
+type ArgumentOperator string
+
+const (
+	ArgOpEquals       ArgumentOperator = "Equals"
+	ArgOpNotEquals    ArgumentOperator = "NotEquals"
+	ArgOpIn           ArgumentOperator = "In"
+	ArgOpNotIn        ArgumentOperator = "NotIn"
+	ArgOpMatches      ArgumentOperator = "Matches"
+	ArgOpNotMatches   ArgumentOperator = "NotMatches"
+	ArgOpHasPrefix    ArgumentOperator = "HasPrefix"
+	ArgOpNotHasPrefix ArgumentOperator = "NotHasPrefix"
+	ArgOpExists       ArgumentOperator = "Exists"
+	ArgOpNotExists    ArgumentOperator = "NotExists"
+)
+
+// ConstraintEffect declares what a constraint match means.
+//
+// +kubebuilder:validation:Enum=Allow;Deny
+type ConstraintEffect string
+
+const (
+	// ConstraintEffectDeny (default): a match blocks the call.
+	ConstraintEffectDeny ConstraintEffect = "Deny"
+	// ConstraintEffectAllow: the constraint is an allowlist gate — the call is permitted
+	// only if it matches.
+	ConstraintEffectAllow ConstraintEffect = "Allow"
+)
+
+// ArgumentConstraint matches one tool-argument value and declares whether a match allows
+// or denies the call. v1 uses structured matchers (not an expression language). See
+// docs/design/phase-3-tool-argument-constraints.md.
+type ArgumentConstraint struct {
+	// Arg is a dotted path into the tool's argument object (e.g. "path", "args[0]",
+	// "options.recursive").
+	// +kubebuilder:validation:MinLength=1
+	Arg string `json:"arg"`
+
+	// Op is the comparison operator.
+	Op ArgumentOperator `json:"op"`
+
+	// Values holds the operands: regular expressions for Matches/NotMatches, literals
+	// otherwise. Ignored for Exists/NotExists.
+	// +optional
+	Values []string `json:"values,omitempty"`
+
+	// Effect declares what a match means. Deny (default) blocks the call; Allow makes the
+	// constraint an allowlist gate (call permitted only if it matches).
+	// +kubebuilder:default=Deny
+	// +optional
+	Effect ConstraintEffect `json:"effect,omitempty"`
+}
+
+// ToolArgumentRule constrains the arguments of matching tool calls. It applies only to
+// calls that already passed name-level allow/deny. Enforcement is the tool gateway's job
+// (Phase 3); this models declared + propagated policy.
+type ToolArgumentRule struct {
+	// Tools lists tool identifiers this rule applies to. "*" matches any tool.
+	// +kubebuilder:validation:MinItems=1
+	Tools []string `json:"tools"`
+
+	// Server optionally scopes the rule to a single MCP server / provider id.
+	// +optional
+	Server string `json:"server,omitempty"`
+
+	// Constraints are ANDed: every constraint must pass for the call to be allowed by
+	// this rule.
+	// +kubebuilder:validation:MinItems=1
+	Constraints []ArgumentConstraint `json:"constraints"`
 }
 
 // ToolPolicyRules maps a ToolPolicy spec into PolicyRules for merge.
@@ -49,6 +129,7 @@ func (s *ToolPolicySpec) ToolPolicyRules() PolicyRules {
 		DeniedTools:       s.DeniedTools,
 		MaxToolCalls:      s.MaxToolCalls,
 		MaxCallsPerMinute: s.MaxCallsPerMinute,
+		ArgumentRules:     s.ArgumentRules,
 	}
 }
 

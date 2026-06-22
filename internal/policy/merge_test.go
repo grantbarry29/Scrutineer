@@ -83,6 +83,60 @@ func TestMergeRules_minWorkspaceBytes(t *testing.T) {
 	}
 }
 
+func TestMergeRules_concatenatesArgumentRules(t *testing.T) {
+	base := relayv1alpha1.PolicyRules{
+		ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+			Tools:       []string{"read_file"},
+			Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: relayv1alpha1.ConstraintEffectAllow}},
+		}},
+	}
+	overlay := relayv1alpha1.PolicyRules{
+		ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+			Tools:       []string{"kubectl"},
+			Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "args[0]", Op: relayv1alpha1.ArgOpIn, Values: []string{"delete"}}},
+		}},
+	}
+	got := MergeRules(base, overlay)
+	if len(got.ArgumentRules) != 2 {
+		t.Fatalf("ArgumentRules = %d rules, want 2: %+v", len(got.ArgumentRules), got.ArgumentRules)
+	}
+	if got.ArgumentRules[0].Tools[0] != "read_file" || got.ArgumentRules[1].Tools[0] != "kubectl" {
+		t.Fatalf("order not preserved: %+v", got.ArgumentRules)
+	}
+}
+
+func TestMergeRules_dedupesIdenticalArgumentRules(t *testing.T) {
+	rule := relayv1alpha1.ToolArgumentRule{
+		Tools:       []string{"read_file"},
+		Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpMatches, Values: []string{"\\.\\."}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+	}
+	got := MergeRules(
+		relayv1alpha1.PolicyRules{ArgumentRules: []relayv1alpha1.ToolArgumentRule{rule}},
+		relayv1alpha1.PolicyRules{ArgumentRules: []relayv1alpha1.ToolArgumentRule{rule}},
+	)
+	if len(got.ArgumentRules) != 1 {
+		t.Fatalf("identical rule not deduped: %+v", got.ArgumentRules)
+	}
+}
+
+func TestMergeRules_distinguishesArgumentRulesByEffect(t *testing.T) {
+	allow := relayv1alpha1.ToolArgumentRule{
+		Tools:       []string{"read_file"},
+		Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/x"}, Effect: relayv1alpha1.ConstraintEffectAllow}},
+	}
+	deny := relayv1alpha1.ToolArgumentRule{
+		Tools:       []string{"read_file"},
+		Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/x"}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+	}
+	got := MergeRules(
+		relayv1alpha1.PolicyRules{ArgumentRules: []relayv1alpha1.ToolArgumentRule{allow}},
+		relayv1alpha1.PolicyRules{ArgumentRules: []relayv1alpha1.ToolArgumentRule{deny}},
+	)
+	if len(got.ArgumentRules) != 2 {
+		t.Fatalf("effect not part of identity: %+v", got.ArgumentRules)
+	}
+}
+
 func TestStrictestMode(t *testing.T) {
 	got := StrictestMode(
 		relayv1alpha1.PolicyModeAuditOnly,

@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (tool/MCP argument-constraints design doc — `ToolArgumentRule`/`ArgumentConstraint` schema, gateway hook, redacted evidence, impl deferred to slices 2–3; Phase 6 slice 2b: backend returns normalized `observation`, reconciler owns status mapping via `applyObservation`/`applyRuntimePhase`; Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (tool argument constraints slice 2: `ToolArgumentRule`/`ArgumentConstraint` schema on `ToolPolicy`+`PolicyRules`, concatenate-merge, merge-time summary decision, sample + manifests — enforcement still Phase 3 slice 3; tool/MCP argument-constraints design doc; Phase 6 slice 2b: backend returns normalized `observation`, reconciler owns status mapping via `applyObservation`/`applyRuntimePhase`; Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -411,19 +411,13 @@ Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
 **Verification:** Review only (docs); `make test` unaffected.
 
-### Task: Tool argument constraints — slice 2 (control-plane schema)
+### Task: Tool argument constraints — slice 2 (control-plane schema) — **done (2026-06-21)**
 
-**Goal:** Add the `ToolArgumentRule`/`ArgumentConstraint` API and merge so policies can declare per-tool argument rules (no enforcement yet).
+**Shipped:** `ToolArgumentRule`/`ArgumentConstraint`/`ArgumentOperator`/`ConstraintEffect` types on `ToolPolicySpec` + `PolicyRules` (`api/v1alpha1`), with kubebuilder validation (operator/effect enums, `MinItems`, `MinLength`). `ToolPolicySpec.ToolPolicyRules()` maps `argumentRules`; `MergeRules` concatenates them across layers with structural dedupe (`concatArgumentRules`/`argumentRuleKey` in `merge.go`) so constraints only tighten; `BuildMergeDecisions` emits one `ArgumentRulesDeclared` `tool`/`argumentRules` summary decision (controller assurance). Regenerated deepcopy + CRDs (toolpolicy/agentpolicy/agentsession). Sample extended (`config/samples/relay_v1alpha1_toolpolicy.yaml`) and validated via `make verify-samples`. README + design-doc status updated. **No enforcement** (slice 3).
 
-**Scope:** Add types to `api/v1alpha1/toolpolicy_types.go` + `PolicyRules`; kubebuilder validation (operator enum, MinItems); `ToolPolicyRules()` mapping; concatenate-merge in `internal/policy`; a merge-time `policyDecisions` summary entry; regenerate manifests; sample. Follow `docs/design/phase-3-tool-argument-constraints.md`.
+**Verification:** `make generate manifests`; `go test ./internal/policy/... ./api/...`; `make verify-samples`; full suite green (2026-06-21). Tests: `merge_test.go` (concat/dedupe/effect-identity), `decisions_test.go` (summary decision).
 
-**Non-goals:** Tool-gateway evaluation (slice 3); CEL; breaking existing samples.
-
-**Acceptance criteria:** CRD fields generated + validated; merge concatenates rules across layers; unit tests for mapping + merge; existing samples still apply.
-
-**Expected files:** `api/v1alpha1/toolpolicy_types.go`, `api/v1alpha1/policy_types.go`, `internal/policy/*`, generated CRDs, a sample, `README.md`.
-
-**Verification command:** `make manifests generate && make test`
+**Files:** `api/v1alpha1/toolpolicy_types.go`, `api/v1alpha1/policy_types.go`, `internal/policy/merge.go`, `internal/policy/decisions.go`, generated CRDs + deepcopy, sample, `README.md`.
 
 ### Task: Tool argument constraints — slice 3 (gateway evaluation + redacted evidence)
 
@@ -996,7 +990,7 @@ Extract inline policy into composable, versioned CRDs without breaking AgentSess
 
 | Item | Where tracked | Notes |
 |------|---------------|-------|
-| ToolPolicy MCP **argument constraints** | **Design done (2026-06-21)**: `docs/design/phase-3-tool-argument-constraints.md`; impl tracked as *Tool argument constraints* slices 2–3 | Roadmap mentioned; out of initial ToolPolicy slice |
+| ToolPolicy MCP **argument constraints** | **Schema done (2026-06-21)** (design + slice 2); enforcement = *Tool argument constraints* slice 3 | `argumentRules` on `ToolPolicy`/`PolicyRules`; gateway eval pending |
 | Inline `spec.policy.mode` override | Not planned | Only CRD modes merge today |
 | Runtime `policyDecisions` append | **done** — slice 2 (`policy_decisions.go`) | Reporters use `AppendRuntimePolicyDecisions` |
 | Active Job env stale after policy change | `PolicyEnvDrift` condition | Documented; immutable Job template |

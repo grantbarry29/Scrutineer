@@ -1,6 +1,6 @@
 # Phase 3 — Tool/MCP Argument Constraints
 
-> **Status:** Design. No code change yet. Defines an argument-level governance layer for `ToolPolicy`/`PolicyRules` and the tool-gateway contract: allow/deny a tool call based on **its arguments**, not just its name. Schema + merge semantics + enforcement hook + evidence shape are specified here; implementation is a later slice (control-plane schema first, then tool-gateway evaluation). Extends [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md).
+> **Status:** Design + control-plane schema (slice 2) shipped. Defines an argument-level governance layer for `ToolPolicy`/`PolicyRules`: allow/deny a tool call based on **its arguments**, not just its name. The `ToolArgumentRule`/`ArgumentConstraint` schema, concatenate-merge, and a merge-time decision summary are implemented (`api/v1alpha1`, `internal/policy`); **enforcement is not** — the tool gateway evaluation is slice 3. Extends [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md).
 
 ## Problem
 
@@ -150,8 +150,8 @@ Argument values frequently contain secrets (tokens, SQL, file contents). Violati
 
 ## Migration plan (slices)
 
-1. **This doc** (design). — *current*
-2. **Control-plane schema** — add `ToolArgumentRule`/`ArgumentConstraint` to `ToolPolicySpec` + `PolicyRules`, kubebuilder validation, `ToolPolicyRules()` mapping, merge (concatenate) in `internal/policy`, and a merge-time `policyDecisions` summary. Manifests regenerated. No enforcement. (`make manifests && make test`)
+1. **This doc** (design). — *done*
+2. **Control-plane schema** — *done (2026-06-21)*. Added `ToolArgumentRule`/`ArgumentConstraint`/`ArgumentOperator`/`ConstraintEffect` to `ToolPolicySpec` + `PolicyRules` with kubebuilder validation; `ToolPolicyRules()` maps them; `MergeRules` concatenates with structural dedupe (`concatArgumentRules`); `BuildMergeDecisions` emits an `ArgumentRulesDeclared` summary decision; manifests + deepcopy regenerated; sample updated. No enforcement.
 3. **Gateway evaluation** — extend `toolgateway.ToolRequest.Arguments`, `EvaluateTool` (+ path resolver + matchers), `GatewayConfig`, and the sidecar `POST /v1/tools/invoke` to pass arguments; emit redacted runtime evidence. (`make test`)
 4. **Live e2e** — argument-denied tool call → `403` (enforced) → `status.violations` with redacted detail (extends `test/e2e/tool_violation_test.go`).
 

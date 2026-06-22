@@ -76,6 +76,20 @@ func BuildMergeDecisions(resolved Resolved, now time.Time) []relayv1alpha1.Polic
 	if resolved.Rules.MaxCallsPerMinute != nil {
 		out = append(out, capDecision(ts, mode, "maxCallsPerMinute", *resolved.Rules.MaxCallsPerMinute))
 	}
+	if n := len(resolved.Rules.ArgumentRules); n > 0 {
+		out = append(out, relayv1alpha1.PolicyDecision{
+			Time:    ts,
+			Phase:   relayv1alpha1.PolicyDecisionPhaseMerge,
+			Type:    "tool",
+			Action:  relayv1alpha1.PolicyDecisionAudit,
+			Actor:   mergeDecisionActor,
+			Target:  strconv.Itoa(n),
+			Reason:  "ArgumentRulesDeclared",
+			Message: fmt.Sprintf("Effective policy declares %d tool argument rule(s); enforced per-call by the tool gateway", n),
+			Mode:    mode,
+			Rule:    "argumentRules",
+		})
+	}
 
 	if len(out) > MaxMergePolicyDecisions {
 		omitted := len(out) - (MaxMergePolicyDecisions - 1)

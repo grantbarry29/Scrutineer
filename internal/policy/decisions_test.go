@@ -106,6 +106,35 @@ func TestBuildMergeDecisions_capsAndNetworkLists(t *testing.T) {
 	}
 }
 
+func TestBuildMergeDecisions_argumentRulesSummary(t *testing.T) {
+	resolved := Resolved{
+		Mode: relayv1alpha1.PolicyModeEnforced,
+		Rules: relayv1alpha1.PolicyRules{
+			ArgumentRules: []relayv1alpha1.ToolArgumentRule{
+				{Tools: []string{"read_file"}, Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: relayv1alpha1.ConstraintEffectAllow}}},
+				{Tools: []string{"kubectl"}, Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "args[0]", Op: relayv1alpha1.ArgOpIn, Values: []string{"delete"}}}},
+			},
+		},
+	}
+	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
+
+	var summary *relayv1alpha1.PolicyDecision
+	for i := range decisions {
+		if decisions[i].Reason == "ArgumentRulesDeclared" {
+			summary = &decisions[i]
+		}
+	}
+	if summary == nil {
+		t.Fatal("expected ArgumentRulesDeclared decision")
+	}
+	if summary.Rule != "argumentRules" || summary.Target != "2" || summary.Type != "tool" {
+		t.Fatalf("argument-rules decision = %+v", summary)
+	}
+	if summary.AssuranceLevel != relayv1alpha1.EvidenceControllerComputed {
+		t.Fatalf("assurance = %q, want controller", summary.AssuranceLevel)
+	}
+}
+
 func TestNormalizeMode_emptyDefaultsAuditOnly(t *testing.T) {
 	if NormalizeMode("") != relayv1alpha1.PolicyModeAuditOnly {
 		t.Fatalf("mode = %q", NormalizeMode(""))

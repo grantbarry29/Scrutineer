@@ -167,6 +167,13 @@ type PolicyRules struct {
 	// +optional
 	MaxCallsPerMinute *int32 `json:"maxCallsPerMinute,omitempty"`
 
+	// ArgumentRules constrain tool calls by their arguments, applied after name-level tool
+	// allow/deny. Merged by concatenation across layers (constraints only tighten).
+	// Enforcement is Phase 3 (tool gateway). See
+	// docs/design/phase-3-tool-argument-constraints.md.
+	// +optional
+	ArgumentRules []ToolArgumentRule `json:"argumentRules,omitempty"`
+
 	// AllowedPaths is a path/glob allowlist for file and workspace access (e.g. /workspace/**).
 	// +optional
 	AllowedPaths []string `json:"allowedPaths,omitempty"`

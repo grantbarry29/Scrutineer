@@ -12,3 +12,26 @@ spec:
   - kubectl-prod
   maxToolCalls: 30
   maxCallsPerMinute: 10
+  # Argument-level rules apply only to calls that pass the name allow/deny above.
+  # Enforcement is the tool gateway's job (Phase 3); this declares + propagates intent.
+  argumentRules:
+  # Constrain the github tool's path argument to the workspace; block path traversal.
+  - tools:
+    - github
+    constraints:
+    - arg: path
+      op: HasPrefix
+      values: ["/workspace/"]
+      effect: Allow
+    - arg: path
+      op: Matches
+      values: ["\\.\\."]
+      effect: Deny
+  # Block destructive verbs on any tool's first positional argument.
+  - tools:
+    - "*"
+    constraints:
+    - arg: "args[0]"
+      op: In
+      values: ["delete", "drop", "shutdown"]
+      effect: Deny
