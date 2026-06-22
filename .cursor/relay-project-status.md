@@ -1,7 +1,7 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-21 (tool argument constraints slice 4: live in-cluster e2e — enforced argument rule denies a tool call, redacted violation in status, verified on kind; tool argument constraints slice 3: tool-gateway per-call argument evaluation — path resolver + operator matchers, deny-precedence/allow-allowlist, redacted evidence, JSON propagation; tool argument constraints slice 2: `ToolArgumentRule`/`ArgumentConstraint` schema on `ToolPolicy`+`PolicyRules`, concatenate-merge, merge-time summary decision, sample + manifests; tool/MCP argument-constraints design doc; Phase 6 slice 2b: backend returns normalized `observation`, reconciler owns status mapping via `applyObservation`/`applyRuntimePhase`; Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-21 (e2e probe distroless fix: `clusterImageRunnable` checks `node.status.images` instead of a `sh -c` probe pod, so live-evidence specs run against standard distroless images instead of skipping — verified live; tool argument constraints slice 4: live in-cluster e2e — enforced argument rule denies a tool call, redacted violation in status, verified on kind; tool argument constraints slice 3: tool-gateway per-call argument evaluation — path resolver + operator matchers, deny-precedence/allow-allowlist, redacted evidence, JSON propagation; tool argument constraints slice 2: `ToolArgumentRule`/`ArgumentConstraint` schema on `ToolPolicy`+`PolicyRules`, concatenate-merge, merge-time summary decision, sample + manifests; tool/MCP argument-constraints design doc; Phase 6 slice 2b: backend returns normalized `observation`, reconciler owns status mapping via `applyObservation`/`applyRuntimePhase`; Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
@@ -435,17 +435,13 @@ Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
 **Files:** `test/e2e/tool_violation_test.go`, `test/e2e/fixtures_test.go`.
 
-### Task: e2e live-evidence image probe assumes a shell (distroless skip)
+### Task: e2e live-evidence image probe assumes a shell (distroless skip) — **done (2026-06-21)**
 
-**Why:** `clusterImageRunnable` (`test/e2e/reporter_infra_test.go`) gates all live-evidence specs by running `sh -c` in a probe pod. The shipped relay + sidecar images are `distroless/static` (no shell), so the probe fails and **every** live-evidence spec **skips** unless images are rebuilt shell-capable (done ad-hoc this session via busybox variants). `make test-e2e` as documented therefore silently skips these specs in a standard build.
+**Shipped:** `clusterImageRunnable` (`test/e2e/reporter_infra_test.go`) no longer launches a `sh -c` probe pod (which always failed on the `distroless/static` relay + sidecar images, silently skipping every live-evidence spec). It now inspects `node.status.images` for image presence, with `normalizeImageRef` stripping default-registry prefixes so user refs match the runtime's fully-qualified names. Graceful skip preserved when an image is genuinely absent.
 
-**Scope:** Make the probe distroless-tolerant — e.g. check image presence on nodes (crictl/containerd) or run the image's own binary with a no-op/`--help` flag instead of `sh -c`; or build dedicated shell-capable e2e image variants in `test-e2e-images`. Keep specs skipping gracefully when images are genuinely absent.
+**Verified live** (2026-06-21): with the **standard distroless** relay + tool-gateway images and **no** `RELAY_E2E_IMG` override, the two tool-violation specs now run and pass (`2 Passed`) — previously they skipped.
 
-**Non-goals:** Changing production image bases; CEL.
-
-**Acceptance criteria:** `make test-e2e-images && make test-e2e` runs (not skips) the live-evidence specs against kind with the standard images.
-
-**Expected files:** `test/e2e/reporter_infra_test.go` and/or `Makefile` + a thin e2e Dockerfile.
+**Files:** `test/e2e/reporter_infra_test.go`.
 
 ### Task: Propagate ToolPolicy maxCallsPerMinute to runtime hooks — **done (2026-06-08)**
 

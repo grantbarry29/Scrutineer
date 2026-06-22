@@ -14,8 +14,8 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -86,50 +86,36 @@ func requireRelayE2EImage(ctx SpecContext) {
 	}
 }
 
+// clusterImageRunnable reports whether image is already present on a cluster node, so a
+// pod scheduled with ImagePullPolicy=IfNotPresent can run it. It inspects
+// node.status.images rather than launching a probe pod: the relay/sidecar images are
+// distroless (no shell), so a `sh -c` probe would fail even when the image is fine to run.
 func clusterImageRunnable(ctx context.Context, image string) bool {
 	GinkgoHelper()
-	probe := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("img-probe-%d", time.Now().UnixNano()),
-			Namespace: "default",
-			Labels:    map[string]string{e2eReporterLabel: "image-probe"},
-		},
-		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
-			Containers: []corev1.Container{{
-				Name:            "probe",
-				Image:           image,
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Command:         []string{"sh", "-c", "sleep 1"},
-			}},
-		},
-	}
-	if err := k8sClient.Create(ctx, probe); err != nil {
+	var nodes corev1.NodeList
+	if err := k8sClient.List(ctx, &nodes); err != nil {
 		return false
 	}
-	defer func() { _ = k8sClient.Delete(ctx, probe) }()
-
-	deadline := time.Now().Add(60 * time.Second)
-	for time.Now().Before(deadline) {
-		var got corev1.Pod
-		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(probe), &got); err != nil {
-			time.Sleep(time.Second)
-			continue
-		}
-		switch got.Status.Phase {
-		case corev1.PodRunning, corev1.PodSucceeded:
-			return true
-		case corev1.PodFailed:
-			return false
-		}
-		for _, cs := range got.Status.ContainerStatuses {
-			if w := cs.State.Waiting; w != nil && (w.Reason == "ErrImagePull" || w.Reason == "ImagePullBackOff") {
-				return false
+	for i := range nodes.Items {
+		for _, img := range nodes.Items[i].Status.Images {
+			for _, name := range img.Names {
+				if normalizeImageRef(name) == normalizeImageRef(image) {
+					return true
+				}
 			}
 		}
-		time.Sleep(time.Second)
 	}
 	return false
+}
+
+// normalizeImageRef strips default-registry prefixes so a user-supplied ref like
+// "relay-e2e-shell:latest" matches the fully-qualified "docker.io/library/..." form that
+// the container runtime reports in node.status.images.
+func normalizeImageRef(ref string) string {
+	for _, prefix := range []string{"index.docker.io/library/", "index.docker.io/", "docker.io/library/", "docker.io/"} {
+		ref = strings.TrimPrefix(ref, prefix)
+	}
+	return ref
 }
 
 func deployInClusterReporter(ctx SpecContext) {
