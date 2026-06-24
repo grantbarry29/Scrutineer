@@ -46,7 +46,14 @@ const (
 	EnvHTTPProxy              = "HTTP_PROXY"
 	EnvHTTPSProxy             = "HTTPS_PROXY"
 	EnvNoProxy                = "NO_PROXY"
-	placeholderSidecarSleep   = "infinity"
+	// Lowercase proxy variants: many common tools (notably BusyBox wget, curl, and
+	// Go's net/http) read the lowercase names, and BusyBox wget reads ONLY the
+	// lowercase form. Setting both ensures agent egress is actually routed through
+	// the dns-proxy instead of silently bypassing enforcement.
+	EnvHTTPProxyLower       = "http_proxy"
+	EnvHTTPSProxyLower      = "https_proxy"
+	EnvNoProxyLower         = "no_proxy"
+	placeholderSidecarSleep = "infinity"
 )
 
 // DefaultReporterURL is the in-cluster base URL for POST /v1/report (no path suffix).
@@ -242,10 +249,17 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, profile *relayv1alpha1.RuntimePro
 		env = append(env, corev1.EnvVar{Name: EnvRelayToolGatewayURL, Value: toolgateway.DefaultListenAddr})
 	}
 	if hasEnabledSidecar(profile, SidecarTypeDNSProxy) {
+		const noProxy = "localhost,127.0.0.1"
 		env = append(env,
 			corev1.EnvVar{Name: EnvHTTPProxy, Value: dnsproxy.DefaultHTTPProxyURL},
 			corev1.EnvVar{Name: EnvHTTPSProxy, Value: dnsproxy.DefaultHTTPProxyURL},
-			corev1.EnvVar{Name: EnvNoProxy, Value: "localhost,127.0.0.1"},
+			corev1.EnvVar{Name: EnvNoProxy, Value: noProxy},
+			// Lowercase variants for tools (BusyBox wget, curl, Go) that read them;
+			// BusyBox wget reads only the lowercase form, so omitting these lets such
+			// agents bypass the dns-proxy entirely.
+			corev1.EnvVar{Name: EnvHTTPProxyLower, Value: dnsproxy.DefaultHTTPProxyURL},
+			corev1.EnvVar{Name: EnvHTTPSProxyLower, Value: dnsproxy.DefaultHTTPProxyURL},
+			corev1.EnvVar{Name: EnvNoProxyLower, Value: noProxy},
 		)
 	}
 	if hasEnabledSidecar(profile, SidecarTypeFSGateway) {

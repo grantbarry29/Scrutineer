@@ -85,6 +85,16 @@ func TestBuild_agentDNSProxyEnv(t *testing.T) {
 	if agentEnv[EnvHTTPProxy] != dnsproxy.DefaultHTTPProxyURL {
 		t.Fatalf("HTTP_PROXY = %q", agentEnv[EnvHTTPProxy])
 	}
+	// Lowercase variants must also be set, or BusyBox-wget-style agents bypass the proxy.
+	if agentEnv[EnvHTTPProxyLower] != dnsproxy.DefaultHTTPProxyURL {
+		t.Fatalf("http_proxy = %q", agentEnv[EnvHTTPProxyLower])
+	}
+	if agentEnv[EnvHTTPSProxyLower] != dnsproxy.DefaultHTTPProxyURL {
+		t.Fatalf("https_proxy = %q", agentEnv[EnvHTTPSProxyLower])
+	}
+	if agentEnv[EnvNoProxyLower] == "" {
+		t.Fatalf("no_proxy unset")
+	}
 
 	proxyEnv := envVarsToMap(byName["egress"].Env)
 	if proxyEnv[dnsproxy.EnvPolicyDeniedDomains] != "evil.example" {
