@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -83,12 +84,32 @@ var _ = Describe("Runtime per-tool approval", func() {
 		Expect(k8sClient.Create(testCtx, req)).To(Succeed())
 		waitForApprovalState(reqKey, relayv1alpha1.ApprovalStatePending)
 
+		// While the hold is undecided the session surfaces it (redaction-safe) so
+		// UI/operators can see what needs approval — argDigest only, no raw args.
+		Eventually(func(g Gomega) {
+			var got relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
+			g.Expect(got.Status.PendingApprovals).To(HaveLen(1))
+			p := got.Status.PendingApprovals[0]
+			g.Expect(p.Name).To(Equal(reqKey.Name))
+			g.Expect(p.Target).To(Equal("deploy-prod"))
+			g.Expect(p.ArgDigest).To(Equal("sha256:deadbeef"))
+			g.Expect(p.State).To(Equal(relayv1alpha1.ApprovalStatePending))
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
 		patchApprovalDecision(reqKey, relayv1alpha1.ApprovalDecisionGranted, "alice")
 
 		granted := waitForApprovalState(reqKey, relayv1alpha1.ApprovalStateGranted)
 		Expect(granted.Status.DecidedBy).To(Equal("alice"))
 		Expect(granted.Status.DecidedAt).NotTo(BeNil())
 		Expect(granted.Status.ExpiresAt).NotTo(BeNil(), "scope.window should yield a post-grant expiry")
+
+		// Once decided, the hold drops off the pending surface.
+		Eventually(func(g Gomega) {
+			var got relayv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
+			g.Expect(got.Status.PendingApprovals).To(BeEmpty())
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
 		// The session itself must never enter the human-approval gate or be denied
 		// because of a runtime tool approval.
@@ -175,6 +196,44 @@ var _ = Describe("Runtime approval helpers", func() {
 		Expect(approvalStateDecided(relayv1alpha1.ApprovalStateExpired)).To(BeTrue())
 		Expect(approvalStateDecided(relayv1alpha1.ApprovalStatePending)).To(BeFalse())
 		Expect(approvalStateDecided(relayv1alpha1.ApprovalState(""))).To(BeFalse())
+	})
+
+	It("projects a redaction-safe summary (argDigest, never raw args) and defaults empty state to Pending", func() {
+		created := metav1.NewTime(time.Now().Add(-time.Minute))
+		req := newRuntimeApprovalRequest("team-a", "rt-sum-deploy", "sess", "deploy", "deploy-prod", "deploy-approvers")
+		req.CreationTimestamp = created
+		req.Status.Reason = "awaiting decision"
+
+		s := runtimeApprovalSummary(req)
+		Expect(s.Name).To(Equal("rt-sum-deploy"))
+		Expect(s.RequestID).To(Equal("rt-sum-deploy-rid"))
+		Expect(s.Action).To(Equal("deploy"))
+		Expect(s.Target).To(Equal("deploy-prod"))
+		Expect(s.ArgDigest).To(Equal("sha256:deadbeef"))
+		Expect(s.PolicyRef).To(Equal("deploy-approvers"))
+		Expect(s.Reason).To(Equal("awaiting decision"))
+		Expect(s.RequestedAt).NotTo(BeNil())
+		Expect(s.State).To(Equal(relayv1alpha1.ApprovalStatePending), "empty observed state surfaces as Pending")
+	})
+
+	It("sorts, caps, and clears the pending-approval summary", func() {
+		session := &relayv1alpha1.AgentSession{}
+		setPendingApprovals(session, []relayv1alpha1.RuntimeApprovalSummary{
+			{Name: "b"}, {Name: "a"}, {Name: "c"},
+		})
+		Expect(session.Status.PendingApprovals).To(HaveLen(3))
+		Expect(session.Status.PendingApprovals[0].Name).To(Equal("a"))
+		Expect(session.Status.PendingApprovals[2].Name).To(Equal("c"))
+
+		over := make([]relayv1alpha1.RuntimeApprovalSummary, maxPendingApprovals+5)
+		for i := range over {
+			over[i].Name = fmt.Sprintf("h-%03d", i)
+		}
+		setPendingApprovals(session, over)
+		Expect(session.Status.PendingApprovals).To(HaveLen(maxPendingApprovals))
+
+		setPendingApprovals(session, nil)
+		Expect(session.Status.PendingApprovals).To(BeNil())
 	})
 
 	It("derives the validity window from policy first, then scope.window", func() {

@@ -30,6 +30,10 @@ import (
 // patchStatusWithEnforcement persists status and reconciles NetworkPolicy enforcement.
 func (r *AgentSessionReconciler) patchStatusWithEnforcement(ctx context.Context, original, session *relayv1alpha1.AgentSession, profile *relayv1alpha1.RuntimeProfile) error {
 	if isTerminal(session.Status.Phase) {
+		// Runtime tool-approval holds are only meaningful while the session runs;
+		// reconcileRuntimeApprovals does not run on terminal passes, so clear any
+		// stale "pending approval" entries here as a central guard.
+		session.Status.PendingApprovals = nil
 		if err := r.collectSessionOutputs(ctx, session); err != nil {
 			r.recordWarning(session, EventReasonOutputsCollectionFailed, err.Error())
 		}

@@ -1046,6 +1046,74 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              pendingApprovals:
+                description: |-
+                  PendingApprovals lists outstanding mid-execution per-tool approval holds
+                  (ApprovalRequest spec.trigger=runtime) awaiting a human decision for this
+                  session. It surfaces the operational "what needs approval now?" question for
+                  UI/observability and is redaction-safe (argDigest only, never raw args).
+                  Controller-owned: recomputed each reconcile and cleared as holds are decided
+                  or the session reaches a terminal phase. Bounded to keep status small.
+                items:
+                  description: |-
+                    RuntimeApprovalSummary is a redaction-safe view of one outstanding
+                    mid-execution per-tool approval hold (ApprovalRequest spec.trigger=runtime)
+                    gating this session. It answers the operational "what needs a human now?"
+                    question for UI/observability surfaces WITHOUT leaking tool-call arguments —
+                    only a digest is exposed. It is controller-owned, recomputed each reconcile,
+                    and entries drop off once the hold is decided (granted/denied/expired).
+                  properties:
+                    action:
+                      description: Action is the gated action type (e.g. "deploy").
+                      type: string
+                    argDigest:
+                      description: |-
+                        ArgDigest is a redacted fingerprint (e.g. sha256) of the held call's
+                        arguments. It NEVER carries raw argument values — only a digest — so this
+                        surface stays redaction-safe.
+                      type: string
+                    name:
+                      description: Name is the ApprovalRequest object gating the held
+                        tool call.
+                      type: string
+                    policyRef:
+                      description: |-
+                        PolicyRef is the ApprovalPolicy gating the hold, if any (empty for
+                        policy-less holds gated solely by RBAC on the ApprovalRequest).
+                      type: string
+                    reason:
+                      description: Reason is a short human-readable explanation of
+                        the current state.
+                      type: string
+                    requestId:
+                      description: |-
+                        RequestID correlates this hold with the data-plane call that raised it
+                        (the reporter's idempotency key). Empty if the gateway did not supply one.
+                      type: string
+                    requestedAt:
+                      description: RequestedAt is when the hold's ApprovalRequest
+                        was created.
+                      format: date-time
+                      type: string
+                    state:
+                      description: State is the controller-observed lifecycle state
+                        (Pending while held).
+                      enum:
+                      - Pending
+                      - Granted
+                      - Denied
+                      - Expired
+                      type: string
+                    target:
+                      description: Target is the tool/entity being approved (scoped
+                        target, else action).
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-type: atomic
               phase:
                 description: Phase is the current high-level phase of the session.
                 enum:

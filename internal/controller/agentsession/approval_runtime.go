@@ -13,6 +13,7 @@ package agentsession
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ func (r *AgentSessionReconciler) reconcileRuntimeApprovals(ctx context.Context, 
 	if err := r.List(ctx, &list, client.InNamespace(session.Namespace)); err != nil {
 		return fmt.Errorf("list ApprovalRequests: %w", err)
 	}
+	var pending []relayv1alpha1.RuntimeApprovalSummary
 	for i := range list.Items {
 		req := &list.Items[i]
 		if req.Spec.SessionRef.Name != session.Name || !req.Spec.IsRuntime() {
@@ -53,8 +55,53 @@ func (r *AgentSessionReconciler) reconcileRuntimeApprovals(ctx context.Context, 
 		if err := r.reconcileRuntimeApproval(ctx, session, req); err != nil {
 			return err
 		}
+		// Surface only holds still awaiting a human after this pass; a request
+		// that just resolved (e.g. onTimeout) must not linger in the summary.
+		if !approvalStateDecided(req.Status.State) {
+			pending = append(pending, runtimeApprovalSummary(req))
+		}
 	}
+	setPendingApprovals(session, pending)
 	return nil
+}
+
+// maxPendingApprovals bounds status.pendingApprovals so a chatty/hostile agent
+// cannot grow the session object unboundedly. It mirrors the API MaxItems cap;
+// the reporter independently caps outstanding holds per session well below this.
+const maxPendingApprovals = 64
+
+// runtimeApprovalSummary projects an ApprovalRequest into the redaction-safe
+// status view (argDigest only — never raw arguments).
+func runtimeApprovalSummary(req *relayv1alpha1.ApprovalRequest) relayv1alpha1.RuntimeApprovalSummary {
+	state := req.Status.State
+	if state == "" {
+		state = relayv1alpha1.ApprovalStatePending
+	}
+	return relayv1alpha1.RuntimeApprovalSummary{
+		Name:        req.Name,
+		RequestID:   req.Spec.RequestID,
+		Action:      req.Spec.Action,
+		Target:      runtimeApprovalTarget(req),
+		ArgDigest:   req.Spec.Scope.ArgDigest,
+		State:       state,
+		PolicyRef:   req.Spec.PolicyRef,
+		RequestedAt: req.CreationTimestamp.DeepCopy(),
+		Reason:      req.Status.Reason,
+	}
+}
+
+// setPendingApprovals sorts (for stable, idempotent status patches), caps, and
+// assigns the outstanding-hold summary. An empty list clears the field.
+func setPendingApprovals(session *relayv1alpha1.AgentSession, pending []relayv1alpha1.RuntimeApprovalSummary) {
+	if len(pending) == 0 {
+		session.Status.PendingApprovals = nil
+		return
+	}
+	sort.Slice(pending, func(i, j int) bool { return pending[i].Name < pending[j].Name })
+	if len(pending) > maxPendingApprovals {
+		pending = pending[:maxPendingApprovals]
+	}
+	session.Status.PendingApprovals = pending
 }
 
 // reconcileRuntimeApproval drives a single runtime ApprovalRequest from its

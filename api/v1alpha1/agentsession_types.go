@@ -334,6 +334,53 @@ type PolicyViolation struct {
 	AssuranceLevel EvidenceAssurance `json:"assuranceLevel,omitempty"`
 }
 
+// RuntimeApprovalSummary is a redaction-safe view of one outstanding
+// mid-execution per-tool approval hold (ApprovalRequest spec.trigger=runtime)
+// gating this session. It answers the operational "what needs a human now?"
+// question for UI/observability surfaces WITHOUT leaking tool-call arguments —
+// only a digest is exposed. It is controller-owned, recomputed each reconcile,
+// and entries drop off once the hold is decided (granted/denied/expired).
+type RuntimeApprovalSummary struct {
+	// Name is the ApprovalRequest object gating the held tool call.
+	Name string `json:"name"`
+
+	// RequestID correlates this hold with the data-plane call that raised it
+	// (the reporter's idempotency key). Empty if the gateway did not supply one.
+	// +optional
+	RequestID string `json:"requestId,omitempty"`
+
+	// Action is the gated action type (e.g. "deploy").
+	// +optional
+	Action string `json:"action,omitempty"`
+
+	// Target is the tool/entity being approved (scoped target, else action).
+	// +optional
+	Target string `json:"target,omitempty"`
+
+	// ArgDigest is a redacted fingerprint (e.g. sha256) of the held call's
+	// arguments. It NEVER carries raw argument values — only a digest — so this
+	// surface stays redaction-safe.
+	// +optional
+	ArgDigest string `json:"argDigest,omitempty"`
+
+	// State is the controller-observed lifecycle state (Pending while held).
+	// +optional
+	State ApprovalState `json:"state,omitempty"`
+
+	// PolicyRef is the ApprovalPolicy gating the hold, if any (empty for
+	// policy-less holds gated solely by RBAC on the ApprovalRequest).
+	// +optional
+	PolicyRef string `json:"policyRef,omitempty"`
+
+	// RequestedAt is when the hold's ApprovalRequest was created.
+	// +optional
+	RequestedAt *metav1.Time `json:"requestedAt,omitempty"`
+
+	// Reason is a short human-readable explanation of the current state.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+}
+
 // ArtifactRef references an artifact produced by an AgentSession.
 // Populated when spec.outputs requests log/artifact collection on terminal phases.
 type ArtifactRef struct {
@@ -435,6 +482,17 @@ type AgentSessionStatus struct {
 	// Artifacts references artifacts collected from this session when spec.outputs requests retention.
 	// +optional
 	Artifacts []ArtifactRef `json:"artifacts,omitempty"`
+
+	// PendingApprovals lists outstanding mid-execution per-tool approval holds
+	// (ApprovalRequest spec.trigger=runtime) awaiting a human decision for this
+	// session. It surfaces the operational "what needs approval now?" question for
+	// UI/observability and is redaction-safe (argDigest only, never raw args).
+	// Controller-owned: recomputed each reconcile and cleared as holds are decided
+	// or the session reaches a terminal phase. Bounded to keep status small.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=64
+	PendingApprovals []RuntimeApprovalSummary `json:"pendingApprovals,omitempty"`
 }
 
 // AgentSession is the Schema for the agentsessions API.
