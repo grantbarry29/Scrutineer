@@ -25,11 +25,34 @@ import (
 	"github.com/secureai/relay/internal/enforcement"
 )
 
-const reportPath = "/v1/report"
+const (
+	reportPath    = "/v1/report"
+	approvalsPath = "/v1/approvals"
+)
 
 type sessionRef struct {
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
+}
+
+// approvalRegisterRequest mirrors the reporter's POST /v1/approvals body. It
+// carries only a redacted argDigest — never raw argument values.
+type approvalRegisterRequest struct {
+	Session   sessionRef `json:"session"`
+	RequestID string     `json:"requestId"`
+	Action    string     `json:"action"`
+	Target    string     `json:"target,omitempty"`
+	ArgDigest string     `json:"argDigest,omitempty"`
+	PolicyRef string     `json:"policyRef,omitempty"`
+	Window    string     `json:"window,omitempty"`
+}
+
+// approvalResponse mirrors the reporter's approval-channel response.
+type approvalResponse struct {
+	ApprovalID string `json:"approvalId"`
+	State      string `json:"state"`
+	ExpiresAt  string `json:"expiresAt,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 type reportRequest struct {
@@ -101,4 +124,68 @@ func (c *ReporterClient) Submit(ctx context.Context, env RuntimeEnv, report enfo
 		return fmt.Errorf("reporter returned %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// RegisterApproval registers (idempotently) a mid-execution hold for a tool call
+// and returns the current approval state. The endpoint dedupes by requestId.
+func (c *ReporterClient) RegisterApproval(ctx context.Context, env RuntimeEnv, reg approvalRegisterRequest) (approvalResponse, error) {
+	if c == nil {
+		return approvalResponse{}, fmt.Errorf("reporter client is nil")
+	}
+	reg.Session = sessionRef{Namespace: env.SessionNamespace, Name: env.SessionName}
+	body, err := json.Marshal(reg)
+	if err != nil {
+		return approvalResponse{}, fmt.Errorf("marshal approval: %w", err)
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, c.BaseURL+approvalsPath, bytes.NewReader(body))
+	if err != nil {
+		return approvalResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return c.doApproval(req)
+}
+
+// GetApproval polls the current state of a hold by approval id.
+func (c *ReporterClient) GetApproval(ctx context.Context, env RuntimeEnv, approvalID string) (approvalResponse, error) {
+	if c == nil {
+		return approvalResponse{}, fmt.Errorf("reporter client is nil")
+	}
+	url := fmt.Sprintf("%s%s/%s?namespace=%s", c.BaseURL, approvalsPath, approvalID, env.SessionNamespace)
+	req, err := c.newRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return approvalResponse{}, err
+	}
+	return c.doApproval(req)
+}
+
+// newRequest builds an authenticated request using the projected reporter token.
+func (c *ReporterClient) newRequest(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
+	token, err := os.ReadFile(c.TokenPath)
+	if err != nil {
+		return nil, fmt.Errorf("read reporter token: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+	return req, nil
+}
+
+// doApproval executes an approval-channel request and decodes the JSON response.
+func (c *ReporterClient) doApproval(req *http.Request) (approvalResponse, error) {
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return approvalResponse{}, fmt.Errorf("approval request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return approvalResponse{}, fmt.Errorf("approval endpoint returned %d", resp.StatusCode)
+	}
+	var out approvalResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return approvalResponse{}, fmt.Errorf("decode approval response: %w", err)
+	}
+	return out, nil
 }

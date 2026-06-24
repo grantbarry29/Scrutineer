@@ -171,6 +171,27 @@ func TestEvaluateTool_nameDenyTakesPrecedence(t *testing.T) {
 	}
 }
 
+func TestEvaluateTool_argDenyBeatsApproval(t *testing.T) {
+	// A tool both requiring approval and matching a deny argument rule must be
+	// auto-denied (never escalated to a human).
+	rules := relayv1alpha1.PolicyRules{
+		RequireHumanApproval: []string{"deploy"},
+		ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+			Tools:       []string{"deploy"},
+			Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "env", Op: relayv1alpha1.ArgOpEquals, Values: []string{"prod"}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+		}},
+	}
+	auth := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "deploy", Arguments: map[string]any{"env": "prod"}})
+	if auth.Reason != ReasonArgumentDenied {
+		t.Fatalf("expected ArgumentDenied to beat approval, got %+v", auth)
+	}
+	// Same tool that does NOT match the deny rule still routes to approval.
+	hold := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "deploy", Arguments: map[string]any{"env": "staging"}})
+	if hold.Reason != ReasonApprovalRequired {
+		t.Fatalf("expected ApprovalRequired, got %+v", hold)
+	}
+}
+
 func TestRuntimeReport_argumentDeny_redactsValue(t *testing.T) {
 	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{})
 	secret := "/etc/shadow-supersecret"

@@ -61,7 +61,11 @@ func formatToolMessage(ctx enforcement.SessionContext, req ToolRequest, auth Too
 	case ReasonNotInAllowedTools:
 		return fmt.Sprintf("tool %q is not in allowedTools (mode=%s)", tool, ctx.Mode)
 	case ReasonApprovalRequired:
-		return fmt.Sprintf("tool %q requires human approval (not enforced in MVP; mode=%s)", tool, ctx.Mode)
+		return fmt.Sprintf("tool %q requires human approval (mode=%s)", tool, ctx.Mode)
+	case ReasonApprovalGranted:
+		return fmt.Sprintf("tool %q allowed by human approval (mode=%s)", tool, ctx.Mode)
+	case ReasonApprovalDenied:
+		return fmt.Sprintf("tool %q denied by human approval (mode=%s)", tool, ctx.Mode)
 	case ReasonArgumentDenied:
 		return fmt.Sprintf("tool %q denied by argument rule (%s; mode=%s)", tool, argMatchDetail(auth.ArgMatch), ctx.Mode)
 	case ReasonArgumentNotAllowed:
@@ -73,13 +77,59 @@ func formatToolMessage(ctx enforcement.SessionContext, req ToolRequest, auth Too
 	}
 }
 
+// ApprovalResolvedReport builds self-reported runtime evidence for a resolved
+// mid-execution approval hold. It records that the gateway held the call and then
+// allowed or denied it per the human decision. The message carries only the
+// redacted argDigest — never raw arguments — preserving the redaction invariant.
+func ApprovalResolvedReport(ctx enforcement.SessionContext, req ToolRequest, argDigest string, granted bool, now time.Time) enforcement.RuntimeReport {
+	ts := metav1.NewTime(now)
+	target := req.Tool
+	if target == "" {
+		target = req.Method
+	}
+	reason := ReasonApprovalDenied
+	action := relayv1alpha1.PolicyDecisionDeny
+	if granted {
+		reason = ReasonApprovalGranted
+		action = relayv1alpha1.PolicyDecisionAllow
+	}
+	digest := argDigest
+	if digest == "" {
+		digest = "none"
+	}
+	decision := relayv1alpha1.PolicyDecision{
+		Time:    ts,
+		Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+		Type:    "approval",
+		Action:  action,
+		Actor:   "relay-tool-gateway",
+		Target:  target,
+		Reason:  reason,
+		Message: fmt.Sprintf("%s [argDigest=%s]", formatApprovalResolvedMessage(target, granted, ctx.Mode), digest),
+		Mode:    ctx.Mode,
+		Rule:    "requireHumanApproval",
+	}
+	report := enforcement.RuntimeReport{Decisions: []relayv1alpha1.PolicyDecision{decision}}
+	if v, ok := enforcement.ViolationFromDecision(decision); ok {
+		report.Violations = []relayv1alpha1.PolicyViolation{v}
+	}
+	return report
+}
+
+func formatApprovalResolvedMessage(tool string, granted bool, mode relayv1alpha1.PolicyMode) string {
+	if granted {
+		return fmt.Sprintf("tool %q allowed by human approval (mode=%s)", tool, mode)
+	}
+	return fmt.Sprintf("tool %q denied by human approval (mode=%s)", tool, mode)
+}
+
 func ruleFieldForReason(reason string) string {
 	switch reason {
 	case ReasonDeniedTools:
 		return "deniedTools"
 	case ReasonNotInAllowedTools:
 		return "allowedTools"
-	case ReasonApprovalRequired:
+	case ReasonApprovalRequired, ReasonApprovalGranted, ReasonApprovalDenied:
 		return "requireHumanApproval"
 	case ReasonArgumentDenied, ReasonArgumentNotAllowed:
 		return "argumentRules"

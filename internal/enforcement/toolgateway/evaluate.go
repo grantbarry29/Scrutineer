@@ -24,6 +24,11 @@ const (
 	ReasonApprovalRequired   = "ApprovalRequired"
 	ReasonArgumentDenied     = "ArgumentDenied"
 	ReasonArgumentNotAllowed = "ArgumentNotAllowed"
+	// ReasonApprovalGranted / ReasonApprovalDenied record the outcome of a resolved
+	// mid-execution human-approval hold (self-reported by the gateway after the
+	// controller-observed decision lands).
+	ReasonApprovalGranted = "ApprovalGranted"
+	ReasonApprovalDenied  = "ApprovalDenied"
 )
 
 // DefaultListenAddr is the in-pod URL agents use when a tool-gateway sidecar is injected.
@@ -82,15 +87,20 @@ func EvaluateTool(ctx enforcement.SessionContext, req ToolRequest) ToolAuthoriza
 	if len(rules.AllowedTools) > 0 && !containsString(rules.AllowedTools, tool) {
 		return authorize(ctx.Mode, true, ReasonNotInAllowedTools)
 	}
-	if containsString(rules.RequireHumanApproval, tool) {
-		// Approval workflows are Phase 5; surface as would-deny under restrictive modes.
-		return authorize(ctx.Mode, true, ReasonApprovalRequired)
-	}
-	// Argument constraints apply only to calls that passed the name gate.
+	// Argument constraints apply only to calls that passed the name gate, and run
+	// BEFORE the human-approval gate: an auto-denied call must never be escalated
+	// to a person.
 	if reason, match := evaluateArgumentRules(rules.ArgumentRules, req); reason != "" {
 		auth := authorize(ctx.Mode, true, reason)
 		auth.ArgMatch = match
 		return auth
+	}
+	if containsString(rules.RequireHumanApproval, tool) {
+		// A call that passed all automatic checks but matches requireHumanApproval is
+		// held for a human (mid-execution gate). Under enforced mode this blocks until
+		// a scoped grant (the gateway turns this into a hold-and-ask); under audit/
+		// dry-run it is recorded as a would-require-approval and allowed through.
+		return authorize(ctx.Mode, true, ReasonApprovalRequired)
 	}
 	return ToolAuthorization{
 		Evaluation: enforcement.Evaluation{
