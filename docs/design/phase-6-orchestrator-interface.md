@@ -1,6 +1,8 @@
 # Phase 6 — Orchestrator Backend Interface
 
-> **Status:** Slices 1 (design), 2 (extraction), and 2b (`observation` normalization) shipped. The AgentSession reconciler calls Kubernetes Jobs only through a `runtimeBackend` interface selected from a registry keyed by `spec.runtime.orchestrator` (`internal/controller/agentsession/runtime_backend.go`). Backends return a normalized `observation`; the **reconciler** owns all status/condition/event/result mapping (`applyObservation`/`applyRuntimePhase`). This decouples the controller from Jobs so other execution backends (Tekton, Argo, Temporal, external workers) can be governed without rewriting governance logic. Next: a concrete second backend (slice 4) and, if needed, status-field generalization (slice 3).
+> **Status:** Slices 1 (design), 2 (extraction), and 2b (`observation` normalization) **shipped**. The AgentSession reconciler calls Kubernetes Jobs only through a `runtimeBackend` interface selected from a registry keyed by `spec.runtime.orchestrator` (`internal/controller/agentsession/runtime_backend.go`). Backends return a normalized `observation`; the **reconciler** owns all status/condition/event/result mapping (`applyObservation`/`applyRuntimePhase`). This decouples the controller from Jobs so other execution backends (Tekton, Argo, Temporal, external workers) can be governed without rewriting governance logic.
+>
+> **Next (slices 3–10, designed below):** prove the abstraction with a **second in-tree backend — `kubernetes-pod`** (a bare Pod, the *reference adapter*), which forces and validates the cross-cutting generalizations any backend needs: a shared pod-template builder (slice 3), a backend-neutral `status.runtimeRef` (slice 4, resolves open question #1), and per-backend completion/drift semantics. `kubernetes-pod` is dependency-free and fully testable in the existing envtest + kind e2e harness, so it de-risks the **external** adapters (Tekton → Argo → Temporal) that follow without committing to their dependencies first. See *Second backend: `kubernetes-pod`* and the updated *Migration plan* below.
 
 ## Purpose
 
@@ -127,17 +129,50 @@ Enforcement sidecars and the reporter token are injected by `internal/controller
 - Ownership/GC stays owner-reference based where the backend uses `Owns()`; `blockOwnerDeletion=false` semantics (so the session can finalize) are preserved.
 - No backend may weaken the evidence-integrity story silently; assurance level must reflect the backend's real channel.
 
+## Second backend: `kubernetes-pod` (reference adapter)
+
+The first non-Job backend is a **bare Pod** (`spec.runtime.orchestrator: kubernetes-pod`): the agent + enforcement sidecars run as a single Pod the controller owns directly, with no Job wrapper. It is chosen as the *reference* second backend deliberately:
+
+- **Dependency-free and fully testable.** No external CRDs, operators, or `go.mod` additions; it runs in the existing envtest control plane and the kind e2e harness exactly like the Job backend. An external adapter (Tekton/Argo) would add a heavyweight dependency and bespoke e2e infra before the abstraction is proven.
+- **Exercises every generalization point** a real adapter needs, so it de-risks them: a different runtime object kind (`Pod` vs `Job`), different completion semantics (`Pod.Status.Phase` vs Job `Succeeded`/`Failed` counts + backoff), different timeout handling (`Pod.spec.activeDeadlineSeconds` directly), different drift/replace (Pods are largely immutable → delete+recreate, no Job-backoff wrapper), a different `ownedType` (`&corev1.Pod{}`), and it forces `status.runtimeRef` generalization.
+- **Reuses the data-plane wiring unchanged.** Because it is still a co-located Pod, the shared pod-template builder injects the same enforcement sidecars + projected reporter token, so runtime evidence stays `self-reported` with **no assurance regression** (same trust posture as the Job backend).
+- **Honest product value.** A bare Pod is a legitimate runtime for agents that want a simple lifecycle with no Job retry/TTL/backoff wrapper; it is not throwaway scaffolding.
+
+### Job vs Pod backend (what differs behind the interface)
+
+| Concern | `kubernetes-job` | `kubernetes-pod` |
+|---------|------------------|------------------|
+| Runtime object | `batchv1.Job` (wraps a Pod template) | `corev1.Pod` (the workload directly) |
+| `observation.runtimeName` / `runtimeRef` | Job name, kind `Job` | Pod name, kind `Pod` |
+| `observation.workloadName` (`status.podName`) | owned Pod discovered via Job UID | the Pod itself |
+| Completion → `runtimePhase` | `Succeeded`/`Failed`+`BackoffExhausted`/`TimedOut`/`Active` | `Pod.Status.Phase` `Succeeded`/`Failed`; `DeadlineExceeded` → `TimedOut`; `Running` |
+| Timeout | Job `activeDeadlineSeconds` | Pod `activeDeadlineSeconds` |
+| Drift replace | delete+recreate pending Job (`ReplaceableForSync`) | delete+recreate pending Pod (Pods are immutable) |
+| `ownedType()` (watch) | `&batchv1.Job{}` | `&corev1.Pod{}` |
+
+The **governance pipeline does not change**: validate → resolve → approval gate → `backend.ensure` → `applyObservation`. Only the runtime mechanics behind `runtimeBackend` differ.
+
+### Shared pod-template builder
+
+`internal/controller/job.Build` currently constructs the agent container + Pod spec (sidecar injection, projected reporter token, `automountServiceAccountToken: false`, security context, workspace volumes) **inline** and wraps it in a Job. Slice 3 extracts that Pod-template construction into a shared, exported builder (e.g. `BuildPodTemplateSpec`) that **both** backends call, so the data-plane/governance wiring is identical and defined once. `Build` becomes "shared pod template + Job wrapper (`backoffLimit`/`ttl`/`activeDeadlineSeconds`)"; the Pod backend uses the shared template directly. This keeps the evidence/sidecar story uniform and avoids two divergent copies.
+
 ## Migration plan (slices)
 
-1. **This doc** (design). — *done*
-2. **Extract `runtimeBackend` + `kubernetes-job` implementation** — *done*. The reconciler routes runtime calls (`ensure`/`stop`/`runtimeGone`/`ownedType`) through a `backendRegistry` keyed by `spec.runtime.orchestrator`; the `kubernetesJobBackend` (`internal/controller/agentsession/runtime_backend.go`) holds the Job mechanics. Behavior-preserving; all existing envtests green.
-2b. **Normalize to `observation`** — *done*. `kubernetesJobBackend.ensure` returns a backend-neutral `observation` (`phase`/`runtimeName`/`workloadName`/`created`/`replaced`/`policyInSync`/`policyMessage`) and no longer writes to the session. The reconciler's `applyObservation`/`applyRuntimePhase` own phase→`AgentSessionPhase` mapping, conditions, lifecycle events, and `SessionResult`. The backend holds only client/apiReader/scheme (no event recorder). Behavior-preserving; full suite green.
-3. **Generalize Job/Pod-specific status fields** (open question below) only if a second backend needs it.
-4. **Adapters** — Tekton, then Argo/Temporal, each its own slice with its own evidence/assurance declaration.
+1. **Design doc** (this doc). — *done*.
+2. **Extract `runtimeBackend` + `kubernetes-job` implementation** — *done*. Reconciler routes `ensure`/`stop`/`runtimeGone`/`ownedType` through a `backendRegistry` keyed by `spec.runtime.orchestrator`; `kubernetesJobBackend` holds the Job mechanics. Behavior-preserving.
+2b. **Normalize to `observation`** — *done*. Backend returns a neutral `observation`; reconciler's `applyObservation`/`applyRuntimePhase` own all status mapping. Behavior-preserving.
+3. **Extract the shared pod-template builder** (`internal/controller/job`) — refactor only; `Build` output unchanged; both backends will reuse it.
+4. **Generalize status to `status.runtimeRef`** — additive API field + `observation.runtimeRef`; `applyObservation` populates it; Job backend fills kind `Job` and keeps `jobName`/`podName`. (Resolves open question #1.)
+5. **`kubernetes-pod` backend** — new `kubernetesPodBackend` (`ensure`/`stop`/`runtimeGone`/`ownedType`); register in the registry; accept `kubernetes-pod` in `validateSpec`; constant.
+6. **Pod backend correctness + unit tests** — `podRuntimePhase` mapping (succeeded/failed/timed-out/running), drift→replace, `runtimeGone`; table-driven unit tests.
+7. **Watch wiring** — `SetupWithManager` `Owns` every registered backend's `ownedType()` (Job **and** Pod) so completions trigger reconciles; envtest.
+8. **Live e2e** — a `kubernetes-pod` session runs as a Pod and reaches `Succeeded` with `status.runtimeRef` kind `Pod`.
+9. **Docs + status alignment** — design-doc statuses, `architecture.md` (`runtimeRef`, second backend), README orchestrator section, status tracker.
+10. **External adapters (future, design per-adapter)** — **Tekton** (`PipelineRun`/`TaskRun`; pods still co-located → sidecars/reporter portable, `self-reported`), then **Argo Workflows**, then **Temporal / external worker** (no co-located pod → needs its own evidence channel + assurance declaration, open questions #3/#4). Each is its own design slice on top of the proven interface.
 
 ## Open questions
 
-1. **Status field generality:** `status.jobName`/`status.podName` are orchestrator-specific. Keep as-is (populated only by `kubernetes-job`) or add a neutral `status.runtimeRef`? Defer until a second backend exists (API change).
+1. **Status field generality:** `status.jobName`/`status.podName` are orchestrator-specific. **Resolved (slice 4 — designed):** add a backend-neutral `status.runtimeRef` (`apiVersion`, `kind`, `name`, optional `uid`) carrying the runtime object's identity for **any** backend, and extend `observation` with a `runtimeRef` so `applyObservation` populates it generically. `status.jobName`/`status.podName` are **retained, additive, and back-compatible**: the `kubernetes-job` backend keeps setting `jobName` (= `runtimeRef.name`, kind `Job`) and `podName` (the workload Pod); the `kubernetes-pod` backend sets `runtimeRef` (kind `Pod`) and `podName`, leaving `jobName` empty. New code/UI should read `runtimeRef`; `jobName` is a deprecated alias (kept through MVP, removed no earlier than a future API revision). This is an additive optional field — no breaking change.
 2. **Drift/replace semantics:** `PolicyEnvDrift`+`ReplaceableForSync` are Job-specific (delete+recreate pending Jobs). Each backend defines its own drift/replace policy behind `Ensure`; the reconciler only consumes `Observation.PolicyInSync`.
 3. **Evidence channel for non-pod backends:** how an external-worker backend reports runtime evidence and at what assurance — needs its own design when that adapter is built.
 4. **Sidecar portability:** enforcement sidecars assume a shared pod. Backends without co-located pods need a different enforcement story (gateway/eBPF/out-of-pod) — out of scope here.

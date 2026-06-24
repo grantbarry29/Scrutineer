@@ -7,6 +7,13 @@
 bin/
 testbin/*
 
+# Accidentally-built cmd binaries at the repo root (built via `go build ./cmd/<x>`)
+/manager
+/relay
+/dns-proxy
+/tool-gateway
+/fs-gateway
+
 # Test binary, build with `go test -c`
 *.test
 

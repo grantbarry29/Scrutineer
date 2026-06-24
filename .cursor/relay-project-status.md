@@ -1,9 +1,18 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-24 (**Phase 5 COMPLETE** — slice 8 **authenticated approver identity**: opt-in mutating admission webhook (`internal/webhook/v1alpha1/approvalrequest_webhook.go`, `--enable-webhooks`) stamps `ApprovalRequest.spec.decidedBy` from the apiserver-authenticated `userInfo` so grants are non-spoofable, resolving approval-workflows open questions #1/#3; `failurePolicy: Fail`, no-op for controller writes, base deploy unaffected (cert-manager `config/webhooks` overlay); unit tests + kustomize render verified; webhook-mode envtest/live-e2e tracked as follow-up; per-tool runtime approval **observability surface** — new `AgentSessionStatus.pendingApprovals[]` (`RuntimeApprovalSummary`) surfaces outstanding runtime holds awaiting a human (redaction-safe: `argDigest` only), recomputed/sorted/capped(64) each pass by `reconcileRuntimeApprovals` and cleared on terminal phases; unit + envtest green; **dns-proxy egress-bypass fix** — controller now injects lowercase `http_proxy`/`https_proxy`/`no_proxy` alongside uppercase so BusyBox-wget/curl/Go agents are actually routed through the dns-proxy (was silently bypassable); unit guard `TestBuild_agentEnvRoutesGoAndBusyBoxClients` + full e2e 21/21; `make fmt` now `gofmt`s build-tagged files (e2e); approval-channel **abuse controls** — `POST /v1/approvals` rate-limits new holds + caps undecided runtime holds per session (16); existing-requestId re-register and GET polls exempt; reporter RBAC + e2e ClusterRole gained `approvalrequests: list`; unit tests + live e2e re-verified; per-tool runtime approval **COMPLETE** — impl slice 4 (live e2e): `test/e2e/tool_approval_test.go` holds an enforced `requireHumanApproval` `deploy` call in a running pod, the gateway registers a runtime `ApprovalRequest` via the reporter channel, a `spec.decision=granted` releases it without changing the session phase, and `status.policyDecisions` shows a redacted `type:approval`/allow decision (`argDigest` only, no leaked arg); e2e reporter ClusterRole gained `approvalrequests: get;create`; verified green on live kind; per-tool runtime approval **impl slice 3** — tool-gateway hold-and-ask: `EvaluateTool` reordered so approval runs after hard denies, `handleApprovalHold` registers via the reporter approval channel + bounded long-polls (default 25s/1s) → 200 grant / 403 deny|expire / 202+Retry-After pending, idempotent `requestId` (agent-supplied or `tool|server|argDigest`), fails closed without a channel, resolved holds emit self-reported `type:approval` evidence with redacted `argDigest`, audit/dry-run still allow-through; gateway grant/deny/pending/no-channel + redaction + ordering tests green; per-tool runtime approval **impl slice 2** — reporter approval channel: `ApprovalHandler` serves `POST /v1/approvals` idempotent create-or-lookup keyed by `requestId` + `GET /v1/approvals/{id}?namespace=` poll, reuses TokenReview + pod→session ownership, creates runtime `ApprovalRequest` owner-ref'd to session, reports controller-observed state only, `argDigest`-only, fake-client tests green; per-tool runtime approval **impl slice 1** — controller runtime `ApprovalRequest` variant: `spec.trigger`/`requestId`/`scope.argDigest`, `reconcileRuntimeApprovals` resolves decision→state→audit per held tool call without gating session phase, nil-policy-safe expiry, approver-allowlist/`allOf`/`onTimeout` reused, envtest+unit tests; per-tool runtime approval **design** — `docs/design/phase-5-runtime-tool-approval.md`: cooperative mid-execution gate that holds a tool/MCP call for a scoped human grant, reusing `ApprovalRequest` + reporter approval channel, stamped `self-reported`; resolves approval-workflows open question #4; e2e probe distroless fix: `clusterImageRunnable` checks `node.status.images` instead of a `sh -c` probe pod, so live-evidence specs run against standard distroless images instead of skipping — verified live; tool argument constraints slice 4: live in-cluster e2e — enforced argument rule denies a tool call, redacted violation in status, verified on kind; tool argument constraints slice 3: tool-gateway per-call argument evaluation — path resolver + operator matchers, deny-precedence/allow-allowlist, redacted evidence, JSON propagation; tool argument constraints slice 2: `ToolArgumentRule`/`ArgumentConstraint` schema on `ToolPolicy`+`PolicyRules`, concatenate-merge, merge-time summary decision, sample + manifests; tool/MCP argument-constraints design doc; Phase 6 slice 2b: backend returns normalized `observation`, reconciler owns status mapping via `applyObservation`/`applyRuntimePhase`; Phase 6 slice 2: extracted `runtimeBackend` interface + registry + kubernetes-job backend, reconciler routes all runtime calls through it, behavior-preserving; end-of-task handoff protocol added to workflow rules; approval audit records carry controller assurance; Phase 6 orchestrator-interface design doc; assurance level in violation/runtime-report audit records; approval-decision audit records + at-most-once notify fix; Phase 5 slice 6: multi-approver allOf; approval_queue_depth counts pending ApprovalRequests; reconcile churn fix: idempotent resolution events; observability export design doc; Phase 5 slice 5: approver allowlist; evidence-integrity slice 2: agent SA automount off; `model.baseURL`; Phase 5 slice 4: approval notification hooks; slice 3: `ApprovalRequest` CRD + controller gate/resume; slice 2: `ApprovalPolicy` CRD; slice 1: approval design doc; evidence-integrity slice 1: `assuranceLevel`; 2026-06-16 audit pass — Phase 4 verified complete)
+> **Last updated:** 2026-06-24
 >
-> For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
+> For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md). Older completed-work detail lives in git history and the per-phase design docs — this file keeps completed items terse and open work in full.
+
+## Recent changes (newest first)
+
+- **Phase 6 second backend planned** — `kubernetes-pod` reference adapter + `status.runtimeRef` generalization designed (`docs/design/phase-6-orchestrator-interface.md`); ordered task cards under *Discovered Follow-Up Tasks → Phase 6*.
+- **Phase 5 COMPLETE (slice 8)** — authenticated approver identity via opt-in mutating webhook (`internal/webhook/v1alpha1/`, `--enable-webhooks`) stamps `ApprovalRequest.spec.decidedBy` from apiserver `userInfo`; `failurePolicy: Fail`; webhook-mode envtest + live cert-manager verification done.
+- **Per-tool runtime approval COMPLETE** — controller runtime variant, reporter approval channel, tool-gateway hold-and-ask, live e2e, abuse controls, and `status.pendingApprovals` surface (all redacted to `argDigest`).
+- **dns-proxy egress-bypass fix** — controller injects lowercase `http_proxy`/`https_proxy`/`no_proxy` too (BusyBox wget/curl/Go now routed through the proxy); regression guard + full e2e 21/21.
+- **Tool argument constraints COMPLETE** — `ToolArgumentRule`/`ArgumentConstraint` schema → gateway per-call eval → redacted evidence → live e2e.
+- **Phase 6 interface** — `runtimeBackend` + registry + `kubernetesJobBackend` extracted; backend returns a neutral `observation`; reconciler owns status mapping.
 
 The **roadmap** below is long-term product intent, not a single backlog. **Ready for Cursor Queue** lists the next small implementation slices.
 
@@ -13,59 +22,11 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phase 3b **closed**. Phase 4 **closed** (observability + audit). **Phase 5 substantively done:** slices 1 (design doc) + 2 (`ApprovalPolicy` CRD) + 3 (`ApprovalRequest` CRD + controller gate/resume) + 4 (notification hooks) + 5 (approver allowlist) + 6 (multi-approver `allOf`) **done**. The approval gate is real, notified, and supports single- or multi-approver: a session matching an `ApprovalPolicy` blocks in `AwaitingApproval` until granted, approvers are webhook-notified, and `allOf` requires every listed approver. **Phase 5 now COMPLETE** (slices 1–8): gate + notifications + approver allowlist + multi-approver `allOf` + per-tool runtime holds (+ `pendingApprovals` surface) + **authenticated approver identity** (opt-in mutating webhook, slice 8, 2026-06-24). **No queue head selected** — pick next from *Discovered Follow-Up Tasks* (e.g. webhook-mode envtest/live-e2e, or Phase 6 second orchestrator adapter).
+> **Critical path:** Phases 0–5 **closed** — control-plane reconciliation, three data-plane enforcement domains (network/tool/file), the runtime-evidence loop, observability/audit export, and human approval workflows (including per-tool runtime holds + authenticated approver identity) all ship. **Phase 6 (orchestrator adapters) is the active phase:** the `runtimeBackend` interface + `kubernetes-job` backend + normalized `observation` are done; the next work is the **`kubernetes-pod` reference backend + `status.runtimeRef` generalization**, decomposed into ordered slices 3–10 under *Discovered Follow-Up Tasks → Phase 6*. Design: [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md).
 
-**Runtime evidence loop — ordered sequence** (see *Discovered Follow-Up Tasks* for full cards):
+**Queue head:** *Phase 6 · slice 3 — extract the shared pod-template builder* (see card below). Slices 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 are dependency-ordered; do one per session, in order.
 
-1. ~~Runtime reporter mechanism design~~ — **done**
-2. ~~Runtime reporter loop (impl)~~ — **done** (`internal/reporter/`)
-3. ~~Structured session events API~~ — **done** (`status.events[]`, reporter `events[]` payload)
-4. ~~Reporter pod wiring~~ — **done** (`relay-controller-reporter` Service, projected token, `RELAY_REPORTER_URL`)
-5. ~~First-party dns-proxy image MVP~~ — **done** (`cmd/dns-proxy`, `Dockerfile.dns-proxy`, sidecar image ref)
-6. ~~First-party tool-gateway image MVP~~ — **done** (`cmd/tool-gateway`, `Dockerfile.tool-gateway`, sidecar image ref)
-7. ~~Live network violation population~~ — **done** (`test/e2e/network_violation_test.go`, in-cluster reporter for e2e)
-8. ~~File/workspace policy implementation~~ — **done** (`PolicyRules` path fields, `workspace.EvaluateFile`, env propagation)
-
-**Phase 4 observability** (roadmap): ~~usage metrics (control-plane)~~ → **execution plan below** → Prometheus → OTel → audit sink → log/artifact collection.
-
-### Phase 4 execution plan (pick in order)
-
-Agreed sequencing after usage-metrics ship (2026-06-10). Full cards in **Discovered Follow-Up Tasks** unless marked *(queue head)*.
-
-| # | Task | Why this order |
-|---|------|----------------|
-| ~~**A**~~ | ~~**E2e usage metric assertions**~~ — **done** | Live `networkRequests` / `toolCalls` in violation e2e specs. |
-| ~~**B**~~ | ~~**Session timeline model**~~ — **done** | `internal/observability` projection + design doc. |
-| ~~**C**~~ | ~~**Usage-only report idempotency (`reportId` cache)**~~ — **done** | In-process seen-cache; 24h TTL. |
-| ~~**D**~~ | ~~**FS gateway sidecar MVP**~~ — **done** | First-party image + sidecar injection + integration test. |
-| ~~**E**~~ | ~~**File usage metrics**~~ — **done** | `SessionUsage.fileOperations` from `type: file` decisions. |
-| ~~**F**~~ | ~~**Live file violation + usage e2e**~~ — **done** | `test/e2e/file_violation_test.go`; `kind-load-fs-gateway` in `test-e2e-images`. |
-
-After A–F: ~~Prometheus exporter~~ **done** → ~~OTel~~ **done** → ~~audit sink~~ **done** → ~~log/artifact collection~~ **done**.
-
----
-
-### Task: E2e usage metric assertions — Phase 4 · slice A — **done (2026-06-10)**
-
-**Shipped:** `test/e2e/network_violation_test.go` and `tool_violation_test.go` assert `status.usage.networkRequests` / `toolCalls` ≥ 1 alongside runtime violations and decisions.
-
-**Verification:** `make test` (pass 2026-06-10); live specs with `make test-e2e-images && make test-e2e`.
-
----
-
-### Task: Usage metrics (Phase 4) — **done (2026-06-10)**
-
-**Shipped:** `status.usage` populated via `ApplyUsageFromReport` — novel runtime decisions increment `networkRequests` (`type: network`) and `toolCalls` (`type: tool`); optional `usage` delta on `POST /v1/report` for tokens; idempotent with decision dedup; `mergeUsageInPlace` on reconcile/reporter patches. Tests: `usage_test.go`, `status_test.go`, `reporter/more_test.go`; live e2e usage in slice A.
-
-**Verification:** `make test` (pass 2026-06-10)
-
-### Task: Session timeline model (Phase 4) — slice B — **done (2026-06-10)**
-
-**Shipped:** `internal/observability/timeline.go` — `ProjectTimeline`, `FilterTimeline`, `GroupByCategory`; `TimelineEntry` with severity/title/detail normalization; `docs/design/phase-4-session-timeline.md`; unit tests.
-
-**Verification:** `make test` (pass 2026-06-10)
-
-**Recently completed** (do not re-implement unless regressions): **Log/artifact collection**; **Audit log sink**; **OpenTelemetry**; **Prometheus metrics**; file domain e2e; Phase 3b evidence loop.
+**Other ready picks** (independent of Phase 6): *Audit controller RBAC for least privilege*, *Pin dev tool versions in README*, *External artifact storage export (S3)* — all under *Discovered Follow-Up Tasks*.
 
 ---
 
@@ -101,216 +62,7 @@ After A–F: ~~Prometheus exporter~~ **done** → ~~OTel~~ **done** → ~~audit 
 
 ## Phase 2 completion tasks (archived — all done 2026-06-03)
 
-Tasks 1–6 below were implemented in sequence; kept for reference. Do not re-run unless regressions.
-
----
-
-### Task: RuntimeProfile CRD API and manifests
-
-**Goal:**  
-Ship a namespace-scoped `RuntimeProfile` CRD with declarative hardening and future sidecar/sandbox hooks.
-
-**Why it matters:**  
-Phase 2’s last roadmap item; operators need a reusable profile object before sessions can reference it.
-
-**Scope:**
-- Add `api/v1alpha1/runtimeprofile_types.go` with `RuntimeProfileSpec` / `RuntimeProfileStatus` (minimal status: `observedGeneration` reserved).
-- Spec fields (declarative only in this task):
-  - Container: `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities` (drop/add lists) — mirror Kubernetes `SecurityContext` subset.
-  - Pod: `runtimeClassName` (sandbox selection hook), `seccompProfile` (type + localhostProfile).
-  - Sidecars: optional `sidecars[]` with `name`, `type` (e.g. `envoy`, `dns-proxy`), `enabled` — **schema only**, no injection.
-- Register in `groupversion_info.go` / scheme; kubebuilder RBAC markers stub if needed later.
-- `config/crd/kustomization.yaml` includes `runtimeprofiles`.
-- Sample: `config/samples/relay_v1alpha1_runtimeprofile.yaml`; add to `config/samples/kustomization.yaml`.
-
-**Non-goals:**
-- Do not add `runtimeProfileRef` on `AgentSession` yet.
-- Do not change Job reconciliation or inject sidecars.
-- Do not implement gVisor/Kata/Envoy.
-
-**Acceptance criteria:**
-- `make manifests` generates `relay.secureai.dev_runtimeprofiles.yaml`.
-- `make verify-samples` passes including the new sample.
-- OpenAPI describes fields as declarative hooks until Phase 3 enforcement.
-
-**Expected files:**
-- `api/v1alpha1/runtimeprofile_types.go`
-- `api/v1alpha1/zz_generated.deepcopy.go` (generated)
-- `config/crd/bases/relay.secureai.dev_runtimeprofiles.yaml` (generated)
-- `config/crd/kustomization.yaml`
-- `config/samples/relay_v1alpha1_runtimeprofile.yaml`
-- `config/samples/kustomization.yaml`
-
-**Verification command:**  
-`make manifests && make verify-samples`
-
----
-
-### Task: AgentSession runtimeProfileRef and validation
-
-**Goal:**  
-Sessions can reference a `RuntimeProfile` in the same namespace; invalid refs fail validation like policy refs.
-
-**Why it matters:**  
-Wires the session API to profiles before the reconciler applies them to Jobs.
-
-**Scope:**
-- Add `spec.runtimeProfileRef` on `AgentSessionSpec` (name required; kind defaults to `RuntimeProfile`).
-- API comments: same-namespace only (match `PolicyRef` / `PromptConfigMapRef` pattern).
-- Controller `validateSpec` / resolve path: missing `RuntimeProfile` → `PhaseDenied` with clear reason (mirror `InvalidPolicy`).
-- Optional condition stub: `RuntimeProfileResolved` constant only (full wiring in task 3).
-
-**Non-goals:**
-- Do not apply profile fields to Job pod template yet.
-- Do not add RuntimeProfile watch.
-- Do not add cross-namespace refs.
-
-**Acceptance criteria:**
-- Valid ref passes validation; missing profile denies session without creating a Job.
-- Envtest covers happy ref + missing profile denial.
-
-**Expected files:**
-- `api/v1alpha1/agentsession_types.go`
-- `internal/controller/agentsession_controller.go` (validation)
-- `internal/controller/agentsession_controller_test.go`
-- `internal/controller/constants.go` (condition name constant)
-
-**Verification command:**  
-`make test`
-
----
-
-### Task: Apply RuntimeProfile to Job pod template
-
-**Goal:**  
-Referenced profiles merge into the owned Job’s pod/container security context and pod-level runtime settings.
-
-**Why it matters:**  
-Completes the control-plane loop: declare profile → materialize on the execution surface (Job template).
-
-**Scope:**
-- Load `RuntimeProfile` when `spec.runtimeProfileRef` is set (`internal/controller/runtimeprofile.go` or equivalent).
-- Merge profile container fields with `defaultContainerSecurityContext()` in `job.go` (profile overrides baseline where set).
-- Apply pod-level `runtimeClassName`, `seccompProfile` on Job pod template.
-- Status: `status.runtimeProfile` (or `matchedRuntimeProfile`) with name + `resourceVersion`/`generation`.
-- Set `RuntimeProfileResolved` condition True/False with reason (e.g. `ProfileApplied`, `ProfileNotFound`).
-- Normal event when profile applied (optional, match `PolicyResolved` style).
-
-**Non-goals:**
-- Do not inject sidecars from `spec.sidecars` (Phase 3).
-- Do not replace running Jobs on profile drift (document immutability; same as policy env on active Jobs).
-- Do not change sample images to require `runAsNonRoot` globally (only sessions with explicit profile).
-
-**Acceptance criteria:**
-- Envtest: session with profile ref produces Job with expected `securityContext` / `runtimeClassName`.
-- Session without ref keeps current baseline behavior (busybox-friendly default).
-- Missing profile → denied path from task 2 still works.
-
-**Expected files:**
-- `internal/controller/runtimeprofile.go` (new)
-- `internal/controller/job.go`
-- `internal/controller/agentsession_controller.go`
-- `internal/controller/agentsession_controller_test.go`
-- `api/v1alpha1/agentsession_types.go` (status field if added)
-
-**Verification command:**  
-`make test`
-
----
-
-### Task: RuntimeProfile watch for session re-reconcile
-
-**Goal:**  
-Updating or deleting a `RuntimeProfile` re-reconciles sessions that reference it.
-
-**Why it matters:**  
-Matches `AgentPolicy` / `ToolPolicy` watch behavior so profile edits propagate to pending Jobs.
-
-**Scope:**
-- `Watches(RuntimeProfile)` with map function → sessions in same namespace referencing profile name.
-- Reuse list+filter pattern from `internal/controller/policy_watch.go`.
-- Envtest: change profile `runAsNonRoot` (or similar) → session reconcile updates desired Job for pending Job; active Job behavior per immutability rules.
-
-**Non-goals:**
-- Do not implement profile drift replacement for active Jobs beyond existing immutability.
-- Do not watch sidecar ConfigMaps.
-
-**Acceptance criteria:**
-- Envtest proves profile update triggers reconcile and updates Job spec when Job is still pending (`Active==0`).
-- RBAC includes `runtimeprofiles` get/list/watch if not already present.
-
-**Expected files:**
-- `internal/controller/runtimeprofile_watch.go` (new) or extend `policy_watch.go`
-- `internal/controller/agentsession_controller.go` (`SetupWithManager`)
-- `internal/controller/agentsession_controller_test.go`
-- `config/rbac/role.yaml` (generated)
-
-**Verification command:**  
-`make manifests && make test`
-
----
-
-### Task: RuntimeProfile operator docs, samples, and e2e
-
-**Goal:**  
-Operators can discover, apply, and verify RuntimeProfile usage without reading controller code.
-
-**Why it matters:**  
-Phase 2 parity with policy CRDs (README + samples + verify-samples; e2e where practical).
-
-**Scope:**
-- README section: what RuntimeProfile does, same-namespace `runtimeProfileRef`, merge with baseline security context, immutability on running Jobs.
-- Update long-term / MVP tables (`RuntimeProfile` row: shipped vs schema-only sidecars).
-- Sample session: `config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml` + kustomization entry.
-- External reference scoping table: add `runtimeProfileRef` row.
-- E2e (if practical): assert Job pod spec field from applied profile, or document why envtest-only (image constraints).
-
-**Non-goals:**
-- Do not document Envoy/gVisor enforcement as shipped.
-- Do not add UI.
-
-**Acceptance criteria:**
-- `make verify-samples` includes runtime profile + session ref samples.
-- README accurately states declarative-only sidecar/sandbox fields.
-
-**Expected files:**
-- `README.md`
-- `config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml`
-- `config/samples/kustomization.yaml`
-- `test/e2e/` (optional new spec)
-
-**Verification command:**  
-`make verify-samples` (and `make test-e2e` if e2e added)
-
----
-
-### Task: Close Phase 2 roadmap and operational state
-
-**Goal:**  
-Status file and roadmap reflect Phase 2 as complete after RuntimeProfile ships.
-
-**Why it matters:**  
-Prevents agents from re-implementing finished work and clarifies Phase 3 entry point.
-
-**Scope:**
-- Mark `[x] RuntimeProfile CRD` on Phase 2 roadmap; add recent-fixes bullet.
-- Update **Current Operational State** table (`Additional CRDs (Phase 2)` → done).
-- Move completed Phase 2 completion cards to **Recently completed**; clear or repoint **Ready for Cursor Queue**.
-- Confirm **Phase 2 deferred** table still accurate (optional polish tasks remain discovered, not Phase 2 blockers).
-
-**Non-goals:**
-- Do not implement new code in this task.
-- Do not start Phase 3 work.
-
-**Acceptance criteria:**
-- No unchecked Phase 2 roadmap bullets except any explicitly deferred items with user approval.
-- **Next up** in queue points to Phase 3 planning or a promoted discovered task.
-
-**Expected files:**
-- `.cursor/relay-project-status.md`
-
-**Verification command:**  
-Review only (no code change required beyond status file)
+The six Phase 2 completion tasks (RuntimeProfile CRD → `runtimeProfileRef` + validation → apply profile to Job pod template → RuntimeProfile watch → operator docs/samples/e2e → roadmap close-out) shipped in sequence and are **done**. Full task templates live in git history; the capability/coverage table above summarizes the result. Do not re-run unless regressions.
 
 ---
 
@@ -320,266 +72,180 @@ Review only (no code change required beyond status file)
 
 Scoped tasks found by repository audit or implementation work. **Not in the active queue** until promoted. Pick one at a time into **Ready for Cursor Queue** when appropriate.
 
-### Task: ~~investigate failing dns-proxy live e2e (`Live network violation population`)~~ — **RESOLVED 2026-06-23 (real bug fixed)**
+---
 
-Full `make test-e2e` was 20/21; the dns-proxy `Live network violation` spec timed out with `status.violations` empty. **Root cause (a real product bug, not a test/env flake):** the controller injected egress proxy settings only as **uppercase** `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`, but BusyBox `wget` (and the e2e probe) reads **only the lowercase** `http_proxy`/`https_proxy`. So a BusyBox-based agent's egress never reached the dns-proxy — it resolved `evil.example` directly (`wget: bad address`), bypassing enforcement entirely with no evidence recorded. Verified live: in-pod `http_proxy=… wget http://evil.example/` returned `403 Forbidden` (proxy denies correctly) while the uppercase-only default failed to route. **Fix:** `applyAgentSidecarEnv` (`internal/controller/job/sidecars.go`) now also injects lowercase `http_proxy`/`https_proxy`/`no_proxy`; unit test asserts both cases; the live spec now passes cleanly in ~20s. **Implication:** dns-proxy egress enforcement was silently bypassable by common tooling (curl/wget/Go also honor lowercase) before this fix. **Audit (2026-06-23):** swept the codebase for the same uppercase-only assumption — proxy env injection exists only in `applyAgentSidecarEnv` (now fixed); no Go component uses `http.ProxyFromEnvironment`, and the other sidecars (tool-gateway, fs-gateway, reporter client, dns-proxy) call localhost/the Kube API directly and intentionally do **not** route through the dns-proxy, so no equivalent bug exists there. Full `make test-e2e` re-run after the fix: **21/21 green**. **Regression guard (2026-06-24):** `TestBuild_agentEnvRoutesGoAndBusyBoxClients` (`internal/controller/job/sidecars_test.go`) builds the agent env and, using the same `golang.org/x/net/http/httpproxy` logic `net/http` uses, asserts that **both** the uppercase set (Go/curl) and the lowercase set (BusyBox wget) resolve `http(s)://evil.example` to the dns-proxy and bypass loopback — so dropping either casing fails the build, not just a live e2e.
+### Phase 6 — orchestrator adapters (ordered task cards)
 
-**Runtime evidence loop — promote in this order** (rationale in *Ready for Cursor Queue*):
+**Goal of the phase:** prove Relay's governance is orchestrator-agnostic by adding a second `runtimeBackend` behind the existing interface, without coupling the reconciler to any one orchestrator. Design: [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md) (read it before starting any slice).
 
-1. ~~Runtime reporter mechanism design~~ — **done** (`docs/design/phase-3-runtime-reporter-contract.md`).
-2. ~~Runtime reporter loop (impl)~~ — **done** (`internal/reporter/`).
-3. ~~Structured session events API~~ — **done** (`docs/design/phase-4-session-events.md`).
-4. ~~Reporter pod wiring~~ — **done** (Service + projected token + `RELAY_REPORTER_URL`).
-5. ~~First-party dns-proxy image MVP~~ — **done** (`cmd/dns-proxy`, `Dockerfile.dns-proxy`).
-6. ~~First-party tool-gateway image MVP~~ — **done** (`cmd/tool-gateway`, `Dockerfile.tool-gateway`).
-7. ~~Live network violation population~~ — **done** (`test/e2e/network_violation_test.go`).
-8. ~~File/workspace policy implementation~~ — **done** (`internal/enforcement/workspace/`, `PolicyRules` path fields).
+**Decision (2026-06-24):** the concrete second backend is an in-tree **`kubernetes-pod`** backend (a bare Pod — the *reference adapter*), **not** Tekton-first. It is dependency-free, fully testable in the existing envtest + kind e2e harness, and exercises every generalization point a real adapter needs (different object kind, completion/timeout/drift semantics, `ownedType`, and `status.runtimeRef`). It de-risks the **external** adapters (Tekton → Argo → Temporal), which become slice 10+ design slices on top of the proven interface.
 
-Cards below are grouped: evidence-loop cards first, then unrelated backlog.
+**Implement slices 3 → 10 in order, one per session.** Slices 3 and 4 are prerequisites for the Pod backend; 5–8 build and verify it; 9–10 close out docs. Each card has one acceptance criterion and one verification command. Do **not** bundle slices, and do **not** add an external orchestrator dependency (Tekton/Argo CRDs) — those are explicitly out of scope until slice 10's design slice.
 
-### Task: Phase 5 · per-tool runtime approval — **COMPLETE (design + impl slices 1–4 done; slice 1 2026-06-21, slices 2–4 2026-06-23)**
+#### Task: Phase 6 · slice 3 — extract the shared pod-template builder
 
-**Design shipped:** `docs/design/phase-5-runtime-tool-approval.md` — a **mid-execution** human gate that holds a specific running tool/MCP call until a scoped, time-bounded human grant, then allows or denies it. Reuses the `ApprovalRequest` CRD (runtime variant keyed by `requestId`, `spec.trigger=runtime`, redacted `argDigest`) and the existing approver/`allOf`/notification/audit machinery; turns `requireHumanApproval` from a surfaced reason into a real hold (ordered **after** hard denies so auto-denied calls are never escalated). Extends the reporter contract with an approval request/lookup channel (`POST /v1/approvals` idempotent by `requestId`, `GET /v1/approvals/{id}`) reusing TokenReview + pod→session ownership; controller stays sole CRD-status writer. **Honest posture:** ships as a **cooperative** gate (gateway shares pod/SA) stamped `assuranceLevel: self-reported`; it does not claim adversarial-grade enforcement. Resolves `phase-5-approval-workflows.md` open question #4.
+**Goal:** make the agent Pod template (container + sidecars + reporter token + security context + workspace volumes) reusable by any backend, so the `kubernetes-pod` backend gets identical data-plane wiring.
 
-**Slice 1 shipped (controller runtime variant):** `ApprovalRequest` gained `spec.trigger` (`session`|`runtime`, default `session`), `spec.requestId`, and `spec.scope.argDigest` (redacted digest only — never raw args). New `reconcileRuntimeApprovals`/`reconcileRuntimeApproval` (`internal/controller/agentsession/approval_runtime.go`) resolve each runtime request's lifecycle (decision→state→audit) **without** touching session phase: approver-allowlist + `allOf` + `onTimeout` reused from the session gate; the human decision is mirrored to the audit sink (`audit.ApprovalDecision`); session-level self-reported evidence stays the gateway/reporter's job (slices 3+). Grant expiry is nil-policy-safe via `approvalValidityWindow` (policy `expiresAfter` → request `scope.window`). Wired as a pass in `Reconcile` after the session gate proceeds. Tests: `approval_runtime_test.go` (envtest grant/deny without session gating, unlisted-approver rejection with policy; unit helpers). Verified `go build`, `go vet`, controller/api/policy `go test` green (2026-06-21). **Files:** `api/v1alpha1/approvalrequest_types.go`, `internal/controller/agentsession/{approval.go,approval_runtime.go,reconciler.go}`, generated CRD + tests.
+**Scope:**
+- In `internal/controller/job`, extract the Pod-template construction currently inline in `Build` into an exported function, e.g. `BuildPodTemplateSpec(session, task, pol, profile) corev1.PodTemplateSpec` (name + labels + `podSpec` + sidecar injection + `automountServiceAccountToken:false` + profile/security merge).
+- `Build` calls the new function and only adds the Job wrapper (`backoffLimit`, `ttlSecondsAfterFinished`, `activeDeadlineSeconds`, `Template`).
 
-**Slice 2 shipped (reporter approval channel):** new `ApprovalHandler` (`internal/reporter/approvals.go`) serves `POST /v1/approvals` (idempotent create-or-lookup keyed by `requestId` via `RuntimeApprovalName`) and `GET /v1/approvals/{id}?namespace=` (poll), wired into the reporter `NewRunnable` mux. It reuses the reporter's `IdentityVerifier` (TokenReview + pod→Job→session ownership) on both paths (lookup authorizes against the stored request's session), creates the runtime `ApprovalRequest` owner-ref'd to the session (GC), and only reports the controller-observed `.status.state` — controller stays sole status writer. Carries `argDigest` only (no raw args). Request/response types in `types.go`; reporter RBAC marker adds `approvalrequests: get;create` (already covered by the controller role union — no manifest drift). Tests in `approvals_test.go` (idempotent create, lookup state, unauthorized/forbidden, bad-request, session/lookup not-found, deterministic+bounded name). Verified `go build`, `go vet`, `go test ./internal/reporter/...` green (2026-06-23).
+**Non-goals:**
+- No behavior change to the produced Job. No new backend yet. No API change.
 
-**Slice 3 shipped (tool-gateway hold-and-ask):** `EvaluateTool` reordered so `requireHumanApproval` is evaluated **after** hard denies (deniedTools / allowlist / argument-rule deny) — auto-denied calls are never escalated. A blocked approval-required outcome (enforced mode) routes to `handleApprovalHold` (`internal/enforcement/toolgateway/gateway.go`), which registers via the reporter approval channel (`ReporterClient.RegisterApproval`/`GetApproval`), bounded long-polls (`ApprovalHoldTimeout`/`ApprovalPollInterval`, default 25s/1s), then returns 200 on grant, 403 on deny/expire, or `202 {approvalId}` + `Retry-After` while pending. `requestId` is agent-supplied or derived from `tool|server|argDigest` (idempotent re-invoke). Fails closed (403) with no channel. Resolved holds emit self-reported runtime evidence via `ApprovalResolvedReport` (`type: approval`, `rule: requireHumanApproval`, redacted `argDigest`, never raw args); audit/dry-run still record would-require-approval and allow through. Tests: gateway grant/deny/pending(202)/no-channel + redaction assertion, `EvaluateTool` arg-deny-beats-approval ordering. Verified `go build`, `go vet`, `go test ./internal/enforcement/toolgateway/...` + controller envtest green (2026-06-23). **Files:** `internal/enforcement/toolgateway/{evaluate.go,gateway.go,report.go,reporter_client.go}` + tests.
+**Acceptance criteria:**
+- `Build`'s output Job is byte-for-byte equivalent to before (same labels, env, sidecars, security context, volumes, deadlines).
+- A unit test asserts the extracted template carries the agent container, injected sidecars, and `automountServiceAccountToken:false`.
+- All existing `internal/controller/job` + agentsession tests stay green.
 
-**Slice 4 shipped (live e2e):** `test/e2e/tool_approval_test.go` — an enforced `requireHumanApproval` `deploy` call is held in a running pod; the gateway registers `ApprovalRequest <session>-rt-<digest>` via the reporter approval channel; granting it (`spec.decision=granted`) releases the call **without** changing the session phase (asserted to stay Running); `status.policyDecisions` then shows a `type:approval`/`action:allow`/`reason:ApprovalGranted` decision carrying only `argDigest=sha256:…` (the `SECRETTOKEN` request arg never leaks into any decision/violation). The e2e in-cluster reporter ClusterRole gained `approvalrequests: get;create` (required for the channel to create the runtime request). Verified green against the live kind cluster (rebuilt + reloaded controller/reporter + tool-gateway images, reinstalled CRDs). **Files:** `test/e2e/{tool_approval_test.go,fixtures_test.go,reporter_infra_test.go}`.
+**Expected files:**
+- `internal/controller/job/builder.go` (+ optional `internal/controller/job/podtemplate.go`)
+- `internal/controller/job/builder_test.go`
 
-**Slice 6 shipped (observability surface — `status.pendingApprovals`, 2026-06-24):** `AgentSessionStatus.pendingApprovals[]` (new `RuntimeApprovalSummary`: `name`, `requestId`, `action`, `target`, `argDigest`, `state`, `policyRef`, `requestedAt`, `reason`) surfaces outstanding **runtime** holds awaiting a human, answering the future UI's "what needs approval now?" without leaking args (digest only). `reconcileRuntimeApprovals` recomputes it each active pass (sorted by name, capped at `maxPendingApprovals=64`, empty clears the field); `patchStatusWithEnforcement` clears it on terminal phases (a central guard since the runtime-approval pass doesn't run when terminal). Controller-owned and written through the normal reconciler status patch (replaced each pass, not union-merged). Tests: helper unit specs (redaction-safe projection, empty→Pending default, sort/cap/clear) + envtest assertions that a pending hold appears (with `argDigest`, no raw args) and drops off after grant. Verified `go build`, `go vet`, controller envtest green. **Files:** `api/v1alpha1/agentsession_types.go` (+ generated CRD/deepcopy), `internal/controller/agentsession/{approval_runtime.go,networkpolicy.go}` + tests.
+**Verification command:** `make test`
 
-**All impl slices complete.** Per-tool runtime approval is end-to-end: declare `requireHumanApproval`, the gateway holds the call, a scoped human grant releases it, and redacted self-reported evidence lands in session status.
+#### Task: Phase 6 · slice 4 — generalize runtime identity to `status.runtimeRef`
 
-**Follow-up DONE (2026-06-23):** approval-channel abuse controls — `POST /v1/approvals` now rate-limits NEW holds per session (`DefaultApprovalRegisterInterval`, `429`+`Retry-After`) and caps undecided runtime holds per session (`DefaultMaxOutstandingApprovals`=16, `429`). Re-registering an existing `requestId` (gateway keepalive) and all `GET` polls are exempt, so a cooperating long-poll loop is never throttled. The handler lists runtime `ApprovalRequest`s to count outstanding holds; reporter RBAC marker + e2e reporter ClusterRole gained `approvalrequests: list`. Tests: cap rejects the over-limit hold but exempts re-register and frees a slot after a grant; limiter throttles a second new hold at the same instant. `internal/reporter/{approvals.go,server.go}` + tests; live e2e re-verified green.
+**Goal:** give every backend a neutral way to record which runtime object it created, resolving design open question #1.
 
-**Open questions (in design doc):** blocking-model default (long-poll vs client re-poll), per-argument scoping granularity, grant reuse window, notifier fan-out, adversarial upgrade path.
+**Scope:**
+- Add a `RuntimeRef` struct (`apiVersion`, `kind`, `name`, optional `uid`) and `status.runtimeRef *RuntimeRef` on `AgentSessionStatus` (`api/v1alpha1/agentsession_types.go`); kubebuilder optional; regenerate CRD + deepcopy.
+- Extend the `observation` struct (`runtime_backend.go`) with a `runtimeRef` (kind + apiVersion + name); `applyObservation` (`reconciler.go`) populates `status.runtimeRef` generically.
+- `kubernetesJobBackend` sets `runtimeRef{kind:Job, apiVersion:batch/v1, name}` and keeps setting `status.jobName` (= `runtimeRef.name`) and `status.podName` (back-compat, additive).
+- API comment: `jobName` is a deprecated alias of `runtimeRef`; new readers use `runtimeRef`.
 
-### Task: Phase 6 · slice 2b — normalize `runtimeBackend` to `observation` (reconciler owns status) — **done (2026-06-21)**
+**Non-goals:**
+- Do not remove `jobName`/`podName`. No Pod backend yet. No UI.
 
-**Shipped:** `kubernetesJobBackend.ensure` now returns a backend-neutral `observation` (`phase`/`runtimeName`/`workloadName`/`created`/`replaced`/`policyInSync`/`policyMessage`) and no longer writes to the session. The reconciler's new `applyObservation` + `applyRuntimePhase` (`reconciler.go`) own all status mapping: phase→`AgentSessionPhase`, `RuntimeCreated`/`PolicyPropagated`/`Completed` conditions, lifecycle events (`JobCreated`/`JobRunning`/`JobSucceeded`/`JobFailed`/`PolicyEnvSynced`/`PolicyEnvDrift`), `StartTime`, and `SessionResult`. The backend dropped its event recorder (holds only client/apiReader/scheme); Job-state→phase mapping is the package func `jobRuntimePhase`. This restores the design-doc invariant "reconciler — not the backend — owns status," the prerequisite for a clean second backend.
+**Acceptance criteria:**
+- A Job-backed session populates `status.runtimeRef{kind:Job,name:relay-<session>}` **and** `status.jobName`/`status.podName` exactly as before (envtest).
+- `make manifests generate` is clean (CRD/deepcopy in sync).
 
-**Behavior-preserving:** full suite green (agentsession envtests + units). The two former `syncStatusFromJob` unit tests now exercise `applyRuntimePhase(session, jobRuntimePhase(job))`.
+**Expected files:**
+- `api/v1alpha1/agentsession_types.go` (+ generated CRD + deepcopy)
+- `internal/controller/agentsession/runtime_backend.go`, `reconciler.go`
+- agentsession envtest
 
-**Verification:** `go build ./...`; `go vet ./internal/controller/agentsession/...`; `KUBEBUILDER_ASSETS=… go test ./...` (all pass 2026-06-21).
+**Verification command:** `make manifests && make test`
 
-**Files:** `internal/controller/agentsession/runtime_backend.go`, `reconciler.go`, `reconciler_test.go`.
+#### Task: Phase 6 · slice 5 — `kubernetes-pod` backend (create/observe/stop)
 
-### Task: Provider-agnostic `model.baseURL` (enables OpenRouter & OpenAI-compatible endpoints) — **done (2026-06-21)**
+**Goal:** add a second runtime backend that runs the agent as a bare Pod, selectable via `spec.runtime.orchestrator: kubernetes-pod`.
 
-**Shipped:** Optional `ModelSpec.BaseURL` (`api/v1alpha1/agentsession_types.go`, CRD `Pattern=^https?://.+`); propagated to the agent as `AGENT_MODEL_BASE_URL` (`internal/controller/job/builder.go` + `constants.go`) and tracked in `managedEnvKeys` so a change is a policy-env drift/sync (`sync.go`). Controller defense-in-depth URL check in `validateSpec` (`validation.go`). Stays **provider-agnostic** — no provider allowlist; Relay never calls the model. Tests: `builder_test.go` (env set + empty when unset), `sync_test.go`/`builder_test.go` drift, `validation_test.go` (valid + non-http(s) rejected). README env list updated.
+**Scope:**
+- Add constant `OrchestratorKubernetesPod = "kubernetes-pod"` (`constants.go`); accept it in `validateSpec` (`validation.go`) alongside `kubernetes-job`.
+- New `kubernetesPodBackend` (`internal/controller/agentsession/backend_pod.go`) implementing `runtimeBackend`: `name()` → `kubernetes-pod`; `ensure()` builds a Pod from the shared pod-template builder (slice 3) wrapped in a `corev1.Pod` (set `RestartPolicy: Never`, `activeDeadlineSeconds` from `spec.runtime.timeoutSeconds`), Get/Create with owner-ref, ownership check (`IsControlledBy`), returns a normalized `observation` (`runtimeRef{kind:Pod}`, `workloadName` = pod name); `stop()` deletes the Pod; `runtimeGone()`; `ownedType()` → `&corev1.Pod{}`.
+- Register `kubernetesPodBackend` in the backend registry next to the Job backend.
 
-**Auth — still deferred (per user, 2026-06-21):** key delivery belongs to Phase 8 `CredentialProfile` + egress/tool-gateway brokering. An aggregator key is high blast radius → no plaintext key injection. Capturing the **routed** downstream model in evidence (so audit isn't blinded by the aggregator) is tracked under *Runtime evidence integrity*.
+**Non-goals:**
+- Completion/timeout/drift edge cases and their unit tests are **slice 6**. Watch wiring is **slice 7**. (Keep this slice to the create/observe/stop happy path.)
 
-**Verification:** `make manifests generate` + `go build`; `go test ./internal/controller/job/... ./internal/controller/agentsession/...` (pass 2026-06-21).
+**Acceptance criteria:**
+- An `AgentSession` with `orchestrator: kubernetes-pod` creates a **Pod** (not a Job), reaches `Running`, and on Pod success reaches a terminal phase; `status.runtimeRef.kind == Pod` (envtest happy path).
+- `kubernetes-job` sessions are unaffected.
 
-### Task: Investigate AgentSession reconcile churn (repeated PolicyResolved events + status conflicts) — **done (2026-06-21)**
+**Expected files:**
+- `internal/controller/agentsession/backend_pod.go` (new)
+- `internal/controller/agentsession/constants.go`, `validation.go`, `runtime_backend.go` (registry)
+- agentsession envtest
 
-**Discovered:** 2026-06-09 during the test-hardening e2e run. Controller logs show the same `PolicyResolved` / "Merged N referenced policies" event re-emitted many times on the *same* resourceVersion for a single session, plus occasional `update AgentSession status: conflict (will requeue)` errors.
+**Verification command:** `make test`
 
-**Findings:**
-- **Status writes were already idempotent** — `patchStatus` (`status.go`) unions conditions/decisions/violations/events, then short-circuits via `equalStatus` (`reflect.DeepEqual`) before `Status().Update`. `meta.SetStatusCondition` preserves `LastTransitionTime` when nothing changes, so no-op reconciles do not write. (Conflict errors are normal optimistic-concurrency requeues, not spurious writes.)
-- **Event emission was the churn** — `PolicyResolved` and `RuntimeProfileResolved` were recorded on *every* reconcile whenever policies matched / a profile applied, regardless of change, refreshing the aggregated Event's count + lastTimestamp on each requeue.
+#### Task: Phase 6 · slice 6 — Pod backend completion/timeout/drift correctness + unit tests
 
-**Shipped:** added `conditionChanged(snapshot, current, condType)` in `reconciler.go` (compares the reconcile-start snapshot `original` vs the freshly-set condition by status/reason/message). Gated both resolution events on it — emitted once per real transition instead of every requeue. Unit test `TestConditionChanged` (`churn_test.go`) covers absent/new/identical/message/reason/status cases.
+**Goal:** make the Pod backend's lifecycle mapping correct and well-tested across all phases.
 
-**Verification:** `go build ./...`; `go test ./internal/controller/agentsession/` (full envtest suite + unit, pass 2026-06-21).
+**Scope:**
+- A `podRuntimePhase(*corev1.Pod) runtimePhase` mapper: `PodSucceeded`→succeeded, `PodFailed`→failed (distinguish `reason: DeadlineExceeded` → timed-out), `PodRunning`/`PodPending`→running/pending.
+- Drift/replace: when policy env drifts and the Pod is still pending/not-started, delete+recreate (Pods are immutable); when running, surface drift without replace (mirror Job `PolicyEnvDrift` semantics via `observation.policyInSync`/`policyMessage`).
+- `runtimeGone()` correct for the deletion/finalizer path.
 
-**Files:** `internal/controller/agentsession/reconciler.go`, `internal/controller/agentsession/churn_test.go`.
+**Non-goals:**
+- No new API fields. No e2e (slice 8).
 
-### Task: Raise unit coverage on data-plane producer packages — **done (2026-06-10)**
+**Acceptance criteria:**
+- Table-driven unit tests cover `podRuntimePhase` for succeeded/failed/timed-out/running/pending, plus a drift→replace test and a running-Pod drift (no replace) test.
+- Pod backend package coverage ≥ the Job backend's.
 
-**Shipped:** Unit tests for `internal/controller/job` (status, sync drift, workspace volumes, envoy placeholder), `dnsproxy` (backend, evaluate/report/reporter/proxy allow path), `toolgateway` (runtime env, config, backend), `workspace` (backend, report), `policy` (LoadPolicyLayers fake client, ApplyStatus, caps/network merge decisions). All previously sub-70% packages now ≥73%.
+**Expected files:**
+- `internal/controller/agentsession/backend_pod.go`
+- `internal/controller/agentsession/backend_pod_test.go` (new)
 
-**Coverage (2026-06-10):** job **80.8%**, dnsproxy **73.7%**, toolgateway **85.8%**, workspace **95.8%**, policy **93.0%**.
+**Verification command:** `make test`
 
-**Verification:** `make test` (pass 2026-06-10).
+#### Task: Phase 6 · slice 7 — watch every registered backend's owned type
 
-### Task: Watch owned Pods for reconcile triggers — **done (2026-06-08)**
+**Goal:** ensure Pod-backed sessions reconcile promptly on runtime completion, like Job-backed ones.
 
-**Shipped:** Added `Watches(&corev1.Pod{})` in `SetupWithManager`; Pod event mapper enqueues the labeled AgentSession only for Job-owned Pods; envtest mapping coverage added.
+**Scope:**
+- In `SetupWithManager`, `Owns(...)` each registered backend's `ownedType()` (Job **and** Pod) instead of a single type, deduping if a type appears twice. Keep the existing labeled-Pod `Watches` mapper.
+- Confirm owner-reference + GC semantics hold for Pods (`blockOwnerDeletion` handling consistent with Jobs).
 
-**Verification:** `make test` (pass 2026-06-08)
+**Non-goals:**
+- No new backend. No API change.
 
-### Task: Document future-only status fields — **done (2026-06-08)**
+**Acceptance criteria:**
+- Envtest: a Pod-backed session transitions to a terminal phase when its owned Pod completes (reconcile triggered by the Pod watch).
+- Job-backed reconcile behavior unchanged.
 
-**Shipped:** API comments on `usage` / `violations` / `artifacts`; README status table with populated vs reserved (Phase 3/4).
+**Expected files:**
+- `internal/controller/agentsession/reconciler.go` (`SetupWithManager`)
+- agentsession envtest
 
-**Verification:** `make manifests && make test` (pass 2026-06-08)
+**Verification command:** `make test`
 
-### Task: Document Kubernetes Events emitted by the controller — **done (2026-06-08)**
+#### Task: Phase 6 · slice 8 — live e2e for the `kubernetes-pod` backend
 
-**Shipped:** README [Kubernetes Events](#kubernetes-events) catalog (all `EventReason*` constants, Normal/Warning, `kubectl describe` examples). Constants already commented in `internal/controller/agentsession/constants.go`.
+**Goal:** prove the Pod backend end-to-end on a real cluster.
 
-**Verification:** `make test` (pass 2026-06-08)
+**Scope:**
+- New e2e spec (`test/e2e/pod_backend_test.go`): create an `AgentSession` with `orchestrator: kubernetes-pod` and a short-lived agent image; assert it runs as a **Pod** (no Job created for the session) and reaches `Succeeded` with `status.runtimeRef.kind == Pod` and `status.podName` set. Reuse existing e2e fixtures/harness.
 
-### Task: Add AgentSession Ready condition — **done (2026-06-08)**
+**Non-goals:**
+- No enforcement/evidence assertions here (covered by existing network/tool/file specs, which are backend-agnostic). No external orchestrator.
 
-**Shipped:**
-- Added `status.conditions` type `Ready` (`internal/controller/agentsession/constants.go`)
-- Reconciler sets `Ready` before every status patch based on `status.phase` (`internal/controller/agentsession/reconciler.go`)
-- API comment documents all condition types including `Ready`
-- Envtest coverage:
-  - Denied path asserts `Ready=False`
-  - Job-running path asserts `Ready=True`
+**Acceptance criteria:**
+- `make test-e2e` passes the new spec on kind alongside the existing suite (no regressions).
 
-**Verification:** `make test` (pass 2026-06-08)
+**Expected files:**
+- `test/e2e/pod_backend_test.go` (new), `test/e2e/fixtures_test.go` (helper if needed)
 
-### Task: ToolPolicy MCP argument constraints (schema design) — **design done (2026-06-21)**
+**Verification command:** `make test-e2e`
 
-**Shipped:** `docs/design/phase-3-tool-argument-constraints.md` — specifies an argument-level governance layer on top of name-level tool rules: a `ToolArgumentRule`/`ArgumentConstraint` schema (dotted arg path + operator enum + `Allow`/`Deny` effect), evaluation order (args checked only after the name gate, deny-precedence, allow-as-allowlist), most-restrictive merge (concatenate; constraints only tighten), the tool-gateway enforcement hook (`ToolRequest.Arguments`, new `ArgumentDenied`/`ArgumentNotAllowed` reasons, `GatewayConfig`), evidence **redaction** (no raw arg values in status/logs), invariants, a 4-slice migration plan, and open questions (CEL vs structured matchers, path syntax, redaction strategy). Indexed in `docs/design/README.md` + `relay-design-docs.mdc`. **Design-only; no code/enforcement.**
+#### Task: Phase 6 · slice 9 — docs + status alignment for the second backend
 
-**Implementation deferred** to scoped slices — see the two follow-up cards below (schema, then gateway evaluation).
+**Goal:** keep the docs honest once `kubernetes-pod` ships.
 
-**Verification:** Review only (docs); `make test` unaffected.
+**Scope:**
+- Flip the slice statuses in `docs/design/phase-6-orchestrator-interface.md` to *done* as each lands; update `architecture.md` (mention `status.runtimeRef` and the two backends; keep diagrams parser-safe — no parentheses/slashes in mermaid class members).
+- README: document `spec.runtime.orchestrator: kubernetes-pod` and `status.runtimeRef`.
+- Update this status file (operational state, roadmap `[x]`, recent changes).
 
-### Task: Tool argument constraints — slice 2 (control-plane schema) — **done (2026-06-21)**
+**Non-goals:** No code changes.
 
-**Shipped:** `ToolArgumentRule`/`ArgumentConstraint`/`ArgumentOperator`/`ConstraintEffect` types on `ToolPolicySpec` + `PolicyRules` (`api/v1alpha1`), with kubebuilder validation (operator/effect enums, `MinItems`, `MinLength`). `ToolPolicySpec.ToolPolicyRules()` maps `argumentRules`; `MergeRules` concatenates them across layers with structural dedupe (`concatArgumentRules`/`argumentRuleKey` in `merge.go`) so constraints only tighten; `BuildMergeDecisions` emits one `ArgumentRulesDeclared` `tool`/`argumentRules` summary decision (controller assurance). Regenerated deepcopy + CRDs (toolpolicy/agentpolicy/agentsession). Sample extended (`config/samples/relay_v1alpha1_toolpolicy.yaml`) and validated via `make verify-samples`. README + design-doc status updated. **No enforcement** (slice 3).
+**Acceptance criteria:** Docs match shipped behavior; `relay-design-docs.mdc` / `README.md` index rows still accurate.
 
-**Verification:** `make generate manifests`; `go test ./internal/policy/... ./api/...`; `make verify-samples`; full suite green (2026-06-21). Tests: `merge_test.go` (concat/dedupe/effect-identity), `decisions_test.go` (summary decision).
+**Expected files:** `docs/design/phase-6-orchestrator-interface.md`, `docs/design/architecture.md`, `README.md`, `.cursor/relay-project-status.md`
 
-**Files:** `api/v1alpha1/toolpolicy_types.go`, `api/v1alpha1/policy_types.go`, `internal/policy/merge.go`, `internal/policy/decisions.go`, generated CRDs + deepcopy, sample, `README.md`.
+**Verification command:** Review only (docs).
 
-### Task: Tool argument constraints — slice 3 (gateway evaluation + redacted evidence) — **done (2026-06-21)**
+#### Task: Phase 6 · slice 10 — external orchestrator adapter design (Tekton first) — **design slice**
 
-**Shipped:** per-call argument evaluation in the tool gateway. `ToolRequest.Arguments` + `invokeRequest.arguments` carry the decoded arg object; `evaluateArgumentRules` (`argconstraints.go`) resolves dotted/`[i]` paths and applies operator matchers (Equals/In/NotIn/Matches/HasPrefix/Exists/… with safe missing-arg semantics), with deny-precedence and Allow-as-allowlist. `EvaluateTool` runs it only after the name gate (name deny still wins); new reasons `ArgumentDenied`/`ArgumentNotAllowed`. `RuntimeReport` emits **redacted** decisions/violations — the matched constraint (arg path, operator, effect, policy operands) only, never the request value (`ArgConstraintMatch`). Rules propagate to the sidecar as JSON via `AGENT_POLICY_ARGUMENT_RULES` (`GatewayConfig.ArgumentRules`, `EnvForConfig`, `LoadRuntimeEnv`). Assurance stays `self-reported`.
+**Goal:** design (not implement) the first external adapter now that the interface is proven by `kubernetes-pod`.
 
-**Verification:** `go test ./internal/enforcement/toolgateway/...` + full suite green (2026-06-21). Tests in `argconstraints_test.go`: path resolver, every operator, deny/allowlist/server-scope/wildcard eval, mode behavior, name-deny precedence, redaction (no raw value in message/violation), env round-trip.
+**Scope:**
+- Extend `phase-6-orchestrator-interface.md` (or a new `phase-6-tekton-adapter.md`) with the Tekton `PipelineRun`/`TaskRun` mapping: how `runtimeBackend.ensure`/`observe`/`stop` map to Tekton objects, how Relay sidecars + reporter token are injected (Tekton `sidecars`/pod template), completion/timeout/cancel mapping, the new `go.mod` dependency + e2e install cost, and the evidence/assurance statement (pods still co-located → `self-reported`, no regression).
+- Decompose Tekton implementation into its own ordered slices (API/validation → backend → tests → e2e), as task cards here. Note Argo + Temporal as subsequent adapters (Temporal has no co-located pod → needs its own evidence channel, open questions #3/#4).
 
-**Files:** `internal/enforcement/toolgateway/argconstraints.go` (new), `types.go`, `evaluate.go`, `report.go`, `config.go`, `runtime_env.go`, `gateway.go`, `argconstraints_test.go`.
+**Non-goals:** No Tekton code, no dependency added in this slice.
 
-### Task: Tool argument constraints — slice 4 (live e2e) — **done (2026-06-21)**
+**Acceptance criteria:** A reviewer can implement the Tekton adapter from the doc + cards without rediscovering the interface; assurance posture stated explicitly.
 
-**Shipped:** new spec in `test/e2e/tool_violation_test.go` ("populates a redacted argument violation…") + fixtures (`createEnforcedArgumentRuleToolPolicy`, `withArgumentDeniedToolInvokeProbe`). Enforced `argumentRules` (allow `read_file` by name, deny `path` HasPrefix `/etc/`) + tool-gateway sidecar; the agent POSTs `{"tool":"read_file","arguments":{"path":"/etc/shadow-SECRETTOKEN"}}`; the in-cluster reporter populates a runtime decision (`ArgumentDenied`, `type=tool`, `rule=argumentRules`, `action=deny`, `target=read_file`) and a violation. Asserts the request value (`SECRETTOKEN`) never appears in any decision/violation (redaction).
+**Expected files:** `docs/design/phase-6-orchestrator-interface.md` (or new doc + index rows), `.cursor/relay-project-status.md`
 
-**Verified live** against the `relay-dev` kind cluster (2026-06-21): both tool-violation specs pass (`2 Passed`), no regression. Run: `RELAY_E2E_IMG=<shell-capable relay img> go test -tags=e2e ./test/e2e/... -ginkgo.focus="Live tool violation population"`.
+**Verification command:** Review only (docs).
 
-**Files:** `test/e2e/tool_violation_test.go`, `test/e2e/fixtures_test.go`.
-
-### Task: e2e live-evidence image probe assumes a shell (distroless skip) — **done (2026-06-21)**
-
-**Shipped:** `clusterImageRunnable` (`test/e2e/reporter_infra_test.go`) no longer launches a `sh -c` probe pod (which always failed on the `distroless/static` relay + sidecar images, silently skipping every live-evidence spec). It now inspects `node.status.images` for image presence, with `normalizeImageRef` stripping default-registry prefixes so user refs match the runtime's fully-qualified names. Graceful skip preserved when an image is genuinely absent.
-
-**Verified live** (2026-06-21): with the **standard distroless** relay + tool-gateway images and **no** `RELAY_E2E_IMG` override, the two tool-violation specs now run and pass (`2 Passed`) — previously they skipped.
-
-**Files:** `test/e2e/reporter_infra_test.go`.
-
-### Task: Propagate ToolPolicy maxCallsPerMinute to runtime hooks — **done (2026-06-08)**
-
-**Shipped:** `MaxCallsPerMinute` on `PolicyRules`; min-merge semantics; `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE` env + drift detection; merge-time `policyDecisions` cap entry; envtest + README. **Enforcement:** Phase 3 only.
-
-**Verification:** `make test` (pass 2026-06-08)
-
-### Task: Phase 3 enforcement backend contract — **done (2026-06-08)**
-
-**Shipped:** `internal/enforcement/` — `SessionContext`, `Backend`, `Capabilities`, `RuntimeReport`, `EvaluateRestrictive`, `ActionForMode`, `AppendRuntimeDecisions`; unit tests for mode mapping, context build, and truncation.
-
-**Verification:** `make test` (pass 2026-06-08)
-
-### Task: DNS / egress proxy prototype — **done (2026-06-09)**
-
-**Shipped:** `internal/enforcement/dnsproxy/`; sidecar policy env + agent `HTTP_PROXY`; `ApplyEgressProxyRuntimeEvent`; `docs/design/phase-3-dns-proxy-prototype.md`; **`cmd/dns-proxy`** sidecar binary + `Dockerfile.dns-proxy`; HTTP egress proxy with reporter client; sidecar image `ghcr.io/secureai/relay-dns-proxy:latest`.
-
-**Verification:** `make test` (pass 2026-06-09)
-
-### Task: File/workspace policy design — **done (2026-06-08)**
-
-**Shipped:** `docs/design/phase-3-file-workspace-policy.md` — mount + RuntimeProfile MVP; defer path rules and FS gateway; `internal/enforcement/workspace/types.go` stubs.
-
-**Verification:** `make test` (pass 2026-06-08)
-
-### Task: First-party data-plane sidecar images — evidence loop #5–#6 — **done (2026-06-10)**
-
-**Shipped:** dns-proxy (`cmd/dns-proxy`, `Dockerfile.dns-proxy`, `ghcr.io/secureai/relay-dns-proxy:latest`); tool-gateway (`cmd/tool-gateway`, `Dockerfile.tool-gateway`, `ghcr.io/secureai/relay-tool-gateway:latest`); sidecar injection in `job/sidecars.go`; `make docker-build-dns-proxy` / `make docker-build-tool-gateway`; integration tests in `dnsproxy/proxy_test.go` and `toolgateway/gateway_test.go`. Envoy still uses `busybox` placeholder.
-
-**Verification:** `make test` (pass 2026-06-10)
-
-### Task: Runtime reporter loop (impl) — evidence loop #2 — **done (2026-06-08)**
-
-**Shipped:** `internal/reporter/` (`POST /v1/report`, `TokenReview` + pod→Job→session auth, rate limit); `agentsession.PatchRuntimePolicyReport`; idempotent decision/violation append; `--reporter-bind-address` (`:8088`); RBAC `tokenreviews: create`; handler unit tests.
-
-**Verification:** `make test` (pass 2026-06-08)
-
-### Task: Structured session events API — evidence loop #3 — **done (2026-06-08)**
-
-**Shipped:** `SessionEvent` API type; `status.events[]` (max 256); `AppendSessionEvents` + `patchStatus`/`PatchRuntimePolicyReport` merge; reporter `events[]` payload; `docs/design/phase-4-session-events.md`; unit + handler tests.
-
-**Verification:** `make manifests && make test` (pass 2026-06-08)
-
-### Task: Reporter pod wiring (projected token + Service) — **done (2026-06-09)**
-
-**Shipped:** `relay-controller-reporter` Service (`config/manager/reporter_service.yaml`); deployment exposes `:8088`; sidecars get `RELAY_REPORTER_URL`, `RELAY_REPORTER_TOKEN_PATH`, and projected SA token volume (`audience: relay-reporter`); samples + README.
-
-**Verification:** `make test` (pass 2026-06-09)
-
-### Task: Live violation population from network enforcement — evidence loop #7 — **done (2026-06-10)**
-
-**Shipped:** E2e `test/e2e/network_violation_test.go` — enforced `deniedDomains` + dns-proxy sidecar + agent `HTTP_PROXY` wget probe → in-cluster `--reporter-only` deployment → `status.violations` + runtime `policyDecisions`. Infra: `test/e2e/reporter_infra_test.go`; prereq `make test-e2e-images`. Design note in `docs/design/phase-3-dns-proxy-prototype.md`. Kernel/CNI drops still unobserved (defer eBPF).
-
-**Verification:** `make test` (pass 2026-06-10); `make test-e2e-images && make test-e2e` for live spec.
-
-### Task: Live tool violation population (tool-gateway e2e) — **done (2026-06-10)**
-
-**Shipped:** `test/e2e/tool_violation_test.go` — enforced `ToolPolicy` `deniedTools` + tool-gateway sidecar + agent `wget` POST to `/v1/tools/invoke` → in-cluster reporter → `status.violations` + runtime `policyDecisions` (`type: tool`). Fixtures in `fixtures_test.go`; `requireLiveToolEvidenceImages`; `make test-e2e-images` includes `kind-load-tool-gateway`.
-
-**Verification:** `make test` (pass 2026-06-10); `make test-e2e-images && make test-e2e` for live spec.
-
-### Task: Usage-only report idempotency (reportId cache) — Phase 4 · slice C — **done (2026-06-10)**
-
-**Shipped:** `internal/reporter/reportid_cache.go` — in-process seen-cache keyed by session + `reportId` (24h TTL); handler short-circuits duplicate `POST /v1/report` with `202` before status patch; wired in `NewRunnable`. Tests: `reportid_cache_test.go`, `handler_test.go` (usage-only with/without reportId). Contract doc §7 updated.
-
-**Verification:** `make test` (pass 2026-06-10)
-
-### Task: File/workspace policy implementation — evidence loop #8 — **done (2026-06-10)**
-
-**Shipped:** `PolicyRules.allowedPaths` / `deniedPaths` / `maxWorkspaceBytes`; merge in `internal/policy/`; `AGENT_POLICY_ALLOWED_PATHS` / `DENIED_PATHS` / `MAX_WORKSPACE_BYTES` env on agent; `internal/enforcement/workspace/` (`EvaluateFile`, `RuntimeReport`, `ApplyFilePolicyRuntimeEvent`, `Backend`); design doc updated.
-
-**Verification:** `make manifests && make test` (pass 2026-06-10)
-
-### Task: First-party FS gateway sidecar MVP — Phase 4 · slice D — **done (2026-06-10)**
-
-**Shipped:** `cmd/fs-gateway`, `Dockerfile.fs-gateway`, `internal/enforcement/workspace/` gateway (`POST /v1/files/access`), runtime env, reporter client; `job/sidecars.go` injection for `fs-gateway` + `RELAY_FS_GATEWAY_URL` on agent; `make docker-build-fs-gateway` / `kind-load-fs-gateway`; integration test in `gateway_test.go`.
-
-**Verification:** `make test` (pass 2026-06-10)
-
-### Task: File usage metrics — Phase 4 · slice E — **done (2026-06-10)**
-
-**Shipped:** `SessionUsage.fileOperations` on `AgentSession` status; `incrementUsageForDecision` / `addUsageDelta` / `mergeUsageInPlace` for `type: file`; reporter `validateUsageDelta` accepts file counter; CRD regenerated. Tests: `usage_test.go`.
-
-**Verification:** `make manifests && make test` (pass 2026-06-10)
-
-### Task: Live file violation and usage e2e — Phase 4 · slice F — **done (2026-06-10)**
-
-**Shipped:** `test/e2e/file_violation_test.go` — enforced `deniedPaths` + fs-gateway sidecar + file access probe → `status.violations`, runtime `type: file` decisions, `status.usage.fileOperations` ≥ 1; fixtures (`createRuntimeProfileWithFSGateway`, `createEnforcedDeniedPathPolicy`, `withDeniedPathAccessProbe`); `requireLiveFileEvidenceImages`; `make test-e2e-images` includes `kind-load-fs-gateway`.
-
-**Verification:** `make test` (pass 2026-06-10); live spec with `make test-e2e-images && make test-e2e`.
-
-### Task: Prometheus metrics exporter — Phase 4 — **done (2026-06-10)**
-
-**Shipped:** `internal/metrics/` — `relay_agentsessions{namespace,phase}`, `relay_agentsession_violations{namespace}`, `relay_approval_queue_depth`, `relay_policy_violations_observed_total{namespace,type}`, `relay_runtime_reports_total{result}`, `relay_runtime_report_duration_seconds`; `AgentSessionCollector` on manager cache; wired in `cmd/main.go`; violation + reporter hooks. Reconcile latency: use built-in `controller_runtime_reconcile_time_seconds`.
-
-**Verification:** `make test` (pass 2026-06-10). Scrape `:8080/metrics` on the controller manager.
-
-### Task: OpenTelemetry tracing — Phase 4 — **done (2026-06-10)**
-
-**Shipped:** `internal/tracing/` — OTLP HTTP export (disabled when `--otel-exporter-otlp-endpoint` empty); `agentsession.reconcile` spans with session phase/requeue attributes; `runtime.report` spans on reporter with W3C trace context extraction (sidecars can continue agent traces via `traceparent`); flags `--otel-exporter-otlp-endpoint`, `--otel-service-name`, `--otel-exporter-otlp-insecure`. Wired in `cmd/main.go`, `reconciler.go`, `reporter/server.go`, `reporter/handler.go`.
-
-**Verification:** `make test` (pass 2026-06-10). Enable with e.g. `--otel-exporter-otlp-endpoint=http://otel-collector:4318`.
-
-### Task: Audit log sink — Phase 4 — **done (2026-06-10)**
-
-**Shipped:** `internal/audit/` — structured `Record` types (`policy.violation`, `session.phase_change`, `runtime.report`); OTLP HTTP log export via `--audit-log-otlp-endpoint` (disabled by default); hooks in reconciler phase transitions, novel violations, accepted runtime reports. Uses `go.opentelemetry.io/otel/sdk/log` + `otlploghttp`.
-
-**Verification:** `make test` (pass 2026-06-10). Enable with e.g. `--audit-log-otlp-endpoint=http://otel-collector:4318`.
-
-### Task: Log and artifact collection — Phase 4 — **done (2026-06-10)**
-
-**Shipped:** `internal/controller/agentsession/outputs.go` — on terminal phase, when `spec.outputs.collectLogs` / `collectArtifacts`: fetch agent pod logs → owned ConfigMap (`configmap://` URI); tar workspace path (default `<mount>/artifacts`) via pod exec → owned Secret (`secret://` URI); populate `status.artifacts`; lifecycle event + `OutputsCollected` event. Caps 512KiB each; idempotent per artifact name. RBAC: `pods/log`, `pods/exec`, ConfigMap/Secret write. Tests: `outputs_test.go`.
-
-**Verification:** `make manifests && make test` (pass 2026-06-10)
+---
 
 ### Task: External artifact storage export (S3 / object store)
 
@@ -616,140 +282,9 @@ Cards below are grouped: evidence-loop cards first, then unrelated backlog.
 
 **Files:** `api/v1alpha1/policy_types.go`, `api/v1alpha1/agentsession_types.go`, `internal/reporter/normalize.go`, `internal/policy/decisions.go`, reporter contract doc §5.
 
-### Task: Observability export design doc (Prometheus / OTel / audit) — **done (2026-06-21)**
-
-**Shipped:** `docs/design/phase-4-observability-export.md` — catalogs the `relay_*` Prometheus metrics (6: `agentsessions`, `agentsession_violations`, `approval_queue_depth`, `policy_violations_observed_total`, `runtime_reports_total`, `runtime_report_duration_seconds`) with types/labels/collection model + cardinality rules; OTel spans (`agentsession.reconcile`, `runtime.report`) with attributes + the W3C TraceContext/Baggage propagation contract (sidecars continue traces via `traceparent`); OTLP audit log records (`policy.violation`, `session.phase_change`, `runtime.report`) with `relay.audit.*`/`relay.session.*`/`relay.report.*` attribute namespaces; enable flags; invariants; non-goals (no in-cluster collector, opt-in, no behavior change). Indexed in `docs/design/README.md` + `relay-design-docs.mdc`.
-
-**Verification:** Docs-only; `go build`/`make test` unaffected.
-
-**Discovered follow-ups (noted in the doc):** ~~refine `relay_approval_queue_depth`~~ (done 2026-06-21, below); add approval-decision audit records (`approval.granted`/`approval.denied`) when consumers need them; surface `assuranceLevel` in audit/UI (tracked under *Runtime evidence integrity*).
-
-### Task: Refine `relay_approval_queue_depth` to count pending ApprovalRequests — **done (2026-06-21)**
-
-**Shipped:** `AgentSessionCollector` (`internal/metrics/collector.go`) now lists `ApprovalRequest`s and counts those awaiting a human decision (`status.state` Pending or unset) instead of the prior proxy (running sessions with a runtime `ApprovalRequired` decision). Removed dead `hasApprovalRequiredDecision`/`approvalRequiredReason`; added `isPendingApproval`. Updated metric Help text, observability design doc, and tests (`TestAgentSessionCollector_updatesGauges` now drives queue depth from ApprovalRequests; granted requests excluded; added `TestIsPendingApproval`).
-
-**Verification:** `go build ./...`; `go test ./internal/metrics/` (pass 2026-06-21).
-
-### Task: Phase 6 · slice 1 — orchestrator interface design doc — **done (2026-06-21)**
-
-**Shipped:** `docs/design/phase-6-orchestrator-interface.md` — catalogs every `batchv1.Job` coupling point in the reconciler (`ensureJob`, `syncStatusFromJob`, `findPodName`, `stopRuntimeJob`, `handleDeletion`, `SetupWithManager` `Owns`, the `internal/controller/job` package); proposes a `RuntimeBackend` interface (`Name`/`Ensure`/`Observe`/`Stop`/`OwnedType`) with a normalized `Observation`/`RuntimePhase` the reconciler maps to phase/conditions (governance logic stays backend-neutral); selection via the existing `spec.runtime.orchestrator` field + a startup registry; honest treatment of the data-plane/evidence channel (sidecars are Pod-specific → non-pod backends affect assurance); invariants; a behavior-preserving migration plan (slice 2 = extract interface + make Jobs the first backend); and open questions (status field generality, drift/replace per backend, evidence channels). Indexed in `docs/design/README.md` + `relay-design-docs.mdc`.
-
-**Why design-first:** decoupling from Jobs is the largest architectural item the product vision flags; this defines the boundary before any refactor and matches the design-doc convention (Phase 5 was sequenced the same way).
-
-**Verification:** Review only (docs); `make test` unaffected.
-
-### Task: Phase 6 · slice 2 — extract `runtimeBackend` + kubernetes-job backend — **done (2026-06-21)**
-
-**Shipped:** `internal/controller/agentsession/runtime_backend.go` — a `runtimeBackend` interface (`name`/`ensure`/`stop`/`runtimeGone`/`ownedType`) and a `backendRegistry` keyed by `spec.runtime.orchestrator`, lazily built from the reconciler's client/scheme/recorder. The `kubernetesJobBackend` holds the moved Job mechanics (`ensureJob`, `syncStatusFromJob`, `findPodName`, Job stop, Job observe). The reconciler routes every runtime call through `r.runtimeBackendFor(session)` — main path (`backend.ensure`), cancellation + finalizer cleanup (`backend.stop` + `backend.runtimeGone`), and `SetupWithManager` `Owns(backend.ownedType())`. **Behavior-preserving:** all existing agentsession envtests + the full suite green; no API/CRD change.
-
-**Transitional deviation (tracked):** the backend still mutates AgentSession status/conditions/events directly instead of returning a normalized `Observation` the reconciler maps. This relaxes the "reconciler owns status" invariant on purpose to keep the diff behavior-preserving — see **Discovered Follow-Up Tasks → Phase 6 slice 2b**.
-
-**Why:** decoupling the controller from Jobs is the top architectural item in the product vision. This establishes the seam (interface + registry + per-orchestrator selection + `Owns`) so future backends plug in without touching governance logic.
-
-**Verification:** `go build ./...`; `go vet ./internal/controller/agentsession/...`; `KUBEBUILDER_ASSETS=… go test ./...` (all pass 2026-06-21).
-
-### Phase 5 — approval workflows (ordered task cards)
-
-Decomposed 2026-06-16 from the Phase 5 roadmap (was a capability with no slices). **Promote slice 1 into Ready for Cursor Queue when starting Phase 5.** Implement one slice at a time; do not bundle.
-
-#### Task: Phase 5 · slice 1 — Approval model design doc — **done (2026-06-21)**
-
-**Shipped:** `docs/design/phase-5-approval-workflows.md` — `ApprovalPolicy` (declarative: actions/approvers/expiry/onTimeout) vs `ApprovalRequest` (per-decision, controller-owned, human sets `spec.decision`); controller gate/resume state machine with proposed `PhaseAwaitingApproval` phase + `ApprovalRequired` condition; relationship to existing `requireHumanApproval` + `status.policyDecisions` (`type: approval`, `assuranceLevel: controller`); audit fields (who/when/scope/expiry); open questions (approver authn via RBAC + future webhook, multi-approver, per-tool runtime approval). Index updated in `docs/design/README.md` + `relay-design-docs.mdc`.
-
-**Next:** slice 2 — `ApprovalPolicy` CRD (declarative only).
-
-**Verification:** Review only (docs); `make test` unaffected.
-
-#### Task: Phase 5 · slice 2 — ApprovalPolicy CRD (declarative only) — **done (2026-06-21)**
-
-**Shipped:** `api/v1alpha1/approvalpolicy_types.go` — `ApprovalPolicy` CRD (`approvalpolicies`, short names `appol`/`approvalpol`). Spec: `actions` (required, `minItems: 1`), `approvers[]` (`kind` enum `User`/`Group`/`ServiceAccount` + `name`), `expiresAfter` (duration), `requirement` (`default`/`allOf`, default `default`), `onTimeout` (`deny`/`allow`, default `deny` — fail closed). Status `observedGeneration` reserved. Generated CRD + deepcopy; registered in `config/crd/kustomization.yaml`; sample `config/samples/relay_v1alpha1_approvalpolicy.yaml` + kustomization. Envtest create/validate (defaults + enum + required) in `internal/controller/agentsession/approvalpolicy_test.go`. No controller behavior (slice 3). Note: short name must avoid `ap` (collides with `agentpolicy`).
-
-**Next:** slice 3 — `ApprovalRequest` CRD + controller gate/resume (`PhaseAwaitingApproval`).
-
-**Verification:** `make manifests && make test` (pass 2026-06-21); `make verify-samples` (pass 2026-06-21).
-
-#### Task: Phase 5 · slice 3 — ApprovalRequest CRD + controller gate — **done (2026-06-21)**
-
-**Shipped:** `api/v1alpha1/approvalrequest_types.go` — `ApprovalRequest` CRD (`approvalrequests`, short names `appreq`/`approvalreq`); `spec` = `sessionRef`/`policyRef`/`action`/`scope`/`decision` (enum `""`/`granted`/`denied`); controller-owned `status` = `state`/`decidedBy`/`decidedAt`/`expiresAt`/`reason`. New session phase `PhaseAwaitingApproval` + condition `ApprovalRequired` + events `ApprovalRequested`/`ApprovalGranted`/`ApprovalDenied`. Gate in `internal/controller/agentsession/approval.go` (`reconcileApprovalGate`), wired in `reconciler.go` between the terminal check and `ensureJob`: when effective `requireHumanApproval` matches a namespace `ApprovalPolicy`, it creates an owned `ApprovalRequest` (1:1, name = session name), holds the session in `AwaitingApproval`, and resumes on `granted` / goes terminal `Denied` on `denied` or `onTimeout=deny` expiry. Control-plane approval `policyDecisions` (`type: approval`, `assuranceLevel: controller`) appended idempotently. Watch on `ApprovalRequest` → owning session. When approval is declared but **no** `ApprovalPolicy` matches, the legacy `ApprovalNotEnforced` warning is kept and the session proceeds. RBAC regenerated; sample `config/samples/relay_v1alpha1_approvalrequest.yaml`.
-
-**MVP semantics:** `ApprovalPolicy.expiresAfter` is enforced as the **decision deadline** (from request creation), not a grant-validity window; one request per session; consume-time TOCTOU re-check and multi-scope requests deferred to later slices (noted in design doc).
-
-**Acceptance (met):** Envtest in `approval_gate_test.go` — declared-but-ungated proceeds (warn-only); matching policy holds `AwaitingApproval` + creates request + no Job; grant resumes to Job (+ allow decision); deny → terminal `Denied` + no Job (+ deny decision).
-
-**Verification:** `make manifests` + `go build ./...` + `go vet`; `go test ./internal/controller/... ./api/... ./internal/policy/...` (pass 2026-06-21); `make verify-samples` (pass).
-
-**Next:** slice 4 — approval notification hooks.
-
-#### Task: Phase 5 · slice 4 — Approval notification hooks — **done (2026-06-21)**
-
-**Shipped:** `internal/approval/notifier.go` — pluggable `Notifier` interface with `NoopNotifier` (default) and `WebhookNotifier` (HTTP POST JSON, bounded 5s timeout, non-2xx → error). Reconciler hook `notifyApprovalRequest` (in `approval.go`) fires once when a session opens the gate (`AwaitingApproval` pending branch), guarded by the `relay.secureai.dev/approval-notified` annotation so delivery is **at-most-once and retried** on the pending requeue until it succeeds; failures emit `ApprovalNotifyFailed` (warning) and never block the gate. Success emits `ApprovalNotified`. Enabled via `cmd/main.go` flag `--approval-webhook-url` (empty = disabled, zero behavior change). Slack/PagerDuty are future adapters over the same interface.
-
-**Acceptance (met):** Package unit tests (`notifier_test.go`) cover JSON payload delivery, non-2xx error, transport error, noop. Envtest (`approval_gate_test.go`) asserts exactly-once delivery on gate open + annotation marker (idempotent across requeues).
-
-**Verification:** `go build ./...` + `go vet`; `go test ./internal/approval/... ./internal/controller/agentsession/...` (pass 2026-06-21).
-
-**Next:** Phase 5 substantively complete (gate + notifications + allowlist + multi-approver). Remaining Phase 5 polish (per-tool runtime approval, authenticated approver-identity via webhook) tracked in `docs/design/phase-5-approval-workflows.md` open questions.
-
-#### Task: Phase 5 · slice 5 — approver allowlist (best-effort `decidedBy`) — **done (2026-06-21)**
-
-**Shipped:** `ApprovalRequest.spec.decidedBy` (approver self-declared identity, set alongside `spec.decision`). The gate (`approval.go` `approverAllowed`) honors a grant only when `decidedBy` matches a listed `ApprovalPolicy.approvers[].name` (match by name; Kind advisory); an unlisted/blank grant keeps the session `AwaitingApproval`, sets condition `ApprovalRequired=ApproverNotAuthorized`, and emits `ApprovalUnauthorized` (warning). When the policy lists no approvers, any grant is accepted (RBAC is the gate). `status.decidedBy` is recorded on decision and used as the approval `policyDecisions` actor. Envtest: unlisted grant stays gated; listed approver resumes (`approval_gate_test.go`).
-
-**Honesty note:** `decidedBy` is **not authenticated** — the real boundary is RBAC on who may patch the `ApprovalRequest`. Authenticated capture (record apiserver `userInfo`) needs a validating webhook (deferred; design doc open question #1).
-
-**Verification:** `make manifests generate` + `go build` + `go vet`; `go test ./internal/controller/agentsession/...` (pass 2026-06-21).
-
-#### Task: Phase 5 · slice 6 — multi-approver (`allOf`) — **done (2026-06-21)**
-
-**Shipped:** `requirement: allOf` is now enforced. New controller-owned `ApprovalRequest.status.approvedBy[]` (`+listType=set`) accumulates each valid grant's `spec.decidedBy`; the gate (`approval.go` `requiresAllOf`/`remainingApprovers`/`recordApprover`) holds the session in `AwaitingApproval` and emits `ApprovalPartiallyApproved` until that set covers every listed `approvers[].name`, then finalizes the grant. The approval `policyDecisions` allow-actor is the joined approver set. An `allOf` policy with no listed approvers degenerates to single-approver. Regenerated deepcopy + CRD. Envtest: `alice` then `bob` required before the Job is created (`approval_gate_test.go`).
-
-**Honesty note (fail-closed):** approvers grant sequentially via the single `spec.decidedBy`, so two grants coalesced into one reconcile record only the latest grantor; the missed approver re-submits — the gate never opens early. A list-typed multi-grant spec + authenticated identity (webhook) is future work (design doc open question #3).
-
-**Verification:** `make generate manifests` + `go build`; `go test ./internal/controller/agentsession/` (full envtest suite, pass 2026-06-21).
-
-#### Task: Phase 5 · slice 7 — approval-decision audit records — **done (2026-06-21)**
-
-**Shipped:** approval grants/denials now reach the OTLP audit sink (SIEM/forensics), not just `status.policyDecisions` + Kubernetes events. New `audit.EventApprovalGranted`/`EventApprovalDenied` (`approval.granted`/`approval.denied`) + `audit.ApprovalDecision` builder (`internal/audit/record.go`); `recordApprovalDecision` emits it once per decision (guarded by `hasApprovalDecision`), threading `ctx` through `denyForApproval`. Actor = approver (or joined `allOf` set), target = gated action, type = `approval`. Builder unit-tested (`internal/audit/sink_test.go`); observability + Phase 5 design docs updated. **Also fixed** a pre-existing at-most-once notification race (separate commit): `markApprovalNotified` read the just-created `ApprovalRequest` from cache (informer lag → NotFound → marker not persisted → duplicate notify); now falls back to the in-hand object.
-
-**Verification:** `go build`; `go test ./internal/audit/`; `go test ./internal/controller/agentsession/` (full envtest suite, pass 2026-06-21).
-
-#### Task: Phase 5 · slice 8 — authenticated approver identity (mutating webhook) — **done (2026-06-24)**
-
-**Shipped:** an opt-in **mutating admission webhook** that closes Phase 5's last gap (open questions #1/#3): the recorded approver identity is now **authenticated and non-spoofable**. `internal/webhook/v1alpha1/approvalrequest_webhook.go` (`ApprovalRequestIdentityStamper`) overwrites `ApprovalRequest.spec.decidedBy` with the apiserver-authenticated `req.UserInfo.Username` whenever a decision is asserted/changed (CREATE/UPDATE with non-empty `spec.decision`), ignoring any client-supplied value. It is a no-op for the controller's own writes (it creates with `decision=""` and only mutates status). When the webhook is **not** deployed, behavior is unchanged (self-declared `decidedBy`, RBAC the only gate) — so it's purely additive. `failurePolicy: Fail` (fail-closed: identity capture can't be bypassed by DoSing the webhook). Wired into the manager behind `--enable-webhooks` (default off → base deploy/e2e/envtest unaffected); `+kubebuilder:webhook` marker generates `config/webhook/manifests.yaml`. New opt-in deploy overlay `config/webhooks/` (requires cert-manager) adds the webhook Service, cert-manager Issuer/Certificate (`config/certmanager/`), CA-injection annotation, and the manager cert mount + flag; `kustomize build config/webhooks` renders clean and `config/default` is unchanged (no webhook objects). The approver-allowlist/`allOf` checks now act on a trustworthy subject. **Files:** `internal/webhook/v1alpha1/{approvalrequest_webhook.go,_test.go}`, `cmd/main.go`, `config/webhook/{manifests.yaml,service.yaml,kustomization.yaml}`, `config/certmanager/*`, `config/webhooks/*`, comment touch-ups in `approval.go`/`approval_runtime.go`, docs.
-
-**Verification:** `go build`, `go vet ./...`, `go test ./internal/webhook/...` (stamp-logic table + Handle patch/no-op), `gofmt`, lints; `kustomize build config/default` (unchanged, no webhook objects) and `config/webhooks` (renders with service ns rewritten, CA-inject annotation, `--enable-webhooks`, cert mount). **Remaining (follow-up):** webhook-mode envtest + live e2e need cert-manager in kind — tracked below.
-
 ### Task: live e2e for the ApprovalRequest identity webhook — **discovered 2026-06-24; envtest DONE + live verified 2026-06-24 (committed spec optional)**
 
 Slice 8 ships the identity-stamping webhook with thorough **unit** coverage (pure stamp logic + `Handle` patch/no-op via constructed `admission.Request`), opt-in manager wiring, generated `MutatingWebhookConfiguration`, and a cert-manager `config/webhooks` overlay that renders cleanly. **Webhook-mode envtest — DONE (2026-06-24):** a dedicated suite (`internal/webhook/v1alpha1/{suite_test.go,approvalrequest_envtest_test.go}`) starts the webhook server against an envtest control plane with the generated `MutatingWebhookConfiguration` installed (`WebhookInstallOptions`), provisions authenticated users via `testEnv.AddUser` (+cluster-admin binding so the test exercises the webhook, not RBAC), and asserts a forged `spec.decidedBy` is corrected to the authenticated identity on both create and update while pending creates are untouched. The suite skips when `KUBEBUILDER_ASSETS` is unset so the pure-unit tests still run standalone. **Live e2e — VERIFIED manually (2026-06-24):** in the `relay-dev` kind cluster, installed cert-manager v1.16.2, deployed the `config/webhooks` overlay (controller image `IfNotPresent`), confirmed the `serving-cert` Certificate went `Ready`, the caBundle (1488 B) was injected into the `MutatingWebhookConfiguration`, and the manager served the webhook on :9443. Then `kubectl --as=alice@example.com apply` of an `ApprovalRequest{decision: granted, decidedBy: mallory}` stored `spec.decidedBy=alice@example.com` (forged value corrected to the authenticated identity), while a pending create left `decidedBy` empty. Torn down afterward (the `failurePolicy: Fail` webhook is removed so it can't block `ApprovalRequest` writes when no controller runs; cert-manager left installed). **Remaining (optional):** fold this into a committed, opt-in ginkgo e2e spec — deliberately not added to the shared suite yet because it would make every `make test-e2e` run depend on cert-manager + an in-cluster controller deploy (the dev harness runs the controller out-of-cluster via `make run`). Test-only; no product code changes expected.
-
-### Task: RuntimeProfile sidecar injection — **done (2026-06-08)**
-
-**Shipped:** `internal/controller/job/sidecars.go` — inject enabled known sidecars; `RELAY_TOOL_GATEWAY_URL` on agent; `RuntimeProfileDrift` includes sidecars; envtest coverage.
-
-**Verification:** `make test` (pass 2026-06-08)
-
-### Task: Tool gateway contract — **done (2026-06-08)**
-
-**Shipped:** `internal/enforcement/toolgateway/` (`ToolRequest`, `EvaluateTool`, `RuntimeReport`, `GatewayConfig`, `Backend`); `docs/design/phase-3-tool-gateway-contract.md`; integration test via `ApplyRuntimePolicyReport`.
-
-**Verification:** `make test` (pass 2026-06-08)
-
-### Task: Runtime policy decision append — **done (2026-06-08)**
-
-**Shipped:** `ApplyPolicyStatus` preserves runtime decisions on policy re-resolve; `AppendRuntimePolicyDecisions` / `ApplyRuntimePolicyReport` for reporters; `patchStatus` merges runtime decisions from stale/live snapshots; unit + envtest coverage.
-
-**Verification:** `make test` (pass 2026-06-08)
-
-### Task: Append runtime policy decisions from enforcement backends — **done (2026-06-08)**
-
-Merged into slice 2 above. Reporters should call `AppendRuntimePolicyDecisions` or `ApplyRuntimePolicyReport`; reconciler preserves runtime via `ApplyPolicyStatus` + `patchStatus`.
-
-**Expected files:**
-- `api/v1alpha1/policy_types.go`
-- `internal/controller/` or enforcement adapter stub
-
-**Verification command:**  
-`make test`
 
 ### Task: Audit controller RBAC for least privilege
 
@@ -776,12 +311,6 @@ RBAC must match kubebuilder markers and actual client calls (Jobs delete, Config
 **Verification command:**  
 `make manifests && make test`
 
-### Task: Update README current-state section — **done (2026-06-08)**
-
-**Shipped:** README [AgentSession controller reference](#agentsession-controller-reference), updated MVP behavior table, status fields, and “What the MVP does” list.
-
-**Verification:** `make test` (pass 2026-06-08)
-
 ### Task: Pin dev tool versions in README
 
 **Why it matters:**  
@@ -803,9 +332,29 @@ RBAC must match kubebuilder markers and actual client calls (Jobs delete, Config
 **Verification command:**  
 `make test` (docs-only)
 
+---
+
+## Completed follow-ups (archived)
+
+Shipped work, kept as a terse index. Full per-task detail (scope/files/verification) is in git history and the relevant `docs/design/` doc. Do not re-implement unless a regression is found.
+
+**Phase 6 — orchestrator interface:** slice 1 (design doc) · slice 2 (`runtimeBackend` + registry + `kubernetesJobBackend` extracted) · slice 2b (backend returns neutral `observation`; reconciler `applyObservation`/`applyRuntimePhase` own status).
+
+**Phase 5 — approval workflows:** slice 1 (design doc) · slice 2 (`ApprovalPolicy` CRD) · slice 3 (`ApprovalRequest` CRD + controller gate/resume, `AwaitingApproval`) · slice 4 (notification hooks, `--approval-webhook-url`) · slice 5 (approver allowlist via `decidedBy`) · slice 6 (multi-approver `allOf`, `status.approvedBy[]`) · slice 7 (approval-decision OTLP audit records + at-most-once notify fix) · slice 8 (authenticated approver identity mutating webhook). Per-tool **runtime approval** (design + impl slices 1–4 + abuse controls + `status.pendingApprovals`).
+
+**Phase 4 — observability & audit:** usage metrics + e2e assertions (slice A) · session timeline model (slice B) · usage-only `reportId` idempotency cache (slice C) · FS gateway sidecar MVP (slice D) · file usage metrics (slice E) · live file violation+usage e2e (slice F) · Prometheus exporter · OpenTelemetry tracing · OTLP audit log sink · log/artifact collection · observability export design doc · `relay_approval_queue_depth` refine (counts pending `ApprovalRequest`s).
+
+**Phase 3 / 3b — enforcement & evidence loop:** enforcement backend contract · DNS/egress proxy prototype + dns-proxy image · tool-gateway contract + image · file/workspace policy design + implementation · first-party sidecar images · runtime reporter loop (`POST /v1/report`) · structured session events API · reporter pod wiring (projected token + Service) · live network/tool violation e2e · runtime policy-decision append. Tool **argument constraints**: schema design + slice 2 (schema) + slice 3 (gateway eval + redacted evidence) + slice 4 (live e2e). e2e distroless image-probe fix. **dns-proxy egress-bypass fix** (inject lowercase proxy env too; regression guard).
+
+**Phase 2 — reusable policy model:** `AgentPolicy`/`ToolPolicy` + `policyRefs` merge + watches + effective policy · `RuntimeProfile` CRD + hardening + sidecar injection + watch · `ToolPolicy maxCallsPerMinute` propagation.
+
+**Controller hardening & docs:** AgentSession `Ready` condition · watch owned Pods · reconcile-churn fix (idempotent resolution events) · provider-agnostic `model.baseURL` · document future-only status fields · document controller Kubernetes Events · README current-state update · data-plane unit-coverage raise.
+
+**Runtime evidence integrity (partial — slices 1–3 done):** `assuranceLevel` enum on decisions/violations + audit records (`relay.audit.assurance`) · agent SA-token automount disabled + reporter token sidecar-only. Remaining hardening is the still-open *Runtime evidence integrity* card above.
+
 ## Current Operational State
 
-Relay has shipped an **end-to-end governance MVP** on Kubernetes: control-plane reconciliation, three data-plane enforcement domains (network / tool / file), runtime evidence into CRD status, and observability export (Prometheus, OTel traces, OTLP audit logs). **Not yet shipped:** operational UI, real approval gates, orchestrator adapters beyond Jobs, enterprise identity/credentials.
+Relay has shipped an **end-to-end governance MVP** on Kubernetes: control-plane reconciliation, three data-plane enforcement domains (network / tool / file), runtime evidence into CRD status, observability export (Prometheus, OTel traces, OTLP audit logs), and **human approval workflows** (session gate + per-tool runtime holds + authenticated approver identity). **Not yet shipped:** operational UI, orchestrator adapters beyond Jobs (Phase 6 in progress — `kubernetes-pod` next), enterprise identity/credentials.
 
 **Trust posture (read before extending):** data-plane enforcement and the runtime-evidence loop are **cooperative**, not adversarial-proof. Enforcement sidecars and the agent share a pod and ServiceAccount; the reporter authenticates the *pod* (TokenReview + pod→Job→session ownership) but cannot distinguish the agent container from a sidecar. A fully compromised agent could therefore tamper with or starve the data plane. To keep this honest, runtime evidence carries an `assuranceLevel` (`self-reported` for cooperative sidecar reports, stamped by the controller and not client-settable; `controller` for authoritative merge-time decisions; `observed` reserved for future independent sources). As least-privilege hardening, the agent pod runs with `automountServiceAccountToken: false` (no free apiserver token) and the projected `relay-reporter` token is mounted only into enforcement sidecars, never the agent. Adversarial-grade integrity still needs data-plane isolation (kernel/eBPF, separate identity/netns, or out-of-pod enforcement) — tracked under *Discovered Follow-Up Tasks → Runtime evidence integrity*. Do not describe current enforcement as tamper-proof in docs/UI.
 
@@ -942,37 +491,7 @@ Built in `internal/policy/decisions.go` via `BuildMergeDecisions`.
 
 ### Recent fixes
 
-- **Phase 2 closed** — reusable policy model + RuntimeProfile complete; verification: 47 envtest + 12 e2e + verify-samples (2026-06-03)
-- **RuntimeProfile docs/samples/e2e (Phase 2 · 5/6)** — README section, session sample, verify-samples, e2e runtime profile spec
-- **RuntimeProfile watch (Phase 2 · 4/6)** — `Watches(RuntimeProfile)`; pending Job replace on profile pod-template drift; envtest
-- **Apply RuntimeProfile to Job (Phase 2 · 3/6)** — merge container/pod security from profile; `status.matchedRuntimeProfile`; `RuntimeProfileResolved` + event; envtest
-- **runtimeProfileRef + validation (Phase 2 · 2/6)** — `RuntimeProfileRef` on AgentSession; `validateSpec` + `resolveRuntimeProfile`; `InvalidRuntimeProfile` denial; RBAC for `runtimeprofiles`; envtest
-- **RuntimeProfile CRD (Phase 2 · 1/6)** — `runtimeprofile_types.go`, container/pod hardening + declarative `sidecars[]`, CRD manifest, sample (`hardened-agent`); `make verify-samples`
-- **README policy docs** — `AgentPolicy`/`ToolPolicy`, merge semantics, scoping, policy change / Job env behavior, MVP table
-- **ToolPolicy CRD** — `toolpolicy_types.go`, merge via `LoadPolicyLayers`, watch, samples, envtest
-- **Job env sync** — `PolicyPropagated` condition; replace pending Job on drift; `PolicyEnvDrift` when Job active (`job_policy.go`)
-- **Policy decision records** — `PolicyDecision` API type, merge-time population, unit + envtest coverage
-- **AgentPolicy watch** — `Watches(AgentPolicy)` maps to sessions with matching `spec.policyRefs`; envtest verifies `status.effectivePolicy` updates on policy change (`internal/controller/agentsession/policy_watch.go`)
-- **Phase 2 reusable policy (slice)** — `AgentPolicy` CRD, `PolicyRules` shared type, `policyRefs`, `internal/policy` merge/resolve, `PolicyResolved` condition, samples, envtest (38 specs)
-- **Rules compliance audit** — Job ownership denial (`JobConflict`), main `APIReader`, model/workspace validation, TimedOut sync without `Failed>0`, `ApprovalNotEnforced` warning event, terminal `Denied` preserves validation reason; envtest coverage (36 specs)
-- **validate sample manifests** — `make verify-samples` (server dry-run on `config/samples/relay_*.yaml`); prompt CM sample in kustomization; README sample list
-- **e2e TimedOut** — short `timeoutSeconds` + long sleep; `PhaseTimedOut` and `JobTimedOut` condition; `jobTimedOut` recognizes `FailureTarget`/`DeadlineExceeded` on Kubernetes 1.31+
-- **status.podName selection semantics** — documented retry/recreate behavior; deterministic name tie-break; unit tests for stale Job UID and equal timestamps
-- **AgentSession finalizers** — `AgentSessionFinalizer` attached on reconcile; `handleDeletion` deletes owned Job (clears `blockOwnerDeletion` when needed), removes finalizer; uncached `APIReader` for delete detection; envtest delete-path specs
-- **GitHub Actions CI** — `.github/workflows/test.yaml` (`make test`), `e2e.yaml` (kind + `make test-e2e`), `lint.yaml` (`make fmt` + `make vet`)
-- **Terminal phase stability** — terminal sessions do not get a replacement Job; `syncStatusFromJob` preserves terminal phase; envtest coverage
-- **Cancellation docs** — README cancel section, MVP table, `relay_v1alpha1_agentsession_cancel.yaml` sample
-- **Cancellation e2e** — cancel running session → Job deleted + `PhaseCancelled`; cancel at create → no Job
-- **Session cancellation (status/events)** — `applyCancellationStatus`: `PhaseCancelled`, `Completed`/`SessionCancelled`, result outcome `cancelled`, `SessionCancelled` event; envtest coverage
-- **Session cancellation (controller)** — `spec.cancelRequested` deletes owned Job via `stopRuntimeJob`; envtest for delete + idempotent missing Job
-- **`spec.cancelRequested`** — declarative cancellation request on `AgentSessionSpec`; CRD default `false`
-- **`status.podName`** — select newest Pod owned by the Job; list errors fail reconcile; envtest + e2e coverage on success/failure paths
-- **Envtest controller tests** — validation, denial, Job create, succeeded transition, promptConfigMapRef
-- **PromptConfigMapRef** — `resolveTask` loads prompt; missing CM/key → `PhaseDenied`
-- **Status patch strategy** — `patchStatus` unions conditions from reconcile snapshot + live object before update; avoids JSON merge patch array replacement on CRDs
-- **RuntimeCreated condition race** — re-assert condition on every `ensureJob` to survive stale-cache JSON-merge-patch overwrites (found by e2e happy-path test)
-- **Model temperature** — `*string` with CRD Pattern instead of `float64` / `allowDangerousTypes`
-- **Devcontainer** — Docker-outside-of-Docker + resilient `kind-up.sh`
+Recent user-visible changes are summarized in **Recent changes (newest first)** at the top of this file; shipped work is indexed under **Discovered Follow-Up Tasks → Completed follow-ups (archived)**. Full per-change detail (including the Phase 0–2 foundation: lifecycle, cancellation, finalizers, policy CRDs, RuntimeProfile, CI) lives in git history.
 
 ---
 
@@ -1111,24 +630,28 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 
 ### Phase 5 — Human approval workflows
 
-Scoped, auditable gates — not a boolean env var. Today `requireHumanApproval` only emits an `ApprovalNotEnforced` warning; this phase makes approval real. **Decomposed into ordered task cards** under *Discovered Follow-Up Tasks → Phase 5 approval workflows* (slice 1 = design doc, then ApprovalPolicy CRD, then ApprovalRequest + gate, then notifications).
+**Complete (slices 1–8).** Scoped, auditable gates — not a boolean env var. `requireHumanApproval` is now a real gate, not just a warning. Ordered task cards archived under *Discovered Follow-Up Tasks → Completed follow-ups*.
 
-- [x] **Approval model design doc** — CRD shape + gate/resume state machine *(slice 1 — `docs/design/phase-5-approval-workflows.md`)*
-- [x] **ApprovalPolicy CRD** — Define what actions require approval *(slice 2, declarative only — `api/v1alpha1/approvalpolicy_types.go`)*
-- [x] **ApprovalRequest CRD + controller gate** — Per-decision approval objects; block in `PhaseAwaitingApproval`, resume on grant *(slice 3 — `approvalrequest_types.go` + `approval.go`)*
-- [x] **Approval audit trail** — Who approved, when, scope, expiry *(slice 3 — `ApprovalRequest.status` + `policyDecisions{type: approval}`)*
-- [x] **Integration hooks** — generic webhook for approval notifications; Slack/PagerDuty are future adapters over the same `Notifier` *(slice 4 — `internal/approval/notifier.go` + `--approval-webhook-url`)*
+- [x] **Approval model design doc** — CRD shape + gate/resume state machine *(slice 1)*
+- [x] **ApprovalPolicy CRD** — what actions require approval *(slice 2, declarative)*
+- [x] **ApprovalRequest CRD + controller gate** — block in `AwaitingApproval`, resume on grant *(slice 3)*
+- [x] **Approval audit trail** — who/when/scope/expiry (`ApprovalRequest.status` + `policyDecisions{type:approval}` + OTLP `approval.*` records) *(slices 3, 7)*
+- [x] **Notification hooks** — generic webhook (`--approval-webhook-url`); Slack/PagerDuty future adapters *(slice 4)*
+- [x] **Approver allowlist + multi-approver `allOf`** *(slices 5, 6)*
+- [x] **Per-tool runtime approval** — mid-execution hold of a running tool call; `status.pendingApprovals` surface *(runtime-approval design + impl)*
+- [x] **Authenticated approver identity** — opt-in mutating webhook stamps `spec.decidedBy` from apiserver `userInfo` *(slice 8)*
 
 ---
 
 ### Phase 6 — Orchestrator adapters
 
-Stay orchestrator-agnostic; add backends without coupling core reconciler to Jobs.
+Stay orchestrator-agnostic; add backends without coupling the core reconciler to Jobs. **Active phase.** Ordered slices 3–10 under *Discovered Follow-Up Tasks → Phase 6*; design: `docs/design/phase-6-orchestrator-interface.md`.
 
-- [~] **Orchestrator interface** — `runtimeBackend` abstraction in controller. **Design doc done (2026-06-21)** (`docs/design/phase-6-orchestrator-interface.md`); **slices 2 + 2b done (2026-06-21):** interface + `backendRegistry` + `kubernetesJobBackend` extracted (`runtime_backend.go`); backend returns a normalized `observation` and the reconciler (`applyObservation`/`applyRuntimePhase`) owns all status mapping. Behavior-preserving. Remaining: a concrete second backend (Tekton/Argo) + optional status-field generalization.
-- [ ] **Tekton adapter** — `runtime.orchestrator: tekton`
+- [x] **Orchestrator interface** — `runtimeBackend` + `backendRegistry` + `kubernetesJobBackend`; backend returns a normalized `observation` and the reconciler (`applyObservation`/`applyRuntimePhase`) owns status mapping *(design + slices 2/2b done 2026-06-21)*
+- [~] **`kubernetes-pod` reference backend** — second in-tree backend proving orchestrator-agnosticism; needs the shared pod-template builder (slice 3) + `status.runtimeRef` generalization (slice 4) + backend impl/tests/e2e (slices 5–9). **Planned 2026-06-24.**
+- [ ] **Tekton adapter** — `runtime.orchestrator: tekton` *(design slice 10, then impl)*
 - [ ] **Argo Workflows adapter**
-- [ ] **Temporal adapter** (or external worker handshake)
+- [ ] **Temporal adapter** (or external worker handshake) — no co-located pod → needs its own evidence channel/assurance
 - [ ] **SessionTemplate CRD** — Parameterized session blueprints for platform teams
 
 ---
