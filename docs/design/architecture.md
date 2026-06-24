@@ -185,7 +185,7 @@ sequenceDiagram
     participant NP as NetworkPolicy backend
 
     API->>R: AgentSession event (watch)
-    R->>R: get session; handle deletion/finalizer
+    R->>R: get session, handle deletion/finalizer
     R->>R: snapshot original (for single end-of-pass patch)
     R->>R: validateSpec -> Denied on failure
     R->>R: resolveTask (prompt / configmap)
@@ -193,7 +193,7 @@ sequenceDiagram
     R->>R: resolveRuntimeProfile (optional)
     R->>R: approval gate (AwaitingApproval if a matching ApprovalPolicy applies)
     alt cancelRequested
-        R->>API: delete owned Job; phase=Cancelled
+        R->>API: delete owned Job, phase=Cancelled
     else terminal phase
         R->>R: skip Job creation
     else active
