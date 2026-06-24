@@ -28,8 +28,8 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 .PHONY: fmt
-fmt: ## Run go fmt against code.
-	go fmt ./...
+fmt: ## Run gofmt against all Go files, including build-tagged files (e.g. //go:build e2e) that `go fmt ./...` skips.
+	@gofmt -w $(shell git ls-files '*.go')
 
 .PHONY: vet
 vet: ## Run go vet against code.
