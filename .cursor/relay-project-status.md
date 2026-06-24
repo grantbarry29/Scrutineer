@@ -74,6 +74,16 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 ---
 
+### Task: Author per-component READMEs
+
+**Goal:** the `component-docs` / `component-binaries` Cursor rules + [`docs/templates/component-readme.md`](../docs/templates/component-readme.md) are in place (2026-06-24), but the components themselves still lack local READMEs. Write the missing ones from code/manifests/tests only (mark unknowns `TODO: verify`).
+
+**Components needing a README** (do a few per session, not all at once): `cmd/dns-proxy/`, `cmd/tool-gateway/`, `cmd/fs-gateway/` (sidecar binaries), `internal/controller/agentsession/` (core controller), `internal/reporter/` (runtime-evidence + approval HTTP service). Manager overview already lives in the root [`README.md`](../README.md).
+
+**Acceptance:** each README follows the template, is concise/scannable, and uses repo-relative links; no boilerplate-only files.
+
+---
+
 ### Phase 6 — orchestrator adapters (ordered task cards)
 
 **Goal of the phase:** prove Relay's governance is orchestrator-agnostic by adding a second `runtimeBackend` behind the existing interface, without coupling the reconciler to any one orchestrator. Design: [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md) (read it before starting any slice).
