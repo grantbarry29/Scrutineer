@@ -81,8 +81,9 @@ func (r *AgentSessionReconciler) reconcileApprovalGate(ctx context.Context, sess
 
 	switch req.Spec.Decision {
 	case relayv1alpha1.ApprovalDecisionGranted:
-		// Honor a grant only from a listed approver (best-effort: DecidedBy is
-		// self-declared, the real boundary is RBAC on patching the request).
+		// Honor a grant only from a listed approver. DecidedBy is authenticated
+		// when the identity webhook is enabled (--enable-webhooks); otherwise it
+		// is self-declared and the real boundary is RBAC on patching the request.
 		if !approverAllowed(gatePolicy, req.Spec.DecidedBy) {
 			_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStatePending, gatePolicy,
 				"granted by an unlisted approver; awaiting an authorized decision")

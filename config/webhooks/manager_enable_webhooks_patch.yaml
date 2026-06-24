@@ -1,0 +1,5 @@
+# Append --enable-webhooks to the manager args (JSON6902 so the base arg list is
+# preserved rather than replaced by a strategic-merge of a scalar list).
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --enable-webhooks

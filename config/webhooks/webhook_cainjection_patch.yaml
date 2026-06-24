@@ -1,0 +1,8 @@
+# Tell cert-manager's ca-injector to populate the webhook caBundle from the
+# serving certificate so the apiserver trusts the webhook server's TLS.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: relay-system/serving-cert

@@ -33,6 +33,7 @@ import (
 	"github.com/secureai/relay/internal/metrics"
 	"github.com/secureai/relay/internal/reporter"
 	"github.com/secureai/relay/internal/tracing"
+	relaywebhookv1alpha1 "github.com/secureai/relay/internal/webhook/v1alpha1"
 )
 
 var (
@@ -58,6 +59,7 @@ func main() {
 		enableLeaderElection bool
 		reporterOnly         bool
 		approvalWebhookURL   string
+		enableWebhooks       bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "Address the metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "Address the probe endpoint binds to.")
@@ -79,6 +81,8 @@ func main() {
 		"Serve only the runtime evidence reporter (no AgentSession reconciler). Used for in-cluster e2e reporter deployments.")
 	flag.StringVar(&approvalWebhookURL, "approval-webhook-url", "",
 		"Webhook URL notified (HTTP POST JSON) when a session opens a human-approval gate. Empty disables notifications.")
+	flag.BoolVar(&enableWebhooks, "enable-webhooks", false,
+		"Serve admission webhooks (requires TLS certs mounted at the webhook server cert dir). Enables the ApprovalRequest identity-stamping webhook that captures the authenticated approver identity.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -149,6 +153,14 @@ func main() {
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "AgentSession")
 			os.Exit(1)
+		}
+
+		if enableWebhooks {
+			if err := relaywebhookv1alpha1.SetupApprovalRequestWebhookWithManager(mgr); err != nil {
+				setupLog.Error(err, "unable to set up admission webhook", "webhook", "ApprovalRequest")
+				os.Exit(1)
+			}
+			setupLog.Info("admission webhooks enabled", "webhook", "ApprovalRequest identity stamper")
 		}
 
 		if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

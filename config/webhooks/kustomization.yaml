@@ -1,0 +1,29 @@
+# Optional overlay that deploys Relay WITH the ApprovalRequest identity-stamping
+# admission webhook enabled. Requires cert-manager in the cluster.
+#
+#   kustomize build config/webhooks | kubectl apply -f -
+#
+# The base `config/default` overlay deploys Relay without webhooks (no cert
+# dependency), so this is purely additive and opt-in.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: relay-system
+
+resources:
+- ../default
+- ../webhook
+- ../certmanager
+
+patches:
+- path: manager_webhook_patch.yaml
+  target:
+    kind: Deployment
+    name: relay-controller-manager
+- path: manager_enable_webhooks_patch.yaml
+  target:
+    kind: Deployment
+    name: relay-controller-manager
+- path: webhook_cainjection_patch.yaml
+  target:
+    kind: MutatingWebhookConfiguration
