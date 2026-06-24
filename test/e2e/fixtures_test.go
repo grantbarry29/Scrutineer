@@ -122,6 +122,21 @@ func withArgumentDeniedToolInvokeProbe(tool, argsJSON string) agentSessionOption
 	}
 }
 
+// withApprovalHoldToolInvokeProbe waits for sidecars then repeatedly POSTs a tool call
+// that matches requireHumanApproval. Under enforced mode the gateway holds the call
+// (long-poll → 202) until a human grants it, so the probe re-invokes the SAME call
+// (stable requestId keeps the hold idempotent) until it is allowed/denied. argsJSON is
+// the raw JSON for the "arguments" object, e.g. `{"target":"prod"}`.
+func withApprovalHoldToolInvokeProbe(tool, argsJSON string) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) {
+		body := fmt.Sprintf(`{"tool":"%s","requestId":"e2e-approval-1","arguments":%s}`, tool, argsJSON)
+		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
+			`sleep 15; for i in $(seq 1 90); do wget -q -O /dev/null --post-data='%s' --header='Content-Type: application/json' "${RELAY_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 1; done; sleep 120`,
+			body,
+		)}
+	}
+}
+
 // withDeniedDomainEgressProbe waits for sidecars then probes a denied domain via HTTP_PROXY.
 func withDeniedDomainEgressProbe(domain string) agentSessionOption {
 	return func(s *relayv1alpha1.AgentSession) {
@@ -267,6 +282,57 @@ func createEnforcedArgumentRuleToolPolicy(ctx context.Context, namespace, name, 
 		},
 	}
 	Expect(k8sClient.Create(ctx, tp)).To(Succeed())
+}
+
+// createEnforcedApprovalPolicy creates an enforced AgentPolicy that requires human
+// approval for the named tool. (requireHumanApproval lives in PolicyRules, not on
+// ToolPolicySpec, so this uses an AgentPolicy.) The strictest-mode merge makes the
+// effective tool-gateway mode enforced, so the gateway holds the call.
+func createEnforcedApprovalPolicy(ctx context.Context, namespace, name, tool string) {
+	GinkgoHelper()
+	ap := &relayv1alpha1.AgentPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: relayv1alpha1.AgentPolicySpec{
+			Mode: relayv1alpha1.PolicyModeEnforced,
+			PolicyRules: relayv1alpha1.PolicyRules{
+				RequireHumanApproval: []string{tool},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
+}
+
+// waitForRuntimeApprovalRequest returns the name of the runtime ApprovalRequest the
+// tool-gateway registered for the session's held tool call (spec.trigger=runtime).
+func waitForRuntimeApprovalRequest(ctx context.Context, namespace, sessionName string) string {
+	GinkgoHelper()
+	var name string
+	Eventually(func(g Gomega) {
+		var list relayv1alpha1.ApprovalRequestList
+		g.Expect(k8sClient.List(ctx, &list, client.InNamespace(namespace))).To(Succeed())
+		for i := range list.Items {
+			req := &list.Items[i]
+			if req.Spec.SessionRef.Name == sessionName && req.Spec.IsRuntime() {
+				name = req.Name
+				return
+			}
+		}
+		g.Expect(name).NotTo(BeEmpty(), "no runtime ApprovalRequest registered yet for session %q", sessionName)
+	}, 90*time.Second, 2*time.Second).Should(Succeed())
+	return name
+}
+
+// grantRuntimeApproval sets a granted decision on a runtime ApprovalRequest (the
+// human action; the controller turns this into status.state=Granted).
+func grantRuntimeApproval(ctx context.Context, namespace, name, approver string) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		var req relayv1alpha1.ApprovalRequest
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &req)).To(Succeed())
+		req.Spec.Decision = relayv1alpha1.ApprovalDecisionGranted
+		req.Spec.DecidedBy = approver
+		g.Expect(k8sClient.Update(ctx, &req)).To(Succeed())
+	}, 30*time.Second, time.Second).Should(Succeed())
 }
 
 func createEnforcedDeniedPathPolicy(ctx context.Context, namespace, name, path string) {
