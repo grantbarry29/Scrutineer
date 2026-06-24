@@ -82,6 +82,7 @@ GET  /v1/approvals/{approvalId}          # poll current state
 
 - **Idempotent:** `POST` with the same `(session, requestId)` returns the same `approvalId` and never creates a duplicate `ApprovalRequest` (name derived from the tuple).
 - **No raw arguments cross the wire** beyond what evidence needs: send an `argDigest` (sha256 over the canonicalized args) and the policy-defined `target`, never raw values (redaction invariant from argument constraints).
+- **Abuse controls (NEW holds only):** creating a new hold is rate-limited per session (min interval, `429` + `Retry-After`) and capped at a max number of *undecided* runtime holds per session (`DefaultMaxOutstandingApprovals`, `429`). Re-registering an existing `requestId` (the gateway keepalive) and all `GET` polls are exempt, so a cooperating agent's long-poll loop is never throttled. This bounds `ApprovalRequest` object creation by a chatty or hostile agent. The handler lists runtime `ApprovalRequest`s to count outstanding holds (reporter RBAC: `approvalrequests: get;list;create`).
 - **Blocking model (gateway side):** bounded **long-poll** — the gateway holds the agent's call up to e.g. 25s per attempt, polling the controller; on timeout it returns `202 {approvalId, retryAfter}` so a cooperating agent re-POSTs the *same* call (same `requestId`, deduped). This bounds held connections while keeping the common case a single synchronous call. (A pure long-hold or pure client-poll are the two extremes; the hybrid is the recommendation.)
 
 ## CRD reuse + minimal additions

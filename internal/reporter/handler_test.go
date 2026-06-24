@@ -349,7 +349,7 @@ func newFakeClient(objs ...client.Object) client.Client {
 	s := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(s)
 	_ = relayv1alpha1.AddToScheme(s)
-	builder := fake.NewClientBuilder().WithScheme(s).WithStatusSubresource(&relayv1alpha1.AgentSession{})
+	builder := fake.NewClientBuilder().WithScheme(s).WithStatusSubresource(&relayv1alpha1.AgentSession{}, &relayv1alpha1.ApprovalRequest{})
 	for _, obj := range objs {
 		builder = builder.WithObjects(obj)
 	}

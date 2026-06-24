@@ -35,6 +35,12 @@ const (
 	approvalsPrefix = "/v1/approvals/"
 	// MaxApprovalBodyBytes bounds the approval-channel request body.
 	MaxApprovalBodyBytes = 16 * 1024
+	// DefaultMaxOutstandingApprovals caps undecided runtime holds per session, so a
+	// chatty or hostile agent cannot create unbounded ApprovalRequest objects.
+	DefaultMaxOutstandingApprovals = 16
+	// DefaultApprovalRegisterInterval is the minimum spacing between NEW holds for one
+	// session (re-registering an existing hold is exempt — that is the keepalive path).
+	DefaultApprovalRegisterInterval = time.Second
 )
 
 // ApprovalHandler serves the mid-execution per-tool approval channel:
@@ -53,6 +59,19 @@ type ApprovalHandler struct {
 	// Reader is an uncached reader for fresh get/lookup (avoids stale-cache races).
 	Reader   client.Reader
 	Verifier IdentityVerifier
+	// Limiter throttles the creation of NEW holds per session (nil disables).
+	Limiter *sessionRateLimiter
+	// MaxOutstanding caps undecided runtime holds per session (<=0 disables).
+	MaxOutstanding int
+	// Now is the clock used for rate limiting (defaults to time.Now).
+	Now func() time.Time
+}
+
+func (h *ApprovalHandler) now() time.Time {
+	if h.Now != nil {
+		return h.Now()
+	}
+	return time.Now()
 }
 
 // ServeHTTP dispatches the approval channel by method/path.
@@ -112,6 +131,26 @@ func (h *ApprovalHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing == nil {
+		// Abuse controls apply only to genuinely NEW holds: re-registering an
+		// existing requestId (the gateway's keepalive) is idempotent and exempt.
+		if h.Limiter != nil && !h.Limiter.allow(sessionKey.String(), h.now()) {
+			w.Header().Set("Retry-After", "1")
+			writeError(w, ErrRateLimited, http.StatusTooManyRequests, "approval registration rate limit exceeded")
+			return
+		}
+		if h.MaxOutstanding > 0 {
+			outstanding, cErr := h.countOutstandingHolds(r.Context(), req.Session.Namespace, req.Session.Name)
+			if cErr != nil {
+				http.Error(w, "failed to count outstanding holds", http.StatusInternalServerError)
+				return
+			}
+			if outstanding >= h.MaxOutstanding {
+				w.Header().Set("Retry-After", "5")
+				writeError(w, ErrRateLimited, http.StatusTooManyRequests,
+					"too many outstanding approval holds for session")
+				return
+			}
+		}
 		created, cErr := h.createApproval(r.Context(), &session, &req, name)
 		if cErr != nil {
 			http.Error(w, "failed to create approval", http.StatusInternalServerError)
@@ -121,6 +160,38 @@ func (h *ApprovalHandler) register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeApprovalResponse(w, existing)
+}
+
+// countOutstandingHolds returns the number of undecided runtime ApprovalRequests
+// gating the given session (the cap denominator).
+func (h *ApprovalHandler) countOutstandingHolds(ctx context.Context, namespace, sessionName string) (int, error) {
+	var list relayv1alpha1.ApprovalRequestList
+	if err := h.Reader.List(ctx, &list, client.InNamespace(namespace)); err != nil {
+		return 0, err
+	}
+	n := 0
+	for i := range list.Items {
+		req := &list.Items[i]
+		if req.Spec.SessionRef.Name != sessionName || !req.Spec.IsRuntime() {
+			continue
+		}
+		if !approvalStateFinal(req.Status.State) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// approvalStateFinal reports whether a hold has reached a terminal state and no
+// longer counts toward the outstanding cap.
+func approvalStateFinal(s relayv1alpha1.ApprovalState) bool {
+	switch s {
+	case relayv1alpha1.ApprovalStateGranted,
+		relayv1alpha1.ApprovalStateDenied,
+		relayv1alpha1.ApprovalStateExpired:
+		return true
+	}
+	return false
 }
 
 // lookup returns the current state of a runtime ApprovalRequest by name, after

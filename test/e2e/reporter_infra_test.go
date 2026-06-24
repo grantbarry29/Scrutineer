@@ -143,7 +143,7 @@ func deployInClusterReporter(ctx SpecContext) {
 			{APIGroups: []string{"authentication.k8s.io"}, Resources: []string{"tokenreviews"}, Verbs: []string{"create"}},
 			{APIGroups: []string{"relay.secureai.dev"}, Resources: []string{"agentsessions"}, Verbs: []string{"get"}},
 			{APIGroups: []string{"relay.secureai.dev"}, Resources: []string{"agentsessions/status"}, Verbs: []string{"get", "update", "patch"}},
-			{APIGroups: []string{"relay.secureai.dev"}, Resources: []string{"approvalrequests"}, Verbs: []string{"get", "create"}},
+			{APIGroups: []string{"relay.secureai.dev"}, Resources: []string{"approvalrequests"}, Verbs: []string{"get", "list", "create"}},
 			{APIGroups: []string{"batch"}, Resources: []string{"jobs"}, Verbs: []string{"get"}},
 			{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get"}},
 		},

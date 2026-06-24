@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -192,6 +193,97 @@ func TestApprovalHandler_lookupNotFound(t *testing.T) {
 	rec := getApprovalHTTP(t, h, "missing-rt-deadbeef", "ns1")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d", rec.Code)
+	}
+}
+
+func TestApprovalHandler_outstandingCapRejectsNewHolds(t *testing.T) {
+	cl := newFakeClient(newApprovalSession("ns1", "sess-a"))
+	h := &ApprovalHandler{
+		Client: cl, Reader: cl,
+		Verifier:       stubVerifier{identity: CallerIdentity{Namespace: "ns1", PodName: "p"}},
+		MaxOutstanding: 2,
+	}
+
+	// Two distinct holds fit under the cap.
+	for _, id := range []string{"c1", "c2"} {
+		rec := postApproval(t, h, ApprovalRegisterRequest{
+			Session: SessionRef{Namespace: "ns1", Name: "sess-a"}, RequestID: id, Action: "deploy",
+		})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("hold %s: status = %d body=%q", id, rec.Code, rec.Body.String())
+		}
+	}
+
+	// A third NEW hold is over the cap.
+	rec := postApproval(t, h, ApprovalRegisterRequest{
+		Session: SessionRef{Namespace: "ns1", Name: "sess-a"}, RequestID: "c3", Action: "deploy",
+	})
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("third hold status = %d, want 429; body=%q", rec.Code, rec.Body.String())
+	}
+
+	// Re-registering an EXISTING hold is exempt from the cap (keepalive path).
+	rec = postApproval(t, h, ApprovalRegisterRequest{
+		Session: SessionRef{Namespace: "ns1", Name: "sess-a"}, RequestID: "c1", Action: "deploy",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("re-register existing hold status = %d, want 200; body=%q", rec.Code, rec.Body.String())
+	}
+
+	// A decided hold no longer counts: grant c1, then a new hold fits again.
+	grantHold(t, cl, RuntimeApprovalName("sess-a", "c1"))
+	rec = postApproval(t, h, ApprovalRegisterRequest{
+		Session: SessionRef{Namespace: "ns1", Name: "sess-a"}, RequestID: "c3", Action: "deploy",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("new hold after a grant status = %d, want 200; body=%q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestApprovalHandler_rateLimitsNewHolds(t *testing.T) {
+	cl := newFakeClient(newApprovalSession("ns1", "sess-a"))
+	frozen := time.Unix(1_700_000_000, 0)
+	h := &ApprovalHandler{
+		Client: cl, Reader: cl,
+		Verifier: stubVerifier{identity: CallerIdentity{Namespace: "ns1", PodName: "p"}},
+		Limiter:  newSessionRateLimiter(time.Second),
+		Now:      func() time.Time { return frozen },
+	}
+
+	rec := postApproval(t, h, ApprovalRegisterRequest{
+		Session: SessionRef{Namespace: "ns1", Name: "sess-a"}, RequestID: "c1", Action: "deploy",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first hold status = %d", rec.Code)
+	}
+	// A second NEW hold at the same instant is throttled.
+	rec = postApproval(t, h, ApprovalRegisterRequest{
+		Session: SessionRef{Namespace: "ns1", Name: "sess-a"}, RequestID: "c2", Action: "deploy",
+	})
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("second hold status = %d, want 429; body=%q", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Fatal("missing Retry-After on rate-limited register")
+	}
+	// Re-registering the first (existing) hold is exempt from the limiter.
+	rec = postApproval(t, h, ApprovalRegisterRequest{
+		Session: SessionRef{Namespace: "ns1", Name: "sess-a"}, RequestID: "c1", Action: "deploy",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("re-register existing hold status = %d, want 200", rec.Code)
+	}
+}
+
+func grantHold(t *testing.T, cl client.Client, name string) {
+	t.Helper()
+	var ar relayv1alpha1.ApprovalRequest
+	if err := cl.Get(context.Background(), client.ObjectKey{Namespace: "ns1", Name: name}, &ar); err != nil {
+		t.Fatal(err)
+	}
+	ar.Status.State = relayv1alpha1.ApprovalStateGranted
+	if err := cl.Status().Update(context.Background(), &ar); err != nil {
+		t.Fatal(err)
 	}
 }
 
