@@ -320,6 +320,10 @@ Review only (no code change required beyond status file)
 
 Scoped tasks found by repository audit or implementation work. **Not in the active queue** until promoted. Pick one at a time into **Ready for Cursor Queue** when appropriate.
 
+### Task: investigate failing dns-proxy live e2e (`Live network violation population`) — **discovered 2026-06-23**
+
+Running the full `make test-e2e` suite (after rebuilding/reloading all sidecar images), **20 of 21 specs pass** — including every per-tool runtime approval spec and the tool/argument-violation specs. The lone failure is `test/e2e/network_violation_test.go` "populates status.violations when dns-proxy denies enforced egress": the session reaches Running with the dns-proxy sidecar injected, but no egress violation is ever recorded (`status.violations` stays empty, times out at 90s). **Not a regression from the runtime-approval slices or the approval-channel abuse controls** — those touch only the tool-gateway, the reporter approval channel, and approval e2e fixtures; the dns-proxy enforcement path and the `/v1/report` handler are untouched, and the tool-gateway→reporter `/v1/report` path (same reporting mechanism) passes. Likely an environmental/data-plane issue: the agent's `wget http://evil.example/` egress is not being intercepted/denied (or denial isn't reported) inside this sandbox kind cluster. **Next step:** inspect the dns-proxy sidecar logs + the agent's HTTP_PROXY/DNS routing in a live run (don't tear down the namespace) to determine whether the egress is reaching the proxy at all, then decide if it's a real enforcement bug or sandbox networking. Scope: dns-proxy data plane only; do not bundle with approval work.
+
 **Runtime evidence loop — promote in this order** (rationale in *Ready for Cursor Queue*):
 
 1. ~~Runtime reporter mechanism design~~ — **done** (`docs/design/phase-3-runtime-reporter-contract.md`).
