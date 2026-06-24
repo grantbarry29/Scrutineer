@@ -36,6 +36,7 @@ type Options struct {
 // +kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests,verbs=get;create
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get
 
@@ -64,8 +65,16 @@ func NewRunnable(opts Options) manager.Runnable {
 		ReportIDs: newReportIDCache(DefaultReportIDCacheTTL),
 	}
 
+	approvals := &ApprovalHandler{
+		Client:   opts.Client,
+		Reader:   opts.APIReader,
+		Verifier: verifier,
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle(reportPath, tracing.HTTPMiddleware(tracing.ReporterTracer(), "runtime.report", handler))
+	mux.Handle(approvalsPath, tracing.HTTPMiddleware(tracing.ReporterTracer(), "runtime.approval", approvals))
+	mux.Handle(approvalsPrefix, tracing.HTTPMiddleware(tracing.ReporterTracer(), "runtime.approval", approvals))
 
 	return &httpServer{
 		addr: bind,

@@ -51,3 +51,29 @@ type CallerIdentity struct {
 	Namespace string
 	PodName   string
 }
+
+// ApprovalRegisterRequest is the JSON body for POST /v1/approvals. A tool-gateway
+// sidecar posts it to register (or look up) a mid-execution hold for a single
+// tool call. It is idempotent per (session, requestId): repeated posts return the
+// same approval without creating duplicates. It carries NO raw argument values —
+// only a redacted argDigest — so the control plane never ingests sensitive args.
+type ApprovalRegisterRequest struct {
+	Session   SessionRef `json:"session"`
+	RequestID string     `json:"requestId"`
+	Action    string     `json:"action"`
+	Target    string     `json:"target,omitempty"`
+	ArgDigest string     `json:"argDigest,omitempty"`
+	PolicyRef string     `json:"policyRef,omitempty"`
+	// Window is an optional post-grant validity duration (Go duration string, e.g.
+	// "15m"). Used only when no matching ApprovalPolicy supplies expiresAfter.
+	Window string `json:"window,omitempty"`
+}
+
+// ApprovalResponse is the JSON response for the approval channel. State mirrors
+// ApprovalRequest.status.state (Pending until a human decides).
+type ApprovalResponse struct {
+	ApprovalID string `json:"approvalId"`
+	State      string `json:"state"`
+	ExpiresAt  string `json:"expiresAt,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+}
