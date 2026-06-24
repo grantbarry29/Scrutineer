@@ -11,8 +11,10 @@ You may obtain a copy of the License at
 package job
 
 import (
+	"net/url"
 	"testing"
 
+	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -99,6 +101,66 @@ func TestBuild_agentDNSProxyEnv(t *testing.T) {
 	proxyEnv := envVarsToMap(byName["egress"].Env)
 	if proxyEnv[dnsproxy.EnvPolicyDeniedDomains] != "evil.example" {
 		t.Fatalf("sidecar denied domains = %q", proxyEnv[dnsproxy.EnvPolicyDeniedDomains])
+	}
+}
+
+// TestBuild_agentEnvRoutesGoAndBusyBoxClients locks in the lowercase-proxy fix:
+// it proves that an agent egress client is routed through the dns-proxy
+// regardless of which env-var casing it honors. BusyBox wget reads ONLY the
+// lowercase names while Go's net/http and curl prefer uppercase; using the same
+// httpproxy logic net/http uses, both casing sets must resolve to the proxy and
+// must bypass loopback. If a future change drops either casing, this fails.
+func TestBuild_agentEnvRoutesGoAndBusyBoxClients(t *testing.T) {
+	enabled := true
+	session := minimalSession()
+	profile := &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
+			}},
+		},
+	}
+	pol := &policy.Resolved{Mode: relayv1alpha1.PolicyModeEnforced}
+	job := Build(session, &Task{}, pol, profile)
+
+	var agentEnv map[string]string
+	for _, c := range job.Spec.Template.Spec.Containers {
+		if c.Name == AgentContainerName {
+			agentEnv = envVarsToMap(c.Env)
+		}
+	}
+
+	wantProxy, err := url.Parse(dnsproxy.DefaultHTTPProxyURL)
+	if err != nil {
+		t.Fatalf("parse proxy url: %v", err)
+	}
+
+	cases := []struct {
+		name              string
+		http, https, none string
+	}{
+		{"uppercase (Go net/http, curl)", agentEnv[EnvHTTPProxy], agentEnv[EnvHTTPSProxy], agentEnv[EnvNoProxy]},
+		{"lowercase (BusyBox wget)", agentEnv[EnvHTTPProxyLower], agentEnv[EnvHTTPSProxyLower], agentEnv[EnvNoProxyLower]},
+	}
+	for _, tc := range cases {
+		cfg := &httpproxy.Config{HTTPProxy: tc.http, HTTPSProxy: tc.https, NoProxy: tc.none}
+		proxyFor := cfg.ProxyFunc()
+
+		for _, target := range []string{"http://evil.example/", "https://evil.example/"} {
+			u, _ := url.Parse(target)
+			got, err := proxyFor(u)
+			if err != nil {
+				t.Fatalf("%s: proxy func for %s: %v", tc.name, target, err)
+			}
+			if got == nil || got.Host != wantProxy.Host {
+				t.Fatalf("%s: %s routed to %v, want dns-proxy %s (egress would bypass enforcement)", tc.name, target, got, wantProxy.Host)
+			}
+		}
+
+		loop, _ := url.Parse("http://127.0.0.1:8088/")
+		if got, _ := proxyFor(loop); got != nil {
+			t.Fatalf("%s: loopback routed to %v, want direct (no_proxy bypass)", tc.name, got)
+		}
 	}
 }
 
