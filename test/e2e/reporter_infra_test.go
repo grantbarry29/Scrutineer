@@ -35,12 +35,12 @@ import (
 )
 
 const (
-	relaySystemNamespace = "relay-system"
-	e2eReporterLabel     = "relay.secureai.dev/e2e-component"
-	e2eReporterLabelVal  = "runtime-reporter"
-	e2eReporterDeploy    = "relay-e2e-runtime-reporter"
-	e2eReporterService   = "relay-controller-reporter"
-	e2eReporterSA        = "relay-e2e-runtime-reporter"
+	relaySystemNamespace   = "relay-system"
+	e2eReporterLabel       = "relay.secureai.dev/e2e-component"
+	e2eReporterLabelVal    = "runtime-reporter"
+	e2eReporterDeploy      = "relay-e2e-runtime-reporter"
+	e2eReporterService     = "relay-controller-reporter"
+	e2eReporterSA          = "relay-e2e-runtime-reporter"
 	e2eReporterClusterRole = "relay-e2e-runtime-reporter"
 )
 
@@ -123,8 +123,8 @@ func deployInClusterReporter(ctx SpecContext) {
 	ensureRelaySystemNamespace(ctx)
 
 	labels := map[string]string{
-		e2eReporterLabel:           e2eReporterLabelVal,
-		"app.kubernetes.io/name":   "relay",
+		e2eReporterLabel:              e2eReporterLabelVal,
+		"app.kubernetes.io/name":      "relay",
 		"app.kubernetes.io/component": "runtime-reporter",
 	}
 

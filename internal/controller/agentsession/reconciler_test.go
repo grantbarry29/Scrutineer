@@ -39,7 +39,6 @@ func testReconciler() *AgentSessionReconciler {
 	}
 }
 
-
 var _ = Describe("AgentSession reconciler", func() {
 
 	Context("validation and denial", func() {
