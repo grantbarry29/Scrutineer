@@ -100,7 +100,7 @@ classDiagram
       spec.runtime
       spec.policyRefs[]
       spec.runtimeProfileRef
-      spec.policy (inline)
+      spec.policy_inline
       spec.workspace
       spec.outputs
       spec.cancelRequested
@@ -110,36 +110,36 @@ classDiagram
       status.matchedPolicies[]
       status.policyDecisions[]
       status.violations[]
-      status.jobName / podName
-      status.result / usage / artifacts
+      status.jobName_podName
+      status.result_usage_artifacts
     }
     class AgentPolicy {
-      spec.rules (PolicyRules)
+      spec.rules_PolicyRules
       spec.mode
     }
     class ToolPolicy {
-      spec.rules (tools/MCP + caps)
+      spec.rules_tools_MCP_caps
       spec.mode
     }
     class RuntimeProfile {
-      spec.container (security)
-      spec.pod (security, runtimeClassName)
+      spec.container_security
+      spec.pod_security_runtimeClassName
       spec.sidecars[]
     }
     class PolicyRules {
-      allowedDomains/deniedDomains
-      allowedCIDRs/deniedCIDRs
-      allowedTools/deniedTools
+      allowedDomains_deniedDomains
+      allowedCIDRs_deniedCIDRs
+      allowedTools_deniedTools
       maxCallsPerMinute
       requireHumanApproval
-      (future: allowedPaths/deniedPaths)
+      future_allowedPaths_deniedPaths
     }
     AgentSession "1" --> "0..*" AgentPolicy : policyRefs
     AgentSession "1" --> "0..*" ToolPolicy : policyRefs
     AgentSession "1" --> "0..1" RuntimeProfile : runtimeProfileRef
     AgentPolicy --> PolicyRules
     ToolPolicy --> PolicyRules
-    AgentSession --> PolicyRules : spec.policy (inline)
+    AgentSession --> PolicyRules : spec.policy inline
 ```
 
 **Reference rules (invariant):** all refs (`policyRefs`, `runtimeProfileRef`, `promptConfigMapRef`) are **same-namespace only** in the MVP. Cross-namespace references are a deliberate future feature, not an oversight.
