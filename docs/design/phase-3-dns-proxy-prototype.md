@@ -6,7 +6,7 @@ Relay enforces domain and CIDR egress policy through an in-pod **dns-proxy** sid
 
 - NetworkPolicy (slice 3) enforces **CIDR only** at the CNI layer.
 - **dns-proxy** sidecars enforce **FQDN + CIDR** at an HTTP(S) egress proxy using effective policy and mode semantics.
-- Agents use `HTTP_PROXY` / `HTTPS_PROXY` pointing at `http://127.0.0.1:15053` when a dns-proxy sidecar is enabled.
+- Agents use `HTTP_PROXY` / `HTTPS_PROXY` (and the lowercase `http_proxy` / `https_proxy`) pointing at `http://127.0.0.1:15053` when a dns-proxy sidecar is enabled.
 
 ## Sidecar configuration
 
@@ -19,7 +19,7 @@ When `RuntimeProfile.spec.sidecars[]` includes an enabled `dns-proxy` entry, the
 | `AGENT_POLICY_*` domain/CIDR lists | Effective policy propagation |
 | `AGENT_POLICY_MODE` | `audit-only` / `dry-run` / `enforced` |
 
-The agent container receives `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY=localhost,127.0.0.1`.
+The agent container receives both casings of the proxy variables — `HTTP_PROXY`/`http_proxy`, `HTTPS_PROXY`/`https_proxy`, and `NO_PROXY`/`no_proxy=localhost,127.0.0.1`. Both are required because common tooling disagrees on casing: BusyBox `wget` reads **only** the lowercase form, so injecting uppercase alone lets such agents resolve denied domains directly and bypass egress enforcement with no evidence recorded.
 
 ## Authorization (`dnsproxy.EvaluateEgress`)
 
