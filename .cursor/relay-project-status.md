@@ -78,7 +78,7 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 **Goal:** the `component-docs` / `component-binaries` Cursor rules + [`docs/templates/component-readme.md`](../docs/templates/component-readme.md) are in place (2026-06-24), but the components themselves still lack local READMEs. Write the missing ones from code/manifests/tests only (mark unknowns `TODO: verify`).
 
-**Components needing a README** (do a few per session, not all at once): `cmd/dns-proxy/`, `cmd/tool-gateway/`, `cmd/fs-gateway/` (sidecar binaries), `internal/controller/agentsession/` (core controller), `internal/reporter/` (runtime-evidence + approval HTTP service). Manager overview already lives in the root [`README.md`](../README.md).
+**Components needing a README** (do a few per session, not all at once): ~~`cmd/dns-proxy/`, `cmd/tool-gateway/`, `cmd/fs-gateway/` (sidecar binaries)~~ — **done 2026-06-24**; remaining: `internal/controller/agentsession/` (core controller), `internal/reporter/` (runtime-evidence + approval HTTP service). Manager overview already lives in the root [`README.md`](../README.md).
 
 **Acceptance:** each README follows the template, is concise/scannable, and uses repo-relative links; no boilerplate-only files.
 
