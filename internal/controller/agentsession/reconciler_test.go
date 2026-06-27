@@ -786,6 +786,62 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(got.Status.JobName).To(Equal(got.Status.RuntimeRef.Name))
 		})
 
+		It("creates an owned Pod (not a Job) for the kubernetes-pod orchestrator", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "creates-pod")
+			session.Spec.Runtime.Orchestrator = OrchestratorKubernetesPod
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			podKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
+			var pod corev1.Pod
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(testCtx, podKey, &pod)).To(Succeed())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			// A pod-backed session must not also create a Job.
+			expectJobAbsent(ns, session)
+
+			Expect(pod.Labels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+			Expect(pod.OwnerReferences[0].Kind).To(Equal("AgentSession"))
+			Expect(pod.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
+			// The shared pod template supplies the agent container + automount-off.
+			Expect(pod.Spec.Containers[0].Name).To(Equal(relayjob.AgentContainerName))
+			Expect(pod.Spec.AutomountServiceAccountToken).NotTo(BeNil())
+			Expect(*pod.Spec.AutomountServiceAccountToken).To(BeFalse())
+
+			var got relayv1alpha1.AgentSession
+			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			Expect(got.Status.RuntimeRef).NotTo(BeNil())
+			Expect(got.Status.RuntimeRef.Kind).To(Equal("Pod"))
+			Expect(got.Status.RuntimeRef.APIVersion).To(Equal("v1"))
+			Expect(got.Status.RuntimeRef.Name).To(Equal(podKey.Name))
+			Expect(got.Status.PodName).To(Equal(podKey.Name))
+		})
+
+		It("maps Pod lifecycle to Running then Succeeded for the kubernetes-pod orchestrator", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "pod-lifecycle")
+			session.Spec.Runtime.Orchestrator = OrchestratorKubernetesPod
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			podKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
+			var pod corev1.Pod
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(testCtx, podKey, &pod)).To(Succeed())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			pod.Status.Phase = corev1.PodRunning
+			Expect(k8sClient.Status().Update(testCtx, &pod)).To(Succeed())
+			waitForPhase(key, relayv1alpha1.PhaseRunning)
+
+			Expect(k8sClient.Get(testCtx, podKey, &pod)).To(Succeed())
+			pod.Status.Phase = corev1.PodSucceeded
+			Expect(k8sClient.Status().Update(testCtx, &pod)).To(Succeed())
+			waitForPhase(key, relayv1alpha1.PhaseSucceeded)
+		})
+
 		It("marks Ready=true when the underlying Job has active pods", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "ready-running")

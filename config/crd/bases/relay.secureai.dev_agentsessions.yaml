@@ -469,10 +469,11 @@ spec:
                     default: kubernetes-job
                     description: |-
                       Orchestrator selects which runtime backend should execute the session.
-                      MVP only supports "kubernetes-job".
+                      Supported: "kubernetes-job" (default) and "kubernetes-pod".
                       Future values: "tekton", "argo", "temporal", "external".
                     enum:
                     - kubernetes-job
+                    - kubernetes-pod
                     type: string
                   resources:
                     description: Resources sets the container resource requests and

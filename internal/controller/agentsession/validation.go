@@ -77,9 +77,9 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 	if orchestrator == "" {
 		orchestrator = OrchestratorKubernetesJob
 	}
-	if orchestrator != OrchestratorKubernetesJob {
-		return fmt.Errorf("spec.runtime.orchestrator %q is not supported in MVP (allowed: %q)",
-			orchestrator, OrchestratorKubernetesJob)
+	if orchestrator != OrchestratorKubernetesJob && orchestrator != OrchestratorKubernetesPod {
+		return fmt.Errorf("spec.runtime.orchestrator %q is not supported (allowed: %q, %q)",
+			orchestrator, OrchestratorKubernetesJob, OrchestratorKubernetesPod)
 	}
 
 	if spec.Model.Temperature != nil {

@@ -73,4 +73,5 @@ const (
 // Orchestrator values supported by Relay.
 const (
 	OrchestratorKubernetesJob = "kubernetes-job"
+	OrchestratorKubernetesPod = "kubernetes-pod"
 )

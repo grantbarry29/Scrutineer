@@ -96,11 +96,15 @@ type runtimeBackend interface {
 // backendRegistry maps spec.runtime.orchestrator → backend.
 type backendRegistry map[string]runtimeBackend
 
-// defaultBackendRegistry builds the registry of supported runtime backends. Slice 2
-// registers only the kubernetes-job backend.
+// defaultBackendRegistry builds the registry of supported runtime backends: the
+// kubernetes-job backend and the kubernetes-pod reference backend.
 func defaultBackendRegistry(c client.Client, apiReader client.Reader, scheme *runtime.Scheme) backendRegistry {
 	jobBackend := newKubernetesJobBackend(c, apiReader, scheme)
-	return backendRegistry{jobBackend.name(): jobBackend}
+	podBackend := newKubernetesPodBackend(c, apiReader, scheme)
+	return backendRegistry{
+		jobBackend.name(): jobBackend,
+		podBackend.name(): podBackend,
+	}
 }
 
 // kubernetesJobBackend runs governed AgentSessions as Kubernetes Jobs.

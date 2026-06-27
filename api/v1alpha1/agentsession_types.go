@@ -105,9 +105,9 @@ type ModelSpec struct {
 // RuntimeSpec describes how the agent should be executed.
 type RuntimeSpec struct {
 	// Orchestrator selects which runtime backend should execute the session.
-	// MVP only supports "kubernetes-job".
+	// Supported: "kubernetes-job" (default) and "kubernetes-pod".
 	// Future values: "tekton", "argo", "temporal", "external".
-	// +kubebuilder:validation:Enum=kubernetes-job
+	// +kubebuilder:validation:Enum=kubernetes-job;kubernetes-pod
 	// +kubebuilder:default=kubernetes-job
 	// +optional
 	Orchestrator string `json:"orchestrator,omitempty"`

@@ -44,8 +44,11 @@ against an unchanged cluster makes no API mutations.
 
 - `reconciler.go` — loop, finalizer, status/condition/event mapping (`applyObservation`,
   `applyRuntimePhase`, `setReadyCondition`).
-- `runtime_backend.go` + `pod.go` — `runtimeBackend` interface, registry, and the
-  `kubernetes-job` backend; `observation`/`runtimePhase` are the backend-neutral output.
+- `runtime_backend.go` + `pod.go` — `runtimeBackend` interface, backend registry, and the
+  `kubernetes-job` backend (`pod.go` discovers the Job's agent Pod for `status.podName`);
+  `observation`/`runtimePhase` are the backend-neutral output.
+- `backend_pod.go` — the `kubernetes-pod` reference backend (runs the agent as a bare
+  Pod via `job.BuildPodTemplateSpec`), selected by `spec.runtime.orchestrator: kubernetes-pod`.
 - `validation.go`, `task.go`, `policy.go` / `policy_decisions.go`, `runtimeprofile.go` —
   spec validation and resolution.
 - `approval.go` / `approval_runtime.go` — pre-runtime gate + per-tool runtime approvals.

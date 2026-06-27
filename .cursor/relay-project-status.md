@@ -7,7 +7,8 @@
 
 ## Recent changes (newest first)
 
-- **Phase 6 · slice 4 DONE (2026-06-27)** — added backend-neutral `status.runtimeRef` (`apiVersion`/`kind`/`name`/`uid`) on `AgentSessionStatus`; the `observation` carries a `runtimeRef` and `applyObservation` populates it generically. Job backend sets `runtimeRef{kind:Job}` and still mirrors `jobName`/`podName` (back-compat; `jobName` now documented as a deprecated alias). Next: slice 5 (`kubernetes-pod` backend).
+- **Phase 6 · slice 5 DONE (2026-06-27)** — added the `kubernetes-pod` reference backend (`backend_pod.go`): runs the agent as a bare Pod from the shared `job.BuildPodTemplateSpec`, registered next to the Job backend and selectable via `spec.runtime.orchestrator: kubernetes-pod` (CRD enum + `validateSpec` accept it). Reports `runtimeRef{kind:Pod}`/`podName`; envtest covers create-Pod-not-Job + Running→Succeeded. Completion/timeout/drift edge cases are slice 6. Next: slice 6.
+- **Phase 6 · slice 4 DONE (2026-06-27)** — added backend-neutral `status.runtimeRef` (`apiVersion`/`kind`/`name`/`uid`) on `AgentSessionStatus`; the `observation` carries a `runtimeRef` and `applyObservation` populates it generically. Job backend sets `runtimeRef{kind:Job}` and still mirrors `jobName`/`podName` (back-compat; `jobName` now documented as a deprecated alias).
 - **Phase 6 · slice 3 DONE (2026-06-27)** — extracted the shared agent pod-template into exported `job.BuildPodTemplateSpec`; `Build` now only adds the Job wrapper (no behavior change). Unblocks the `kubernetes-pod` backend.
 - **Phase 6 second backend planned** — `kubernetes-pod` reference adapter + `status.runtimeRef` generalization designed (`docs/design/phase-6-orchestrator-interface.md`); ordered task cards under *Discovered Follow-Up Tasks → Phase 6*.
 - **Phase 5 COMPLETE (slice 8)** — authenticated approver identity via opt-in mutating webhook (`internal/webhook/v1alpha1/`, `--enable-webhooks`) stamps `ApprovalRequest.spec.decidedBy` from apiserver `userInfo`; `failurePolicy: Fail`; webhook-mode envtest + live cert-manager verification done.
@@ -26,7 +27,7 @@ Pick **one task card** per session unless the user asks for a design plan. Imple
 
 > **Critical path:** Phases 0–5 **closed** — control-plane reconciliation, three data-plane enforcement domains (network/tool/file), the runtime-evidence loop, observability/audit export, and human approval workflows (including per-tool runtime holds + authenticated approver identity) all ship. **Phase 6 (orchestrator adapters) is the active phase:** the `runtimeBackend` interface + `kubernetes-job` backend + normalized `observation` are done; the next work is the **`kubernetes-pod` reference backend + `status.runtimeRef` generalization**, decomposed into ordered slices 3–10 under *Discovered Follow-Up Tasks → Phase 6*. Design: [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md).
 
-**Queue head:** *Phase 6 · slice 5 — `kubernetes-pod` backend (create/observe/stop)* (see card below). Slices 3 (shared pod-template builder) and 4 (`status.runtimeRef`) shipped 2026-06-27. Slices 5 → 6 → 7 → 8 → 9 → 10 are dependency-ordered; do one per session, in order.
+**Queue head:** *Phase 6 · slice 6 — Pod backend completion/timeout/drift correctness + unit tests* (see card below). Slices 3 (shared pod-template builder), 4 (`status.runtimeRef`), and 5 (`kubernetes-pod` backend create/observe/stop) shipped 2026-06-27. Slices 6 → 7 → 8 → 9 → 10 are dependency-ordered; do one per session, in order.
 
 **Other ready picks** (independent of Phase 6): *Audit controller RBAC for least privilege*, *Pin dev tool versions in README*, *External artifact storage export (S3)* — all under *Discovered Follow-Up Tasks*.
 
@@ -84,29 +85,6 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 **Implement slices 3 → 10 in order, one per session.** Slices 3 and 4 are prerequisites for the Pod backend; 5–8 build and verify it; 9–10 close out docs. Each card has one acceptance criterion and one verification command. Do **not** bundle slices, and do **not** add an external orchestrator dependency (Tekton/Argo CRDs) — those are explicitly out of scope until slice 10's design slice.
 
-#### Task: Phase 6 · slice 5 — `kubernetes-pod` backend (create/observe/stop)
-
-**Goal:** add a second runtime backend that runs the agent as a bare Pod, selectable via `spec.runtime.orchestrator: kubernetes-pod`.
-
-**Scope:**
-- Add constant `OrchestratorKubernetesPod = "kubernetes-pod"` (`constants.go`); accept it in `validateSpec` (`validation.go`) alongside `kubernetes-job`.
-- New `kubernetesPodBackend` (`internal/controller/agentsession/backend_pod.go`) implementing `runtimeBackend`: `name()` → `kubernetes-pod`; `ensure()` builds a Pod from the shared pod-template builder (slice 3) wrapped in a `corev1.Pod` (set `RestartPolicy: Never`, `activeDeadlineSeconds` from `spec.runtime.timeoutSeconds`), Get/Create with owner-ref, ownership check (`IsControlledBy`), returns a normalized `observation` (`runtimeRef{kind:Pod}`, `workloadName` = pod name); `stop()` deletes the Pod; `runtimeGone()`; `ownedType()` → `&corev1.Pod{}`.
-- Register `kubernetesPodBackend` in the backend registry next to the Job backend.
-
-**Non-goals:**
-- Completion/timeout/drift edge cases and their unit tests are **slice 6**. Watch wiring is **slice 7**. (Keep this slice to the create/observe/stop happy path.)
-
-**Acceptance criteria:**
-- An `AgentSession` with `orchestrator: kubernetes-pod` creates a **Pod** (not a Job), reaches `Running`, and on Pod success reaches a terminal phase; `status.runtimeRef.kind == Pod` (envtest happy path).
-- `kubernetes-job` sessions are unaffected.
-
-**Expected files:**
-- `internal/controller/agentsession/backend_pod.go` (new)
-- `internal/controller/agentsession/constants.go`, `validation.go`, `runtime_backend.go` (registry)
-- agentsession envtest
-
-**Verification command:** `make test`
-
 #### Task: Phase 6 · slice 6 — Pod backend completion/timeout/drift correctness + unit tests
 
 **Goal:** make the Pod backend's lifecycle mapping correct and well-tested across all phases.
@@ -132,6 +110,8 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 #### Task: Phase 6 · slice 7 — watch every registered backend's owned type
 
 **Goal:** ensure Pod-backed sessions reconcile promptly on runtime completion, like Job-backed ones.
+
+**Note (2026-06-27):** mostly satisfied by slice 5 — `SetupWithManager` already loops `Owns(backend.ownedType())` over the registry (now includes Pod), and the slice 5 envtest "maps Pod lifecycle to Running then Succeeded" drives transitions via the manager's watches (not direct `Reconcile` calls). This slice likely reduces to confirming `blockOwnerDeletion`/GC parity for Pods and optionally deduping if a type appears twice across backends.
 
 **Scope:**
 - In `SetupWithManager`, `Owns(...)` each registered backend's `ownedType()` (Job **and** Pod) instead of a single type, deduping if a type appears twice. Keep the existing labeled-Pod `Watches` mapper.
@@ -606,7 +586,7 @@ Backend surfaces for the future operational UI and enterprise audit requirements
 Stay orchestrator-agnostic; add backends without coupling the core reconciler to Jobs. **Active phase.** Ordered slices 3–10 under *Discovered Follow-Up Tasks → Phase 6*; design: `docs/design/phase-6-orchestrator-interface.md`.
 
 - [x] **Orchestrator interface** — `runtimeBackend` + `backendRegistry` + `kubernetesJobBackend`; backend returns a normalized `observation` and the reconciler (`applyObservation`/`applyRuntimePhase`) owns status mapping *(design + slices 2/2b done 2026-06-21)*
-- [~] **`kubernetes-pod` reference backend** — second in-tree backend proving orchestrator-agnosticism. Shared pod-template builder (slice 3) + `status.runtimeRef` generalization (slice 4) **done 2026-06-27**; remaining: backend impl/tests/e2e (slices 5–9).
+- [~] **`kubernetes-pod` reference backend** — second in-tree backend proving orchestrator-agnosticism. Shared pod-template builder (slice 3) + `status.runtimeRef` (slice 4) + create/observe/stop backend (slice 5) **done 2026-06-27**; remaining: completion/timeout/drift correctness + watch wiring + e2e/docs (slices 6–10).
 - [ ] **Tekton adapter** — `runtime.orchestrator: tekton` *(design slice 10, then impl)*
 - [ ] **Argo Workflows adapter**
 - [ ] **Temporal adapter** (or external worker handshake) — no co-located pod → needs its own evidence channel/assurance
