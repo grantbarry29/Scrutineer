@@ -46,6 +46,9 @@ type observation struct {
 	phase runtimePhase
 	// runtimeName feeds status.jobName (e.g. the Job name). Empty if no runtime yet.
 	runtimeName string
+	// runtimeRef is the backend-neutral identity of the created runtime object (kind +
+	// apiVersion + name [+ uid]). Empty until a runtime exists. Feeds status.runtimeRef.
+	runtimeRef *relayv1alpha1.RuntimeRef
 	// workloadName feeds status.podName (e.g. the Pod name). Empty if none yet.
 	workloadName string
 	// created reports that the runtime object was created on this reconcile (drives
@@ -127,8 +130,14 @@ func (b *kubernetesJobBackend) ensure(ctx context.Context, session *relayv1alpha
 		return observation{}, fmt.Errorf("find pod for job %q: %w", runtimeJob.Name, err)
 	}
 	return observation{
-		phase:         jobRuntimePhase(runtimeJob),
-		runtimeName:   runtimeJob.Name,
+		phase:       jobRuntimePhase(runtimeJob),
+		runtimeName: runtimeJob.Name,
+		runtimeRef: &relayv1alpha1.RuntimeRef{
+			APIVersion: batchv1.SchemeGroupVersion.String(),
+			Kind:       "Job",
+			Name:       runtimeJob.Name,
+			UID:        string(runtimeJob.UID),
+		},
 		workloadName:  podName,
 		created:       meta.created,
 		replaced:      meta.replaced,

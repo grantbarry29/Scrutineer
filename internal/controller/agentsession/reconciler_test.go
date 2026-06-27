@@ -776,6 +776,14 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			runtimeCreated := getCondition(&got, ConditionRuntimeCreated)
 			Expect(runtimeCreated.Status).To(Equal(metav1.ConditionTrue))
+
+			// Backend-neutral runtime identity (slice 4) is populated for the Job backend,
+			// and the deprecated jobName alias still mirrors runtimeRef.Name (back-compat).
+			Expect(got.Status.RuntimeRef).NotTo(BeNil())
+			Expect(got.Status.RuntimeRef.Kind).To(Equal("Job"))
+			Expect(got.Status.RuntimeRef.APIVersion).To(Equal("batch/v1"))
+			Expect(got.Status.RuntimeRef.Name).To(Equal(jobNameFor(session)))
+			Expect(got.Status.JobName).To(Equal(got.Status.RuntimeRef.Name))
 		})
 
 		It("marks Ready=true when the underlying Job has active pods", func() {

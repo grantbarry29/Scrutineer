@@ -393,6 +393,27 @@ type ArtifactRef struct {
 	MediaType string `json:"mediaType,omitempty"`
 }
 
+// RuntimeRef is a backend-neutral reference to the orchestrator object that runs a
+// session (e.g. a batch/v1 Job or a v1 Pod). It lets status consumers identify the
+// runtime regardless of which runtime backend created it.
+type RuntimeRef struct {
+	// APIVersion of the runtime object (e.g. "batch/v1", "v1").
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
+	// Kind of the runtime object (e.g. "Job", "Pod").
+	// +optional
+	Kind string `json:"kind,omitempty"`
+
+	// Name of the runtime object.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// UID of the runtime object, when known.
+	// +optional
+	UID string `json:"uid,omitempty"`
+}
+
 // AgentSessionStatus defines the observed state of an AgentSession.
 type AgentSessionStatus struct {
 	// Phase is the current high-level phase of the session.
@@ -428,14 +449,23 @@ type AgentSessionStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 
+	// RuntimeRef identifies the orchestrator object the active backend created for this
+	// session (e.g. a batch/v1 Job, or a v1 Pod). It is the backend-neutral runtime
+	// identity; orchestrator-agnostic readers should prefer it over JobName.
+	// +optional
+	RuntimeRef *RuntimeRef `json:"runtimeRef,omitempty"`
+
 	// JobName is the name of the underlying batch/v1 Job, when one has been created.
+	//
+	// Deprecated: JobName is a backend-specific alias of RuntimeRef.Name kept for
+	// backward compatibility with the kubernetes-job backend. Prefer RuntimeRef.
 	// +optional
 	JobName string `json:"jobName,omitempty"`
 
-	// PodName is the name of the agent Pod for the current Job, when known.
+	// PodName is the name of the agent Pod for the current runtime, when known.
 	// The controller lists Pods labeled for this session, keeps only those owned by the
-	// current Job (ownerReference UID), and records the newest by CreationTimestamp
-	// (name breaks ties). Pods from a replaced Job or without the session label are ignored.
+	// current runtime (ownerReference UID), and records the newest by CreationTimestamp
+	// (name breaks ties). Pods from a replaced runtime or without the session label are ignored.
 	// +optional
 	PodName string `json:"podName,omitempty"`
 

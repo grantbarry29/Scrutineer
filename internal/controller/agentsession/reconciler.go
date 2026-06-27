@@ -431,6 +431,9 @@ func (r *AgentSessionReconciler) applyObservation(session *relayv1alpha1.AgentSe
 	if obs.runtimeName != "" {
 		session.Status.JobName = obs.runtimeName
 	}
+	if obs.runtimeRef != nil {
+		session.Status.RuntimeRef = obs.runtimeRef
+	}
 
 	if obs.replaced {
 		r.recordNormal(session, EventReasonPolicyEnvSynced, "Replaced pending Job to sync policy env vars")
