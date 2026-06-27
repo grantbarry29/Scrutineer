@@ -42,6 +42,10 @@ func withCommand(cmd ...string) agentSessionOption {
 	return func(s *relayv1alpha1.AgentSession) { s.Spec.Runtime.Command = cmd }
 }
 
+func withOrchestrator(orchestrator string) agentSessionOption {
+	return func(s *relayv1alpha1.AgentSession) { s.Spec.Runtime.Orchestrator = orchestrator }
+}
+
 func withoutTask() agentSessionOption {
 	return func(s *relayv1alpha1.AgentSession) {
 		s.Spec.Task = relayv1alpha1.SessionTaskSpec{}
