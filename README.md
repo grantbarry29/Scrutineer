@@ -27,23 +27,27 @@ gates sensitive actions behind human approval workflows.
 ## Long-term product vision
 
 Relay aims to become the runtime control plane for safely running autonomous AI
-agents inside enterprise environments. Planned capabilities:
+agents inside enterprise environments.
+
+**Shipped today** (Phases 0–5):
 
 - Runtime governance for AI agents (per-session policy)
-- Network egress policy (FQDN + CIDR allow/deny)
-- Tool access policy (which tools/MCP servers an agent may invoke)
+- Network egress policy (domain + CIDR allow/deny) — cooperative enforcement
+- Tool access policy (which tools/MCP servers an agent may invoke, incl. argument constraints)
 - File / workspace policy (what the agent may read/write)
-- Identity and credential isolation (per-session SA, KMS-scoped secrets)
-- Audit logs of every model call, tool call, and network request
 - First-class policy violations as cluster events and CRD status
-- Observability (metrics, traces, structured run records)
-- Human approval gates for sensitive actions
-- Integrations with existing orchestrators: Kubernetes Jobs, Tekton, Argo, Temporal
-- Optional enforcement via Envoy sidecars, Cilium/eBPF, NetworkPolicy,
-  DNS proxying, and eventually stronger sandboxes (gVisor / Kata / Firecracker)
+- Audit + observability (Prometheus metrics, OpenTelemetry traces, OTLP audit sink, structured run records)
+- Human approval gates for sensitive actions (incl. mid-execution per-tool holds)
+- Reconcile into Kubernetes Jobs behind a backend-neutral `runtimeBackend` interface
 
-Phases 0–5 of that vision have shipped; Phase 6 (orchestrator adapters) is in
-progress. The authoritative, always-current roadmap and status live in
+**Future** (Phase 6+):
+
+- Additional orchestrators behind the same interface: Kubernetes Pods (in progress), then Tekton, Argo, Temporal
+- Identity and credential isolation (per-session SA, KMS-scoped secrets)
+- Stronger / adversarial-grade enforcement: Envoy sidecars, Cilium/eBPF, generated NetworkPolicy, and sandboxes (gVisor / Kata / Firecracker)
+- An operational governance/observability UI
+
+The authoritative, always-current roadmap and status live in
 [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).
 
 ---
