@@ -74,16 +74,6 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 ---
 
-### Task: Author per-component READMEs
-
-**Goal:** the `component-docs` / `component-binaries` Cursor rules + [`docs/templates/component-readme.md`](../docs/templates/component-readme.md) are in place (2026-06-24), but the components themselves still lack local READMEs. Write the missing ones from code/manifests/tests only (mark unknowns `TODO: verify`).
-
-**Components needing a README** (do a few per session, not all at once): ~~`cmd/dns-proxy/`, `cmd/tool-gateway/`, `cmd/fs-gateway/` (sidecar binaries)~~ — **done 2026-06-24**; remaining: `internal/controller/agentsession/` (core controller), `internal/reporter/` (runtime-evidence + approval HTTP service). Manager overview already lives in the root [`README.md`](../README.md).
-
-**Acceptance:** each README follows the template, is concise/scannable, and uses repo-relative links; no boilerplate-only files.
-
----
-
 ### Phase 6 — orchestrator adapters (ordered task cards)
 
 **Goal of the phase:** prove Relay's governance is orchestrator-agnostic by adding a second `runtimeBackend` behind the existing interface, without coupling the reconciler to any one orchestrator. Design: [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md) (read it before starting any slice).
@@ -347,6 +337,8 @@ RBAC must match kubebuilder markers and actual client calls (Jobs delete, Config
 ## Completed follow-ups (archived)
 
 Shipped work, kept as a terse index. Full per-task detail (scope/files/verification) is in git history and the relevant `docs/design/` doc. Do not re-implement unless a regression is found.
+
+**Component docs (2026-06-27):** `component-docs` (always-on) + `component-binaries` Cursor rules + `docs/templates/component-readme.md`; component READMEs authored for all five components — `cmd/{dns-proxy,tool-gateway,fs-gateway}`, `internal/controller/agentsession`, `internal/reporter` (manager overview is the root `README.md`).
 
 **Phase 6 — orchestrator interface:** slice 1 (design doc) · slice 2 (`runtimeBackend` + registry + `kubernetesJobBackend` extracted) · slice 2b (backend returns neutral `observation`; reconciler `applyObservation`/`applyRuntimePhase` own status).
 
