@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +26,10 @@ import (
 	"github.com/secureai/relay/internal/controller/job"
 	"github.com/secureai/relay/internal/policy"
 )
+
+// podDeadlineExceededReason is the Pod status.reason set by the kubelet when a Pod is
+// killed for exceeding spec.activeDeadlineSeconds.
+const podDeadlineExceededReason = "DeadlineExceeded"
 
 // kubernetesPodBackend runs governed AgentSessions as a single bare Kubernetes Pod
 // (no Job wrapper). It reuses the shared agent pod template (job.BuildPodTemplateSpec)
@@ -47,27 +52,71 @@ func (b *kubernetesPodBackend) name() string { return OrchestratorKubernetesPod 
 
 func (b *kubernetesPodBackend) ownedType() client.Object { return &corev1.Pod{} }
 
-// ensure creates the agent Pod if absent and returns a normalized observation. It never
-// writes to session status. Returns ErrJobNotOwned on an ownership conflict at the
-// deterministic name.
+// ensure creates the agent Pod if absent, reconciles policy/runtime-profile drift, and
+// returns a normalized observation. It never writes to session status. Returns
+// ErrJobNotOwned on an ownership conflict at the deterministic name.
 func (b *kubernetesPodBackend) ensure(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (observation, error) {
 	podKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
+	desired := b.buildPod(session, task, pol, profile)
 
 	var existing corev1.Pod
 	if err := b.client.Get(ctx, podKey, &existing); err == nil {
 		if !metav1.IsControlledBy(&existing, session) {
 			return observation{}, fmt.Errorf("%w: Pod %q", ErrJobNotOwned, existing.Name)
 		}
-		return b.observe(&existing, false), nil
+		return b.reconcileExisting(ctx, session, &existing, desired, podKey)
 	} else if !apierrors.IsNotFound(err) {
 		return observation{}, fmt.Errorf("get Pod %s: %w", podKey, err)
 	}
 
-	created, didCreate, err := b.createPod(ctx, session, b.buildPod(session, task, pol, profile), podKey)
+	created, didCreate, err := b.createPod(ctx, session, desired, podKey)
 	if err != nil {
 		return observation{}, err
 	}
-	return b.observe(created, didCreate), nil
+	obs := b.observe(created, didCreate)
+	obs.policyInSync = true
+	return obs, nil
+}
+
+// reconcileExisting handles an already-owned Pod. Pods are immutable, so policy/profile
+// drift can only be resolved by delete+recreate while the Pod has not started; on a
+// running Pod the drift is surfaced (policyInSync=false) without disruption, mirroring
+// the Job backend's PolicyEnvDrift semantics.
+func (b *kubernetesPodBackend) reconcileExisting(ctx context.Context, session *relayv1alpha1.AgentSession, existing, desired *corev1.Pod, podKey client.ObjectKey) (observation, error) {
+	policyDrift := podPolicyEnvDrift(existing, desired)
+	profileDrift := podRuntimeProfileDrift(existing, desired)
+
+	if !policyDrift && !profileDrift {
+		obs := b.observe(existing, false)
+		obs.policyInSync = true
+		return obs, nil
+	}
+
+	if podReplaceableForSync(existing) {
+		propagation := metav1.DeletePropagationBackground
+		if err := b.client.Delete(ctx, existing, client.PropagationPolicy(propagation)); err != nil && !apierrors.IsNotFound(err) {
+			return observation{}, fmt.Errorf("delete Pod %s for runtime sync: %w", podKey, err)
+		}
+		created, didCreate, err := b.createPod(ctx, session, desired, podKey)
+		if err != nil {
+			return observation{}, err
+		}
+		obs := b.observe(created, didCreate)
+		obs.replaced = policyDrift
+		obs.policyInSync = true
+		return obs, nil
+	}
+
+	// Running Pod: cannot replace without disruption.
+	obs := b.observe(existing, false)
+	if policyDrift {
+		obs.policyInSync = false
+		obs.policyMessage = podPolicyEnvDriftMessage()
+		return obs, nil
+	}
+	// Profile-only drift on a running Pod: policy env is still current.
+	obs.policyInSync = true
+	return obs, nil
 }
 
 // buildPod renders the desired agent Pod from the shared pod template, adding the
@@ -115,8 +164,9 @@ func (b *kubernetesPodBackend) createPod(ctx context.Context, session *relayv1al
 	return desired, true, nil
 }
 
-// observe maps a live Pod onto a normalized observation. For a Pod backend the runtime
-// object and the workload are the same object, so podName == runtimeRef.Name.
+// observe maps a live Pod onto a normalized observation (phase + identity). Callers set
+// the policy-sync fields per reconcile path. For a Pod backend the runtime object and the
+// workload are the same object, so podName == runtimeRef.Name.
 func (b *kubernetesPodBackend) observe(pod *corev1.Pod, created bool) observation {
 	return observation{
 		phase:       podRuntimePhase(pod),
@@ -129,9 +179,6 @@ func (b *kubernetesPodBackend) observe(pod *corev1.Pod, created bool) observatio
 		},
 		workloadName: pod.Name,
 		created:      created,
-		// Policy-env drift detection/replacement for Pods is slice 6; the freshly built
-		// Pod always reflects current policy on create.
-		policyInSync: true,
 	}
 }
 
@@ -183,17 +230,61 @@ func (b *kubernetesPodBackend) stop(ctx context.Context, session *relayv1alpha1.
 	return nil
 }
 
-// podRuntimePhase maps a Pod's status.phase onto the backend-neutral runtimePhase.
-// Timeout (DeadlineExceeded) distinction and drift handling are refined in slice 6.
+// podRuntimePhase maps a Pod's status onto the backend-neutral runtimePhase. A Pod failed
+// for exceeding spec.activeDeadlineSeconds carries status.reason=DeadlineExceeded and is
+// reported as timed-out (distinct from a generic failure). Pending and the empty initial
+// phase map to runtimeStarting (the "starting/indeterminate" state).
 func podRuntimePhase(pod *corev1.Pod) runtimePhase {
 	switch pod.Status.Phase {
 	case corev1.PodSucceeded:
 		return runtimeSucceeded
 	case corev1.PodFailed:
+		if pod.Status.Reason == podDeadlineExceededReason {
+			return runtimeTimedOut
+		}
 		return runtimeFailed
 	case corev1.PodRunning:
 		return runtimeRunning
 	default:
 		return runtimeStarting
 	}
+}
+
+// podReplaceableForSync reports whether an owned Pod can be deleted+recreated to sync
+// drifted policy/profile without disrupting a started workload. Only a Pod that has not
+// begun running (empty initial phase or Pending) is replaceable.
+func podReplaceableForSync(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	switch pod.Status.Phase {
+	case "", corev1.PodPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// podDriftJob wraps a Pod's spec as a throwaway Job so the Pod backend can reuse the
+// Job backend's tested drift detection (which compares Spec.Template.Spec). This avoids
+// duplicating the managed-env-key and runtime-profile comparison logic.
+func podDriftJob(pod *corev1.Pod) *batchv1.Job {
+	return &batchv1.Job{Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{Spec: pod.Spec}}}
+}
+
+// podPolicyEnvDrift reports whether the propagated AGENT_POLICY_* env on the existing Pod
+// differs from the desired Pod.
+func podPolicyEnvDrift(existing, desired *corev1.Pod) bool {
+	return job.PolicyEnvDrift(podDriftJob(existing), podDriftJob(desired))
+}
+
+// podRuntimeProfileDrift reports whether RuntimeProfile-derived pod fields differ.
+func podRuntimeProfileDrift(existing, desired *corev1.Pod) bool {
+	return job.RuntimeProfileDrift(podDriftJob(existing), podDriftJob(desired))
+}
+
+// podPolicyEnvDriftMessage explains stale env on a running, non-replaceable Pod.
+func podPolicyEnvDriftMessage() string {
+	return "Effective policy changed but the owned Pod is immutable while running; " +
+		"status.effectivePolicy is current; AGENT_POLICY_* env inside the running Pod may be stale until the Pod is replaced"
 }
