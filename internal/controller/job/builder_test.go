@@ -11,13 +11,63 @@ You may obtain a copy of the License at
 package job
 
 import (
+	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 	"github.com/secureai/relay/internal/policy"
 )
+
+func TestBuildPodTemplateSpec(t *testing.T) {
+	enabled := true
+	session := &relayv1alpha1.AgentSession{
+		ObjectMeta: metav1.ObjectMeta{Name: "sess", Namespace: "ns"},
+		Spec: relayv1alpha1.AgentSessionSpec{
+			Runtime: relayv1alpha1.RuntimeSpec{
+				Orchestrator:       "kubernetes-job",
+				Image:              "busybox:latest",
+				ServiceAccountName: "default",
+			},
+			Workspace: relayv1alpha1.WorkspaceSpec{Ephemeral: true, MountPath: "/workspace"},
+		},
+	}
+	profile := &relayv1alpha1.RuntimeProfile{
+		Spec: relayv1alpha1.RuntimeProfileSpec{
+			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+				{Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled},
+			},
+		},
+	}
+
+	tmpl := BuildPodTemplateSpec(session, &Task{Prompt: "p"}, nil, profile)
+
+	if tmpl.Labels[LabelSessionRef] != "sess" {
+		t.Fatalf("expected session label on template, got %v", tmpl.Labels)
+	}
+	if tmpl.Spec.AutomountServiceAccountToken == nil || *tmpl.Spec.AutomountServiceAccountToken {
+		t.Fatalf("expected AutomountServiceAccountToken=false on agent pod template")
+	}
+
+	byName := map[string]corev1.Container{}
+	for _, c := range tmpl.Spec.Containers {
+		byName[c.Name] = c
+	}
+	if _, ok := byName[AgentContainerName]; !ok {
+		t.Fatalf("expected agent container %q in template", AgentContainerName)
+	}
+	if _, ok := byName["egress"]; !ok {
+		t.Fatalf("expected injected dns-proxy sidecar 'egress' in template")
+	}
+
+	// Build must wrap the identical template (no behavior change from the extraction).
+	job := Build(session, &Task{Prompt: "p"}, nil, profile)
+	if !reflect.DeepEqual(job.Spec.Template, tmpl) {
+		t.Fatalf("Build template diverged from BuildPodTemplateSpec")
+	}
+}
 
 func TestMergeContainerSecurityContext(t *testing.T) {
 	base := defaultContainerSecurityContext()

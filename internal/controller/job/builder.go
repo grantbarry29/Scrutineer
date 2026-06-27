@@ -40,61 +40,25 @@ func labelsFor(session *relayv1alpha1.AgentSession) map[string]string {
 	}
 }
 
-// Build renders the batch/v1 Job that should run the AgentSession.
+// Build renders the batch/v1 Job that should run the AgentSession. The agent Pod
+// template is produced by BuildPodTemplateSpec (shared across runtime backends);
+// Build only adds the Job-specific wrapper (name, backoff/TTL, deadline).
 func Build(session *relayv1alpha1.AgentSession, task *Task, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) *batchv1.Job {
-	labels := labelsFor(session)
 	rt := session.Spec.Runtime
 
 	backoffLimit := int32(0)
 	ttl := int32(300)
 
-	container := corev1.Container{
-		Name:            AgentContainerName,
-		Image:           rt.Image,
-		ImagePullPolicy: rt.ImagePullPolicy,
-		Command:         rt.Command,
-		Args:            rt.Args,
-		Resources:       rt.Resources,
-		Env:             applyAgentSidecarEnv(buildEnv(session, task, pol), profile),
-		SecurityContext: mergeContainerSecurityContext(defaultContainerSecurityContext(), profile),
-	}
-
-	volumes, mounts := buildWorkspaceVolumes(&session.Spec.Workspace)
-	container.VolumeMounts = mounts
-
-	// Least privilege: never auto-mount the namespace-default ServiceAccount token
-	// into the agent pod. A compromised/prompt-injected agent must not get an
-	// apiserver-audience token for free. Enforcement sidecars that legitimately
-	// report evidence carry their own narrowly-scoped projected reporter token
-	// (audience relay-reporter), which is unaffected by this setting.
-	automountSAToken := false
-	podSpec := corev1.PodSpec{
-		RestartPolicy:                corev1.RestartPolicyNever,
-		ServiceAccountName:           rt.ServiceAccountName,
-		AutomountServiceAccountToken: &automountSAToken,
-		Containers:                   []corev1.Container{container},
-		Volumes:                      volumes,
-		NodeSelector:                 rt.NodeSelector,
-		Tolerations:                  rt.Tolerations,
-	}
-	applyRuntimeProfileToPodSpec(&podSpec, profile)
-	injectSidecars(&podSpec, session, pol, profile)
-
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      NameFor(session),
 			Namespace: session.Namespace,
-			Labels:    labels,
+			Labels:    labelsFor(session),
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            &backoffLimit,
 			TTLSecondsAfterFinished: &ttl,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: podSpec,
-			},
+			Template:                BuildPodTemplateSpec(session, task, pol, profile),
 		},
 	}
 
