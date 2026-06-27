@@ -842,6 +842,33 @@ var _ = Describe("AgentSession reconciler", func() {
 			waitForPhase(key, relayv1alpha1.PhaseSucceeded)
 		})
 
+		It("reaches Failed via the Pod watch and keeps a GC-safe owner ref (kubernetes-pod)", func() {
+			ns := newTestNamespace()
+			session := minimalAgentSession(ns, "pod-failed")
+			session.Spec.Runtime.Orchestrator = OrchestratorKubernetesPod
+			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+			key := client.ObjectKeyFromObject(session)
+
+			podKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
+			var pod corev1.Pod
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(testCtx, podKey, &pod)).To(Succeed())
+			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+			// Owner ref must be a controller ref with blockOwnerDeletion=false so the Pod is
+			// garbage-collected with the session and teardown never deadlocks.
+			ctrlRef := metav1.GetControllerOf(&pod)
+			Expect(ctrlRef).NotTo(BeNil())
+			Expect(ctrlRef.Kind).To(Equal("AgentSession"))
+			Expect(ctrlRef.BlockOwnerDeletion).NotTo(BeNil())
+			Expect(*ctrlRef.BlockOwnerDeletion).To(BeFalse())
+
+			// A Pod completion (no manual Reconcile) must drive the session terminal via the watch.
+			pod.Status.Phase = corev1.PodFailed
+			Expect(k8sClient.Status().Update(testCtx, &pod)).To(Succeed())
+			waitForPhase(key, relayv1alpha1.PhaseFailed)
+		})
+
 		It("marks Ready=true when the underlying Job has active pods", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "ready-running")

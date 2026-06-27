@@ -221,6 +221,16 @@ func (b *kubernetesPodBackend) stop(ctx context.Context, session *relayv1alpha1.
 		return fmt.Errorf("get Pod %s: %w", podKey, err)
 	}
 
+	// Clear blockOwnerDeletion so the Pod can be removed while the AgentSession still
+	// exists (parity with the Job backend). createPod sets this false, but an adopted or
+	// legacy Pod may carry blockOwnerDeletion=true and would otherwise deadlock teardown.
+	if needsBlockOwnerDeletionPatch(&existing) {
+		setBlockOwnerDeletion(&existing, false)
+		if err := b.client.Update(ctx, &existing); err != nil {
+			return fmt.Errorf("patch Pod owner reference %s: %w", podKey, err)
+		}
+	}
+
 	if err := b.client.Delete(ctx, &existing); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil

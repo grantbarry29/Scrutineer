@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"time"
 
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -398,8 +397,12 @@ func (r *AgentSessionReconciler) removeFinalizer(ctx context.Context, session *r
 	})
 }
 
-func needsBlockOwnerDeletionPatch(job *batchv1.Job) bool {
-	for _, ref := range job.OwnerReferences {
+// needsBlockOwnerDeletionPatch reports whether any owner reference still sets
+// blockOwnerDeletion=true, which would deadlock teardown (the owned runtime object cannot
+// be deleted until the session is gone, but the session waits on the runtime). Generic
+// over the runtime object kind so both the Job and Pod backends share it.
+func needsBlockOwnerDeletionPatch(obj metav1.Object) bool {
+	for _, ref := range obj.GetOwnerReferences() {
 		if ref.BlockOwnerDeletion != nil && *ref.BlockOwnerDeletion {
 			return true
 		}
@@ -562,9 +565,17 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&relayv1alpha1.AgentSession{}).
 		Owns(&networkingv1.NetworkPolicy{})
-	// Watch each backend's runtime object so completions trigger reconciles.
+	// Watch each registered backend's runtime object so completions trigger reconciles,
+	// deduping in case two backends ever share an owned type.
+	ownedSeen := map[string]struct{}{}
 	for _, backend := range r.backends {
-		builder = builder.Owns(backend.ownedType())
+		owned := backend.ownedType()
+		key := fmt.Sprintf("%T", owned)
+		if _, dup := ownedSeen[key]; dup {
+			continue
+		}
+		ownedSeen[key] = struct{}{}
+		builder = builder.Owns(owned)
 	}
 	return builder.
 		Watches(
