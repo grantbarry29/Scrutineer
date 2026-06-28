@@ -76,7 +76,24 @@ against an unchanged cluster makes no API mutations.
   `PolicyPropagated`, `RuntimeCreated`, `Completed`, `Ready`), `result`, and
   reporter-populated `policyDecisions`/`violations`/`usage`.
 - RBAC is generated from the `+kubebuilder:rbac` markers in `reconciler.go` via
-  `make manifests` (into `config/rbac/`).
+  `make manifests` (into `config/rbac/`). The manager role is least-privilege —
+  each verb maps to an actual client call (audited 2026-06-27):
+
+  | Resource | Verbs | Why |
+  |---|---|---|
+  | `agentsessions` | get,list,watch,update,patch | Primary resource: reconcile + finalizer; **never** created/deleted by the controller |
+  | `agentsessions/status`, `agentsessions/finalizers` | get,update,patch / update | Status subresource + finalizer |
+  | `agentpolicies`, `toolpolicies`, `runtimeprofiles`, `approvalpolicies` | get,list,watch | Read-only policy/profile refs + watches |
+  | `approvalrequests` (+`/status`) | get,list,watch,create,update,patch | Created with an owner ref (GC deletes them → no `delete`) |
+  | `jobs` (batch) | get,list,watch,create,update,patch,delete | `kubernetes-job` runtime object (create + drift-replace + cancel) |
+  | `pods` | get,list,watch,create,update,patch,delete | `kubernetes-pod` runtime object (create/owner-patch/stop); `get,list,watch` also serve the Job-owned-pod watch + `status.podName` |
+  | `networkpolicies` | get,list,watch,create,update,patch,delete | Enforced egress baseline (create/update/delete) |
+  | `configmaps`, `secrets` | get,list,watch,create,update,patch | Prompt ConfigMap read + output logs/artifact tar (created with owner ref → GC deletes, no `delete`) |
+  | `events` | create,patch | Kubernetes events |
+  | `pods/log`, `pods/exec` | get / create | Log + workspace-tar collection (`spec.outputs`) |
+
+  `list`/`watch` are required wherever the controller `Get`s through the cached
+  client (informers `LIST`+`WATCH` even for single-object reads).
 
 ## Invariants & files that must change together
 

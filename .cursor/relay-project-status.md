@@ -7,6 +7,7 @@
 
 ## Recent changes (newest first)
 
+- **Bucket 1 · Audit controller RBAC for least privilege DONE (2026-06-27)** — audited the `+kubebuilder:rbac` markers (`internal/controller/agentsession/reconciler.go`) against actual client calls. **Fixed a real gap:** the `kubernetes-pod` backend creates/updates/deletes Pods but `pods` was only `get;list;watch` — added `create;update;patch;delete` (would have failed under a restrictive manager role; masked by admin kubeconfig in envtest/kind). **Trimmed unused verbs:** dropped `create`/`delete` on `agentsessions` (controller never creates/deletes its primary resource), and `delete` on `approvalrequests`/`configmaps`/`secrets` (all created with owner refs → GC deletes them). Regenerated `config/rbac/role.yaml`; added a least-privilege permission matrix to the agentsession package README. `make manifests && make test` pass (no generate diff). **Out-of-scope noticed:** reporter `+kubebuilder:rbac` markers (`internal/reporter/server.go`) are aggregated into the *same* `manager-role` rather than a separate least-privilege role — tracked below. Next (bucket 1): *Pin dev tool versions in README*.
 - **Work precedence re-set (2026-06-27)** — with Phases 0–5 closed and Phase 6 proven by **two** in-tree backends (`kubernetes-job` + `kubernetes-pod`), the remaining backlog is re-ordered to ship value cheaply, then make that value visible, then deepen trust, then go enterprise, breadth last: **(1)** smaller functional gaps → **(2)** test-only loose ends → **(3)** operational UI (Phase 7, API-first read-only MVP first) → **(4)** runtime evidence integrity → **(5)** enterprise platform → **(6)** orchestrator adapters (Tekton/Argo/Temporal). Phase 6 slice 10 (Tekton design) and the rest of Phase 6 are **deferred** to last. See *Ready for Cursor Queue → Work precedence*.
 - **Phase 6 · slice 9 DONE (2026-06-27)** — docs/status alignment for the second backend (docs-only): flipped slices 3–9 to *done* in `docs/design/phase-6-orchestrator-interface.md` (banner + migration plan), added the two-backends + `status.runtimeRef` note and code-map/roadmap updates to `docs/design/architecture.md`, documented `kubernetes-pod` + `runtimeRef` (and `jobName` as a deprecated alias) across `README.md` and the agentsession package README. Next: slice 10 (Tekton adapter design).
 - **Phase 6 · slice 8 DONE (2026-06-27)** — live e2e for the `kubernetes-pod` backend (`test/e2e/pod_backend_test.go` + `withOrchestrator` fixture): a session with `orchestrator: kubernetes-pod` runs as a **Pod** (no Job), reaches `Succeeded`, with `status.runtimeRef.kind==Pod`, `status.podName` set, and a controller owner ref. Verified live on kind: the new spec **plus all 14 core busybox AgentSession e2e specs pass (0 failed)**. (The 8 sidecar live-evidence specs need first-party images built via Docker, which is unavailable in the current sandbox — not exercised here; unrelated to this change.) Next: slice 9 (docs alignment).
@@ -45,7 +46,7 @@ Ship value cheaply → make it visible (UI) → deepen trust → enterprise → 
 | 5 | **Enterprise platform (Phase 8)** | What real multi-tenant adopters demand first | Phase 8 roadmap: per-session identity, `CredentialProfile`, multi-tenancy, HA, sandboxes |
 | 6 | **Orchestrator adapters (Phase 6 remainder)** | Pure breadth; abstraction already proven by two backends | Phase 6 slice 10 (Tekton design) + Argo/Temporal/`SessionTemplate` — **deferred** |
 
-**Queue head:** bucket **1 — smaller functional gaps**. Recommended first card: *Audit controller RBAC for least privilege* (small, high-value hygiene, `make manifests && make test`). Then *Pin dev tool versions in README*, then *External artifact storage export (S3)*.
+**Queue head:** bucket **1 — smaller functional gaps**. *Audit controller RBAC* shipped 2026-06-27. Recommended next card: *Pin dev tool versions in README* (docs-only), then *External artifact storage export (S3)*; *Admission (validating) webhook* and *Helm chart / kustomize overlays* (Phase 1 roadmap bullets) remain in this bucket.
 
 ---
 
@@ -158,30 +159,23 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 Slice 8 ships the identity-stamping webhook with thorough **unit** coverage (pure stamp logic + `Handle` patch/no-op via constructed `admission.Request`), opt-in manager wiring, generated `MutatingWebhookConfiguration`, and a cert-manager `config/webhooks` overlay that renders cleanly. **Webhook-mode envtest — DONE (2026-06-24):** a dedicated suite (`internal/webhook/v1alpha1/{suite_test.go,approvalrequest_envtest_test.go}`) starts the webhook server against an envtest control plane with the generated `MutatingWebhookConfiguration` installed (`WebhookInstallOptions`), provisions authenticated users via `testEnv.AddUser` (+cluster-admin binding so the test exercises the webhook, not RBAC), and asserts a forged `spec.decidedBy` is corrected to the authenticated identity on both create and update while pending creates are untouched. The suite skips when `KUBEBUILDER_ASSETS` is unset so the pure-unit tests still run standalone. **Live e2e — VERIFIED manually (2026-06-24):** in the `relay-dev` kind cluster, installed cert-manager v1.16.2, deployed the `config/webhooks` overlay (controller image `IfNotPresent`), confirmed the `serving-cert` Certificate went `Ready`, the caBundle (1488 B) was injected into the `MutatingWebhookConfiguration`, and the manager served the webhook on :9443. Then `kubectl --as=alice@example.com apply` of an `ApprovalRequest{decision: granted, decidedBy: mallory}` stored `spec.decidedBy=alice@example.com` (forged value corrected to the authenticated identity), while a pending create left `decidedBy` empty. Torn down afterward (the `failurePolicy: Fail` webhook is removed so it can't block `ApprovalRequest` writes when no controller runs; cert-manager left installed). **Remaining (optional):** fold this into a committed, opt-in ginkgo e2e spec — deliberately not added to the shared suite yet because it would make every `make test-e2e` run depend on cert-manager + an in-cluster controller deploy (the dev harness runs the controller out-of-cluster via `make run`). Test-only; no product code changes expected.
 
-### Task: Audit controller RBAC for least privilege
+### Task: Audit controller RBAC for least privilege — **DONE (2026-06-27)**
 
-**Why it matters:**  
-RBAC must match kubebuilder markers and actual client calls (Jobs delete, ConfigMaps get, Events create, status update).
+Audited `+kubebuilder:rbac` markers (`internal/controller/agentsession/reconciler.go`) vs actual client calls. Added missing `pods: create;update;patch;delete` (kubernetes-pod backend); removed unused `create`/`delete` on `agentsessions` and `delete` on `approvalrequests`/`configmaps`/`secrets` (owner-ref GC). Regenerated `config/rbac/role.yaml`; least-privilege permission matrix added to the agentsession package README. `make manifests && make test` pass. Spawned the *Separate least-privilege role for the reporter* follow-up below.
 
-**Scope:**
-- Compare `+kubebuilder:rbac` markers in `agentsession_controller.go` to `config/rbac/role.yaml`.
-- Remove unused verbs/resources; add missing ones.
-- Note any permissions reserved for future controllers.
+### Task: Separate least-privilege role for the reporter
 
-**Non-goals:**
-- Do not add RBAC for unimplemented CRDs.
-- Do not deploy OPA or admission policies.
+**Discovered:** 2026-06-27 during the controller RBAC audit. `controller-gen` aggregates **all** `+kubebuilder:rbac` markers in the module — including the reporter's (`internal/reporter/server.go`: `tokenreviews:create`, `agentsessions get` + `/status`, `jobs get`, `pods get`, `approvalrequests get;list;create`) — into the single `manager-role`. The reporter runs as a sidecar with its own narrowly-scoped projected token and should not borrow the manager's broad role.
 
-**Acceptance criteria:**
-- `make manifests` regenerates role YAML consistent with markers.
-- Short permission matrix in README or this file.
+**Why it matters:** least privilege / evidence-integrity posture — a compromised reporter sidecar should not inherit controller-level write access (Jobs/Pods/NetworkPolicies create/delete, etc.).
 
-**Expected files:**
-- `internal/controller/agentsession_controller.go`
-- `config/rbac/role.yaml` (generated)
+**Scope (proposed):** Emit a dedicated `reporter-role` (separate `roleName` / output path or a distinct marker set) bound to the reporter's ServiceAccount; keep the manager role to controller-only verbs. Confirm the reporter's deployed RBAC actually references the scoped role.
 
-**Verification command:**  
-`make manifests && make test`
+**Non-goals:** Reworking the reporter auth model (TokenReview + ownership) — that is the separate *Runtime evidence integrity* track.
+
+**Verification:** `make manifests && make test`; confirm two distinct roles render and the reporter binding points at the scoped one.
+
+**Files:** `internal/reporter/server.go`, `config/rbac/`, reporter deployment overlay.
 
 ### Task: Pin dev tool versions in README
 

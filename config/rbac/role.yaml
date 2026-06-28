@@ -11,7 +11,6 @@ rules:
   - secrets
   verbs:
   - create
-  - delete
   - get
   - list
   - patch
@@ -29,8 +28,12 @@ rules:
   resources:
   - pods
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - ""
@@ -89,10 +92,7 @@ rules:
   - relay.secureai.dev
   resources:
   - agentsessions
-  - approvalrequests
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
@@ -113,3 +113,14 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - relay.secureai.dev
+  resources:
+  - approvalrequests
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch

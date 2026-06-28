@@ -90,19 +90,23 @@ const deletionRequeueAfter = 2 * time.Second
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=toolpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=runtimeprofiles,verbs=get;list;watch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalpolicies,verbs=get;list;watch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests,verbs=get;list;watch;create;update;patch;delete
+// ApprovalRequests are created+mutated by the controller (owner-ref GC handles deletion, so no delete verb).
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get;list;watch;create;update;patch;delete
+// AgentSession is the primary resource: read+mutate (status/finalizers) only; the controller never creates or deletes it.
+// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/finalizers,verbs=update
+// Runtime objects: the kubernetes-job backend owns Jobs; the kubernetes-pod backend owns Pods (create/update/delete).
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// Output ConfigMaps/Secrets are created+updated then owner-ref GC'd (no delete verb needed).
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
 
 // Reconcile is the main entry point for AgentSession reconciliation.
 //
