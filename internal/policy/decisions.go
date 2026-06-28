@@ -60,11 +60,11 @@ func BuildMergeDecisions(resolved Resolved, now time.Time) []relayv1alpha1.Polic
 	}
 
 	out = append(out, ruleListDecisions(ts, mode, "network", "allowedDomains", resolved.Rules.AllowedDomains, relayv1alpha1.PolicyDecisionAllow, "AllowedDomains")...)
-	out = append(out, ruleListDecisions(ts, mode, "network", "deniedDomains", resolved.Rules.DeniedDomains, restrictiveAction(mode), "DeniedDomains")...)
+	out = append(out, ruleListDecisions(ts, mode, "network", "deniedDomains", resolved.Rules.DeniedDomains, actionForMode(mode), "DeniedDomains")...)
 	out = append(out, ruleListDecisions(ts, mode, "network", "allowedCIDRs", resolved.Rules.AllowedCIDRs, relayv1alpha1.PolicyDecisionAllow, "AllowedCIDRs")...)
-	out = append(out, ruleListDecisions(ts, mode, "network", "deniedCIDRs", resolved.Rules.DeniedCIDRs, restrictiveAction(mode), "DeniedCIDRs")...)
+	out = append(out, ruleListDecisions(ts, mode, "network", "deniedCIDRs", resolved.Rules.DeniedCIDRs, actionForMode(mode), "DeniedCIDRs")...)
 	out = append(out, ruleListDecisions(ts, mode, "tool", "allowedTools", resolved.Rules.AllowedTools, relayv1alpha1.PolicyDecisionAllow, "AllowedTools")...)
-	out = append(out, ruleListDecisions(ts, mode, "tool", "deniedTools", resolved.Rules.DeniedTools, restrictiveAction(mode), "DeniedTools")...)
+	out = append(out, ruleListDecisions(ts, mode, "tool", "deniedTools", resolved.Rules.DeniedTools, actionForMode(mode), "DeniedTools")...)
 	out = append(out, ruleListDecisions(ts, mode, "approval", "requireHumanApproval", resolved.Rules.RequireHumanApproval, relayv1alpha1.PolicyDecisionAudit, "RequireHumanApproval")...)
 
 	if resolved.Rules.MaxNetworkRequests != nil {
@@ -147,17 +147,6 @@ func capDecision(ts metav1.Time, mode relayv1alpha1.PolicyMode, rule string, val
 		Message: fmt.Sprintf("Effective policy declares %s=%d", rule, value),
 		Mode:    mode,
 		Rule:    rule,
-	}
-}
-
-func restrictiveAction(mode relayv1alpha1.PolicyMode) relayv1alpha1.PolicyDecisionAction {
-	switch mode {
-	case relayv1alpha1.PolicyModeEnforced:
-		return relayv1alpha1.PolicyDecisionDeny
-	case relayv1alpha1.PolicyModeDryRun:
-		return relayv1alpha1.PolicyDecisionDryRun
-	default:
-		return relayv1alpha1.PolicyDecisionAudit
 	}
 }
 
