@@ -70,6 +70,36 @@ func (c *reportIDCache) mark(key string, now time.Time) {
 	c.entries[key] = now.Add(c.ttl)
 }
 
+// reserve atomically reports whether key is newly recorded: it records key until
+// now+TTL and returns true when key is absent/expired, or returns false when key
+// is already present within TTL. The check and set happen under a single lock
+// acquisition, closing the TOCTOU window where two concurrent identical reportIds
+// could both pass contains() before either called mark().
+func (c *reportIDCache) reserve(key string, now time.Time) bool {
+	if c == nil || key == "" {
+		return true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.evictExpiredLocked(now)
+	if exp, ok := c.entries[key]; ok && now.Before(exp) {
+		return false
+	}
+	c.entries[key] = now.Add(c.ttl)
+	return true
+}
+
+// release removes a key recorded by reserve, used to roll back a reservation when
+// processing fails so the report can be retried.
+func (c *reportIDCache) release(key string) {
+	if c == nil || key == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.entries, key)
+}
+
 func (c *reportIDCache) evictExpiredLocked(now time.Time) {
 	for k, exp := range c.entries {
 		if !now.Before(exp) {

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -370,6 +371,70 @@ func TestHandler_emitsViolationEventForEachViolatingReport(t *testing.T) {
 		if !strings.Contains(e, "RuntimeViolation") {
 			t.Fatalf("unexpected event: %q", e)
 		}
+	}
+}
+
+// Regression for #42: two concurrent reports with the same reportId must be
+// processed exactly once. Each violating report emits one RuntimeViolation event,
+// so exactly-once processing means exactly one event.
+func TestHandler_concurrentDuplicateReportIdProcessedOnce(t *testing.T) {
+	ts := metav1.NewTime(time.Unix(500, 0))
+	session := &relayv1alpha1.AgentSession{
+		ObjectMeta: metav1.ObjectMeta{Name: "sess-c", Namespace: "ns1"},
+		Status: relayv1alpha1.AgentSessionStatus{
+			EffectivePolicy: &relayv1alpha1.EffectivePolicyStatus{
+				Mode: relayv1alpha1.PolicyModeEnforced,
+			},
+		},
+	}
+	cl := newFakeClient(session)
+	rec := record.NewFakeRecorder(10)
+	h := &Handler{
+		Writer:    cl.Status(),
+		Reader:    cl,
+		Verifier:  stubVerifier{identity: CallerIdentity{Namespace: "ns1", PodName: "pod-a"}},
+		Recorder:  rec,
+		ReportIDs: newReportIDCache(time.Hour),
+		Now:       func() time.Time { return ts.Time },
+	}
+	body := ReportRequest{
+		Session:  SessionRef{Namespace: "ns1", Name: "sess-c"},
+		Backend:  "egress-proxy",
+		ReportID: "dup-1",
+		Decisions: []relayv1alpha1.PolicyDecision{{
+			Time:    ts,
+			Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Type:    "network",
+			Action:  relayv1alpha1.PolicyDecisionDeny,
+			Reason:  "DeniedDomain",
+			Target:  "evil.example.com",
+			Message: "egress blocked",
+		}},
+	}
+	// Pre-marshal so the goroutines never call t.Fatal off the test goroutine.
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			req := httptest.NewRequest(http.MethodPost, reportPath, bytes.NewReader(raw))
+			req.Header.Set("Authorization", "Bearer ok")
+			req.Header.Set("Content-Type", "application/json")
+			h.ServeHTTP(httptest.NewRecorder(), req)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := len(drainEvents(rec.Events)); got != 1 {
+		t.Fatalf("RuntimeViolation events = %d, want 1 (reportId must dedupe under concurrency)", got)
 	}
 }
 

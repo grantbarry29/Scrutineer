@@ -143,8 +143,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	reportKey := ""
 	if reportID := normalizeReportID(req.ReportID); reportID != "" && h.ReportIDs != nil {
-		if h.ReportIDs.contains(reportIDCacheKey(sessionKey, reportID), receivedAt) {
+		reportKey = reportIDCacheKey(sessionKey, reportID)
+		// Atomically reserve the reportId so concurrent identical reports can't both
+		// pass the dedup check before either records it. Released below if the status
+		// patch fails, so a failed report can still be retried.
+		if !h.ReportIDs.reserve(reportKey, receivedAt) {
 			result = "duplicate"
 			w.WriteHeader(http.StatusAccepted)
 			return
@@ -152,6 +157,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := agentsession.PatchRuntimePolicyReport(r.Context(), h.Writer, h.Reader, sessionKey, report); err != nil {
+		h.ReportIDs.release(reportKey)
 		if apierrors.IsNotFound(err) {
 			result = "not_found"
 			writeError(w, ErrNotFound, http.StatusNotFound, "AgentSession not found")
@@ -177,10 +183,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-	}
-
-	if reportID := normalizeReportID(req.ReportID); reportID != "" && h.ReportIDs != nil {
-		h.ReportIDs.mark(reportIDCacheKey(sessionKey, reportID), receivedAt)
 	}
 
 	result = "accepted"
