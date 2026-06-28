@@ -12,12 +12,17 @@ package metrics
 
 import (
 	"context"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
 )
+
+// collectTimeout bounds the cache reads done on each Prometheus scrape so a
+// blocked read cannot stall the scrape indefinitely.
+const collectTimeout = 5 * time.Second
 
 // AgentSessionCollector exposes aggregate AgentSession gauges on scrape.
 type AgentSessionCollector struct {
@@ -42,11 +47,15 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	phaseCounts := make(map[string]map[string]int)
-	violationTotals := make(map[string]int)
+	ctx, cancel := context.WithTimeout(context.Background(), collectTimeout)
+	defer cancel()
 
+	// Refresh each gauge family only when its List succeeds; on a transient error
+	// keep the previous values rather than zeroing the gauges for that scrape.
 	var list relayv1alpha1.AgentSessionList
-	if err := c.Client.List(context.Background(), &list); err == nil {
+	if err := c.Client.List(ctx, &list); err == nil {
+		phaseCounts := make(map[string]map[string]int)
+		violationTotals := make(map[string]int)
 		for _, session := range list.Items {
 			phase := string(session.Status.Phase)
 			if phase == "" {
@@ -59,33 +68,32 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 
 			violationTotals[session.Namespace] += len(session.Status.Violations)
 		}
+
+		agentsByPhase.Reset()
+		for ns, phases := range phaseCounts {
+			for phase, count := range phases {
+				agentsByPhase.WithLabelValues(ns, phase).Set(float64(count))
+			}
+		}
+
+		sessionViolations.Reset()
+		for ns, total := range violationTotals {
+			sessionViolations.WithLabelValues(ns).Set(float64(total))
+		}
 	}
 
 	// Approval queue depth is the count of ApprovalRequests still awaiting a human
 	// decision — the true Phase 5 gate, not the prior runtime ApprovalRequired proxy.
-	var approvalQueue int
 	var reqs relayv1alpha1.ApprovalRequestList
-	if err := c.Client.List(context.Background(), &reqs); err == nil {
+	if err := c.Client.List(ctx, &reqs); err == nil {
+		approvalQueue := 0
 		for i := range reqs.Items {
 			if isPendingApproval(reqs.Items[i].Status.State) {
 				approvalQueue++
 			}
 		}
+		approvalQueueDepth.Set(float64(approvalQueue))
 	}
-
-	agentsByPhase.Reset()
-	for ns, phases := range phaseCounts {
-		for phase, count := range phases {
-			agentsByPhase.WithLabelValues(ns, phase).Set(float64(count))
-		}
-	}
-
-	sessionViolations.Reset()
-	for ns, total := range violationTotals {
-		sessionViolations.WithLabelValues(ns).Set(float64(total))
-	}
-
-	approvalQueueDepth.Set(float64(approvalQueue))
 
 	agentsByPhase.Collect(ch)
 	sessionViolations.Collect(ch)
