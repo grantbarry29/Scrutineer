@@ -1,12 +1,13 @@
 # Relay Project Status
 
 > **What Relay has shipped, what is in progress, and where it is headed.**
-> **Last updated:** 2026-06-24
+> **Last updated:** 2026-06-27
 >
 > For **how agents should implement tasks** (scope rules, templates, scans, updating this file), see [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md). Older completed-work detail lives in git history and the per-phase design docs — this file keeps completed items terse and open work in full.
 
 ## Recent changes (newest first)
 
+- **Work precedence re-set (2026-06-27)** — with Phases 0–5 closed and Phase 6 proven by **two** in-tree backends (`kubernetes-job` + `kubernetes-pod`), the remaining backlog is re-ordered to ship value cheaply, then make that value visible, then deepen trust, then go enterprise, breadth last: **(1)** smaller functional gaps → **(2)** test-only loose ends → **(3)** operational UI (Phase 7, API-first read-only MVP first) → **(4)** runtime evidence integrity → **(5)** enterprise platform → **(6)** orchestrator adapters (Tekton/Argo/Temporal). Phase 6 slice 10 (Tekton design) and the rest of Phase 6 are **deferred** to last. See *Ready for Cursor Queue → Work precedence*.
 - **Phase 6 · slice 9 DONE (2026-06-27)** — docs/status alignment for the second backend (docs-only): flipped slices 3–9 to *done* in `docs/design/phase-6-orchestrator-interface.md` (banner + migration plan), added the two-backends + `status.runtimeRef` note and code-map/roadmap updates to `docs/design/architecture.md`, documented `kubernetes-pod` + `runtimeRef` (and `jobName` as a deprecated alias) across `README.md` and the agentsession package README. Next: slice 10 (Tekton adapter design).
 - **Phase 6 · slice 8 DONE (2026-06-27)** — live e2e for the `kubernetes-pod` backend (`test/e2e/pod_backend_test.go` + `withOrchestrator` fixture): a session with `orchestrator: kubernetes-pod` runs as a **Pod** (no Job), reaches `Succeeded`, with `status.runtimeRef.kind==Pod`, `status.podName` set, and a controller owner ref. Verified live on kind: the new spec **plus all 14 core busybox AgentSession e2e specs pass (0 failed)**. (The 8 sidecar live-evidence specs need first-party images built via Docker, which is unavailable in the current sandbox — not exercised here; unrelated to this change.) Next: slice 9 (docs alignment).
 - **Phase 6 · slice 7 DONE (2026-06-27)** — closed out backend watch wiring: the generic `SetupWithManager` Owns-loop now dedupes owned types; generalized `needsBlockOwnerDeletionPatch` to any object and gave Pod `stop()` the same defensive `blockOwnerDeletion=false` patch as Jobs (GC parity, no teardown deadlock). Envtest asserts a Pod-backed session reaches Failed via the Pod watch (no manual reconcile) and that the agent Pod carries a controller owner ref with `blockOwnerDeletion=false`. Next: slice 8 (live e2e).
@@ -29,11 +30,22 @@ The **roadmap** below is long-term product intent, not a single backlog. **Ready
 
 Pick **one task card** per session unless the user asks for a design plan. Implementation rules: [`.cursor/relay-cursor-workflow.md`](relay-cursor-workflow.md).
 
-> **Critical path:** Phases 0–5 **closed** — control-plane reconciliation, three data-plane enforcement domains (network/tool/file), the runtime-evidence loop, observability/audit export, and human approval workflows (including per-tool runtime holds + authenticated approver identity) all ship. **Phase 6 (orchestrator adapters) is the active phase:** the `runtimeBackend` interface + `kubernetes-job` backend + normalized `observation` are done; the next work is the **`kubernetes-pod` reference backend + `status.runtimeRef` generalization**, decomposed into ordered slices 3–10 under *Discovered Follow-Up Tasks → Phase 6*. Design: [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md).
+> **Critical path:** Phases 0–5 **closed** — control-plane reconciliation, three data-plane enforcement domains (network/tool/file), the runtime-evidence loop, observability/audit export, and human approval workflows (including per-tool runtime holds + authenticated approver identity) all ship. **Phase 6 is no longer the active phase:** orchestrator-agnosticism is proven by two in-tree backends (`kubernetes-job` + `kubernetes-pod`); the remaining external adapters are pure breadth and are **deferred to last** (see *Work precedence* below). Design: [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md).
 
-**Queue head:** *Phase 6 · slice 10 — external orchestrator adapter design (Tekton first)* (**design slice**; see card below). Slices 3–9 shipped 2026-06-27 (shared pod-template builder, `status.runtimeRef`, the `kubernetes-pod` backend with lifecycle/drift/GC, live e2e, and docs alignment). Slice 10 is the last Phase 6 card.
+### Work precedence (set 2026-06-27)
 
-**Other ready picks** (independent of Phase 6): *Audit controller RBAC for least privilege*, *Pin dev tool versions in README*, *External artifact storage export (S3)* — all under *Discovered Follow-Up Tasks*.
+Ship value cheaply → make it visible (UI) → deepen trust → enterprise → breadth last. Pick the **lowest-numbered bucket with an unclaimed card**; one card per session.
+
+| # | Bucket | Why here | Cards / where tracked |
+|---|--------|----------|------------------------|
+| 1 | **Smaller functional gaps** | Cheap, low-risk, adopter-facing wins; build momentum | *Audit controller RBAC*, *Pin dev tool versions*, *External artifact storage export (S3)* (cards below); *Admission (validating) webhook*, *Helm chart / kustomize overlays* (Phase 1 roadmap bullets) |
+| 2 | **Test-only loose ends** | Cheap; tightens confidence before deeper work | *Live e2e for the ApprovalRequest identity webhook* (card below); Phase 5 list-typed concurrent multi-grant refinement |
+| 3 | **Operational UI (Phase 7)** | Surfaces the governance value already built (Phases 0–5); makes the product demoable/adoptable. **API-first, read-only MVP first** — not a big-bang dashboard | Phase 7 roadmap. Start with a UI-architecture/design slice, then a thin read-only session list/detail (phase, conditions, violations, `assuranceLevel`, approval inbox). `assuranceLevel` labeling already ships, so trust levels render correctly from day one |
+| 4 | **Runtime evidence integrity** | Deepens the **core product thesis** (trustworthy, tamper-resistant evidence); larger | *Runtime evidence integrity (cooperative → adversarial)* card below — remaining `observed`/eBPF source + opt-in SA-token re-enable |
+| 5 | **Enterprise platform (Phase 8)** | What real multi-tenant adopters demand first | Phase 8 roadmap: per-session identity, `CredentialProfile`, multi-tenancy, HA, sandboxes |
+| 6 | **Orchestrator adapters (Phase 6 remainder)** | Pure breadth; abstraction already proven by two backends | Phase 6 slice 10 (Tekton design) + Argo/Temporal/`SessionTemplate` — **deferred** |
+
+**Queue head:** bucket **1 — smaller functional gaps**. Recommended first card: *Audit controller RBAC for least privilege* (small, high-value hygiene, `make manifests && make test`). Then *Pin dev tool versions in README*, then *External artifact storage export (S3)*.
 
 ---
 
@@ -87,9 +99,9 @@ Scoped tasks found by repository audit or implementation work. **Not in the acti
 
 **Decision (2026-06-24):** the concrete second backend is an in-tree **`kubernetes-pod`** backend (a bare Pod — the *reference adapter*), **not** Tekton-first. It is dependency-free, fully testable in the existing envtest + kind e2e harness, and exercises every generalization point a real adapter needs (different object kind, completion/timeout/drift semantics, `ownedType`, and `status.runtimeRef`). It de-risks the **external** adapters (Tekton → Argo → Temporal), which become slice 10+ design slices on top of the proven interface.
 
-**Implement slices 3 → 10 in order, one per session.** Slices 3 and 4 are prerequisites for the Pod backend; 5–8 build and verify it; 9–10 close out docs. Each card has one acceptance criterion and one verification command. Do **not** bundle slices, and do **not** add an external orchestrator dependency (Tekton/Argo CRDs) — those are explicitly out of scope until slice 10's design slice.
+**Slices 3 → 9 shipped (2026-06-27); the `kubernetes-pod` reference backend is done.** Slice 10 (external Tekton adapter **design**) and the later Argo/Temporal/`SessionTemplate` adapters are **DEFERRED to last** per *Ready for Cursor Queue → Work precedence* (2026-06-27): orchestrator-agnosticism is already proven by two in-tree backends, so further adapters are breadth, not critical path. The card below is kept ready-to-pick, but only after buckets 1–5 are exhausted (or the user explicitly requests a Tekton adapter). Do **not** add an external orchestrator dependency (Tekton/Argo CRDs) before slice 10's design slice runs.
 
-#### Task: Phase 6 · slice 10 — external orchestrator adapter design (Tekton first) — **design slice**
+#### Task: Phase 6 · slice 10 — external orchestrator adapter design (Tekton first) — **design slice** — *DEFERRED (bucket 6)*
 
 **Goal:** design (not implement) the first external adapter now that the interface is proven by `kubernetes-pod`.
 
@@ -520,7 +532,7 @@ Stay orchestrator-agnostic; add backends without coupling the core reconciler to
 
 ### Phase 7 — Operational UI
 
-Governance/observability dashboard — not a chatbot.
+Governance/observability dashboard — not a chatbot. **Precedence bucket 3** (after smaller functional gaps + test-only loose ends; see *Ready for Cursor Queue → Work precedence*, 2026-06-27). Build **API-first, read-only MVP first** (session list/detail, conditions, violations, `assuranceLevel`, approval inbox) — not a big-bang dashboard. Start with a UI-architecture/design slice.
 
 - [ ] **UI architecture** — SPA + backend API reading CRDs, events, audit store
 - [ ] **Session list / detail** — Phase, Job, policy summary, conditions, violations
