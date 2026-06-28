@@ -71,7 +71,15 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   `DefaultMaxOutstandingApprovals` undecided holds; reportId dedup TTL.
 - RBAC from `+kubebuilder:rbac` markers in `server.go` (`tokenreviews: create`;
   `agentsessions: get` + `agentsessions/status: get;update;patch`; `approvalrequests:
-  get;list;create`; `jobs`/`pods: get`) via `make manifests`.
+  get;list;create`; `jobs`/`pods: get`) via `make manifests`. These render into a
+  **dedicated least-privilege `reporter-role`** (`config/rbac/reporter/role.yaml`),
+  scoped by a separate path-restricted `controller-gen` invocation so the reporter's
+  permissions are *not* aggregated into the broad `manager-role`. The role is bound by
+  `config/rbac/reporter_role_binding.yaml`.
+  > **Note:** the reporter runs in-process under the `relay-controller-manager`
+  > ServiceAccount today, so that SA is the binding subject and its *effective* runtime
+  > privilege is unchanged. Running the reporter under its own ServiceAccount — the change
+  > that actually reduces the manager SA's privilege — is tracked separately (issue #34).
 
 ## Invariants & files that must change together
 

@@ -1,0 +1,46 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: reporter-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+- apiGroups:
+  - relay.secureai.dev
+  resources:
+  - agentsessions
+  verbs:
+  - get
+- apiGroups:
+  - relay.secureai.dev
+  resources:
+  - agentsessions/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - relay.secureai.dev
+  resources:
+  - approvalrequests
+  verbs:
+  - create
+  - get
+  - list

@@ -21,7 +21,12 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	# RBAC is split by component so the in-process reporter's permissions are a
+	# distinct, least-privilege role rather than aggregated into manager-role.
+	# Each role is scoped to the package that declares its +kubebuilder:rbac markers.
+	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./internal/controller/..." output:rbac:dir=config/rbac
+	$(CONTROLLER_GEN) rbac:roleName=reporter-role paths="./internal/reporter/..." output:rbac:dir=config/rbac/reporter
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

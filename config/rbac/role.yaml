@@ -48,12 +48,6 @@ rules:
   verbs:
   - get
 - apiGroups:
-  - authentication.k8s.io
-  resources:
-  - tokenreviews
-  verbs:
-  - create
-- apiGroups:
   - batch
   resources:
   - jobs
