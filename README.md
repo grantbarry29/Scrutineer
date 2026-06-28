@@ -644,6 +644,28 @@ You can also run these targets **outside** the dev container as long as Docker,
 The Makefile auto-installs `controller-gen`, `kustomize`, and `setup-envtest`
 into `./bin/` on first use.
 
+#### Pinned tool versions
+
+These are pinned so contributors don't hit Go/envtest/apiserver version skew.
+The values below are mirrored from the source of truth — `Makefile` and
+`.devcontainer/kind-config.yaml` — so update those files (not just this table)
+when a version changes:
+
+| Tool | Version | Pinned in |
+|------|---------|-----------|
+| Go toolchain | `1.23` | `.devcontainer/devcontainer.json` (`VARIANT=1-1.23-bookworm`), CI workflows |
+| `controller-gen` | `v0.16.1` | `Makefile` (`CONTROLLER_TOOLS_VERSION`) |
+| `kustomize` | `v5.4.3` | `Makefile` (`KUSTOMIZE_VERSION`) |
+| `setup-envtest` | `release-0.19` | `Makefile` |
+| envtest Kubernetes assets | `1.31.0` | `Makefile` (`ENVTEST_K8S_VERSION`) |
+| kind node image (dev + e2e) | `kindest/node:v1.31.4` | `.devcontainer/kind-config.yaml` |
+| kind CLI (CI e2e) | `v0.31.0` | `.github/workflows/e2e.yaml` |
+
+`make test` runs the envtest suite against the `ENVTEST_K8S_VERSION` apiserver
+(`1.31.0`), and the dev/e2e `kind` cluster pins `kindest/node:v1.31.4` so the
+CRD is exercised against a matching apiserver version in both unit and e2e
+runs. Do **not** upgrade these unless something is broken.
+
 ### 1. Generate code and CRDs
 
 ```
