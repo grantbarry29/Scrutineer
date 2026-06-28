@@ -32,3 +32,6 @@ testbin/*
 
 # macOS
 .DS_Store
+
+# Claude Code: transient rule-review sentinel (not for commit)
+.claude/.rules-review-pending
