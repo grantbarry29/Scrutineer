@@ -65,6 +65,14 @@ label and add the new one in the same `issue_write` update.
 
 ## MCP operations (how to act on the board)
 
+These tools come from the **GitHub MCP server**, configured as the remote `github`
+server in the repo [`.mcp.json`](../.mcp.json) (GitHub's hosted endpoint, per-user
+OAuth — no token is committed). To use it: trust the server when Claude Code prompts,
+then complete the browser OAuth flow on first use. **Grant the `project` scope** during
+OAuth in addition to `repo` — Projects v2 (board #1) writes fail without it. If the
+`github` server isn't connected (check `/mcp`), fall back to the `gh` CLI, which is
+authenticated but **lacks `project` scope** (run `gh auth refresh -s project` to add it).
+
 | Goal | Tool | Notes |
 |------|------|-------|
 | Find work / check duplicates | `search_issues`, `list_issues`, `issue_read` | Search before creating to avoid duplicates |
@@ -74,7 +82,8 @@ label and add the new one in the same `issue_write` update.
 | Link a child to an epic/parent | `sub_issue_write` (`add`) | `sub_issue_id` is the child's **node/database id** (get it from `issue_read`), not its issue number |
 | Create a missing label | `label_write` | Only when a needed label from the model above doesn't exist yet |
 
-> Always check a tool's JSON descriptor in `mcps/user-github/tools/` before calling it.
+> Check a tool's input schema before calling it (visible via `/mcp`, or the server's
+> tool descriptors) — argument names occasionally shift between server versions.
 
 ## Creating a new issue (discovered work, bugs, follow-ups) — mandatory
 
