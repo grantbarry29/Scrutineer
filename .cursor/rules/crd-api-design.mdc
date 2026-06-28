@@ -4,54 +4,8 @@ globs: api/**/*.go,config/crd/**/*.yaml,config/samples/**/*.yaml
 alwaysApply: false
 ---
 
-# CRD and API Design Rules
+# crd-api-design
 
-CRDs are long-lived user-facing contracts. Design declarative APIs, validate at the boundary, and keep spec minimal / status observed. Optimize for backward compatibility and operational clarity over implementation convenience.
-
-**Before changing an API:**
-- Read the existing types, validation markers, and generated CRD first.
-- Identify which field/version/reference is changing and who consumes it.
-- Prefer additive, optional changes. If a change is breaking, stop and document it.
-- Out-of-scope future fields go to a **GitHub Issue** (see `.cursor/rules/task-management.mdc`), not silent implementation.
-
-## API Shape
-
-13. **CRDs are APIs, not internal structs.** Treat them as long-lived user-facing contracts. Do not mirror internal Go structs directly. Prefer a clear declarative API shape over implementation convenience.
-
-14. **Spec describes desired state, not imperative actions.** Avoid fields like `doCreate`, `deleteNow`, `restart`, `runOnce`, `action`, `command`. Prefer nouns over verbs. Design spec so reconciliation can resume after restart.
-
-15. **Keep spec minimal and status rich.** Only user-configurable desired state in spec. Put generated names, cloud IDs, observed IPs, phase details, and errors in status. Do not require users to provide values the controller can derive safely.
-
-## Validation and Immutability
-
-16. **Validate aggressively at the API boundary.** Add OpenAPI validation markers for every field: enums for finite sets, `minimum`/`maximum` for numbers, regex patterns where appropriate, deliberate `Required`/`Optional`, and `listType`/`listMapKey`/`set` semantics. Use CEL validation for cross-field validation and immutability when possible. Use admission webhooks **only** when schema/CEL cannot express the rule.
-
-17. **Be deliberate about immutability.** Make fields immutable when changing them would require destructive replacement or ambiguous migration. If a field can change safely, implement the update path fully. Do not silently ignore unsupported spec changes — reject at validation time or surface a clear status condition.
-
-18. **References must be explicit and safe.** Use typed refs where possible. Always define namespace behavior. For same-namespace refs, use `LocalObjectReference`-style fields. Cross-namespace refs require explicit namespace plus security/RBAC consideration. Missing references produce conditions, not panics.
-
-19. **Selectors must be deterministic and bounded.** Define what the selector selects (pods, namespaces, nodes, services, custom resources). Avoid selectors that accidentally match the whole cluster. Consider indexes and cache selectors for large clusters. Never rely on Go map iteration order.
-
-## Versioning and Defaults
-
-20. **Plan CRD versioning from the beginning.** `v1alpha1` for unstable, `v1beta1` only when close to stable, `v1` only when backward compatibility is a serious commitment. Do not remove/rename fields casually. Prefer adding optional fields over changing semantics. Implement conversion if versions diverge. Preserve user intent across served versions.
-
-21. **Defaults must be safe.** Defaults must not surprise users, grant broad network access, delete external resources, or create expensive cloud resources unless clearly requested. Prefer explicit deny / default-safe behavior for security and networking APIs.
-
-## Status and kubectl Ergonomics
-
-22. **Status must not become an unbounded log.** Do not append endlessly to status, store large raw external responses, or store massive per-pod/per-flow/per-endpoint/per-FQDN lists. Use Events for recent human-facing changes; metrics/logs/traces for high-volume observations.
-
-23. **Add useful kubectl output.** Add printcolumns for `Ready`, important refs, a concise reason, and `Age`. Provide minimal, common, and advanced examples. Examples must be valid against the schema.
-
-## CRD Design Checklist (answer before coding)
-
-1. What is desired state vs observed state? 2. Which fields are immutable? 3. What validation/defaulting is required (markers, enums, ranges, CEL)? 4. What references exist and what is their namespace behavior? 5. What does each selector match, and is it bounded? 6. Which version is this and how will it evolve? 7. Are defaults safe (no broad access, no destructive/expensive side effects)? 8. Is status bounded (no unbounded logs / high-cardinality lists)? 9. Are printcolumns and valid examples present? 10. Are generated manifests regenerated and checked in?
-
-## Anti-Patterns To Reject (unless explicitly requested + justified)
-
-Building CRDs as mirrors of internal Go structs instead of user-facing APIs · imperative verb fields in spec · mutating spec from the controller · unbounded lists / event-log style status · implementing webhook validation when CRD schema/CEL can handle it · missing namespace semantics on references · selectors that can match the whole cluster · removing/renaming fields casually · unsafe defaults (broad network access, destructive or expensive side effects).
-
-## Highest Priority (on conflict, prioritize)
-
-1. Spec is desired state; status is observed state. 2. Every field needs validation/defaulting/immutability decisions. 3. Prefer CRD schema/CEL over webhooks. 4. Defaults must be safe and fail-closed for security/networking. 5. Do not store high-cardinality runtime data in status. 6. Out-of-scope future requirements go to a GitHub Issue (see `task-management.mdc`), not silent implementation.
+> **Canonical content lives in [`dev-agent-rules/crd-api-design.md`](../../dev-agent-rules/crd-api-design.md).**
+> This file only carries the Cursor auto-attach metadata (description/globs/alwaysApply) above.
+> Read the canonical file before working in scope — do not edit rules here.
