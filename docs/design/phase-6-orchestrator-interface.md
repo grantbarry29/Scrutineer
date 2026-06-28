@@ -1,8 +1,8 @@
 # Phase 6 — Orchestrator Backend Interface
 
-> **Status:** Slices 1 (design), 2 (extraction), and 2b (`observation` normalization) **shipped**. The AgentSession reconciler calls Kubernetes Jobs only through a `runtimeBackend` interface selected from a registry keyed by `spec.runtime.orchestrator` (`internal/controller/agentsession/runtime_backend.go`). Backends return a normalized `observation`; the **reconciler** owns all status/condition/event/result mapping (`applyObservation`/`applyRuntimePhase`). This decouples the controller from Jobs so other execution backends (Tekton, Argo, Temporal, external workers) can be governed without rewriting governance logic.
+> **Status:** Slices 1–8 **shipped (2026-06-27)**. The AgentSession reconciler calls runtimes only through a `runtimeBackend` interface selected from a registry keyed by `spec.runtime.orchestrator` (`internal/controller/agentsession/runtime_backend.go`); backends return a normalized `observation` and the **reconciler** owns all status/condition/event/result mapping (`applyObservation`/`applyRuntimePhase`). The abstraction is now proven by **two** in-tree backends: `kubernetes-job` (default) and `kubernetes-pod` (a bare Pod, the reference adapter). Shipped generalizations: a shared pod-template builder (`job.BuildPodTemplateSpec`, slice 3), a backend-neutral `status.runtimeRef` (slice 4, resolves open question #1), the `kubernetes-pod` backend with lifecycle/drift correctness + GC parity (slices 5–7), and a live kind e2e (slice 8).
 >
-> **Next (slices 3–10, designed below):** prove the abstraction with a **second in-tree backend — `kubernetes-pod`** (a bare Pod, the *reference adapter*), which forces and validates the cross-cutting generalizations any backend needs: a shared pod-template builder (slice 3), a backend-neutral `status.runtimeRef` (slice 4, resolves open question #1), and per-backend completion/drift semantics. `kubernetes-pod` is dependency-free and fully testable in the existing envtest + kind e2e harness, so it de-risks the **external** adapters (Tekton → Argo → Temporal) that follow without committing to their dependencies first. See *Second backend: `kubernetes-pod`* and the updated *Migration plan* below.
+> **Next (slices 9–10):** docs/status alignment (slice 9, this update) and the **external** adapter design (slice 10, Tekton first) on top of the now-proven interface.
 
 ## Purpose
 
@@ -161,13 +161,13 @@ The **governance pipeline does not change**: validate → resolve → approval g
 1. **Design doc** (this doc). — *done*.
 2. **Extract `runtimeBackend` + `kubernetes-job` implementation** — *done*. Reconciler routes `ensure`/`stop`/`runtimeGone`/`ownedType` through a `backendRegistry` keyed by `spec.runtime.orchestrator`; `kubernetesJobBackend` holds the Job mechanics. Behavior-preserving.
 2b. **Normalize to `observation`** — *done*. Backend returns a neutral `observation`; reconciler's `applyObservation`/`applyRuntimePhase` own all status mapping. Behavior-preserving.
-3. **Extract the shared pod-template builder** (`internal/controller/job`) — refactor only; `Build` output unchanged; both backends will reuse it.
-4. **Generalize status to `status.runtimeRef`** — additive API field + `observation.runtimeRef`; `applyObservation` populates it; Job backend fills kind `Job` and keeps `jobName`/`podName`. (Resolves open question #1.)
-5. **`kubernetes-pod` backend** — new `kubernetesPodBackend` (`ensure`/`stop`/`runtimeGone`/`ownedType`); register in the registry; accept `kubernetes-pod` in `validateSpec`; constant.
-6. **Pod backend correctness + unit tests** — `podRuntimePhase` mapping (succeeded/failed/timed-out/running), drift→replace, `runtimeGone`; table-driven unit tests.
-7. **Watch wiring** — `SetupWithManager` `Owns` every registered backend's `ownedType()` (Job **and** Pod) so completions trigger reconciles; envtest.
-8. **Live e2e** — a `kubernetes-pod` session runs as a Pod and reaches `Succeeded` with `status.runtimeRef` kind `Pod`.
-9. **Docs + status alignment** — design-doc statuses, `architecture.md` (`runtimeRef`, second backend), README orchestrator section, status tracker.
+3. **Extract the shared pod-template builder** (`internal/controller/job`) — *done*. `job.BuildPodTemplateSpec` builds the agent Pod template; `Build` wraps it in the Job. Output unchanged; both backends reuse it.
+4. **Generalize status to `status.runtimeRef`** — *done*. Additive `RuntimeRef` API field + `observation.runtimeRef`; `applyObservation` populates it; Job backend fills kind `Job` and keeps `jobName`/`podName` (`jobName` documented as a deprecated alias). (Resolves open question #1.)
+5. **`kubernetes-pod` backend** — *done*. `kubernetesPodBackend` (`ensure`/`stop`/`runtimeGone`/`ownedType`) registered next to the Job backend; `validateSpec` + CRD enum accept `kubernetes-pod`.
+6. **Pod backend correctness + unit tests** — *done*. `podRuntimePhase` (succeeded/failed/`DeadlineExceeded`→timed-out/running/pending), drift→replace (pending) vs surface-only (running), `runtimeGone`; table-driven + fake-client unit tests.
+7. **Watch wiring** — *done*. `SetupWithManager` `Owns` every registered backend's `ownedType()` (Job **and** Pod, deduped); Pod `stop()` has Job-parity `blockOwnerDeletion` handling; envtest.
+8. **Live e2e** — *done*. A `kubernetes-pod` session runs as a Pod (no Job) and reaches `Succeeded` with `status.runtimeRef` kind `Pod` (`test/e2e/pod_backend_test.go`).
+9. **Docs + status alignment** — *done (this update)*. Design-doc statuses, `architecture.md` (`runtimeRef`, second backend), README orchestrator section, status tracker.
 10. **External adapters (future, design per-adapter)** — **Tekton** (`PipelineRun`/`TaskRun`; pods still co-located → sidecars/reporter portable, `self-reported`), then **Argo Workflows**, then **Temporal / external worker** (no co-located pod → needs its own evidence channel + assurance declaration, open questions #3/#4). Each is its own design slice on top of the proven interface.
 
 ## Open questions

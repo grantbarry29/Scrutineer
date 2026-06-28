@@ -110,6 +110,7 @@ classDiagram
       status.matchedPolicies[]
       status.policyDecisions[]
       status.violations[]
+      status.runtimeRef
       status.jobName_podName
       status.result_usage_artifacts
     }
@@ -212,6 +213,8 @@ sequenceDiagram
 - Job pod template is **immutable** while active; policy/profile changes on a *pending* Job replace it, on an *active* Job set a `*Drift` condition instead.
 - The reconciler uses an uncached `APIReader` where stale reads are dangerous (deletion detection, status pre-read).
 
+**Runtime backends (Phase 6).** Runtime mechanics (create/observe/stop) are not hard-wired to Jobs: the reconciler routes `ensure`/`stop`/`runtimeGone`/`ownedType` through a `runtimeBackend` interface chosen from a registry keyed by `spec.runtime.orchestrator` (`runtime_backend.go`). Two in-tree backends ship today — `kubernetes-job` (default, `batchv1.Job`) and `kubernetes-pod` (a bare `corev1.Pod`, `backend_pod.go`) — both built from the shared `job.BuildPodTemplateSpec` so the data-plane/sidecar wiring is identical. Backends return a neutral `observation`; the reconciler owns all status mapping. `status.runtimeRef` (`apiVersion`/`kind`/`name`/`uid`) records the runtime object's identity for any backend; `status.jobName` is a deprecated alias of `runtimeRef.name` kept for the Job backend. The diagram above shows the Job path; the Pod path is identical with `Pod` substituted for `Job`.
+
 ---
 
 ## 6. Policy resolution, propagation, and evidence
@@ -293,7 +296,7 @@ Detailed per-backend designs: [`phase-3-enforcement-architecture.md`](phase-3-en
 | Path | Responsibility |
 |------|----------------|
 | `api/v1alpha1/` | CRD Go types + kubebuilder markers (`agentsession_types.go`, `agentpolicy_types.go`, `toolpolicy_types.go`, `runtimeprofile_types.go`, `policy_types.go`). Source of truth for generated CRDs. |
-| `internal/controller/agentsession/` | The reconciler and its helpers: `reconciler.go`, `status.go` (patch strategy), `policy.go`/`policy_decisions.go`, `violations.go`, `networkpolicy.go`, `egress_proxy.go`, `runtimeprofile*.go`, `pod*.go`, watches. |
+| `internal/controller/agentsession/` | The reconciler and its helpers: `reconciler.go`, `status.go` (patch strategy), `runtime_backend.go` (backend interface + registry + `kubernetes-job`), `backend_pod.go` (`kubernetes-pod`), `policy.go`/`policy_decisions.go`, `violations.go`, `networkpolicy.go`, `egress_proxy.go`, `runtimeprofile*.go`, `pod*.go`, watches. |
 | `internal/controller/job/` | Pure Job/Pod template construction: `builder.go`, `sidecars.go`, `constants.go` (labels). No cluster I/O. |
 | `internal/policy/` | Policy layer loading, merge/resolve, status application. Backend-neutral. |
 | `internal/enforcement/` | Enforcement contract + mode semantics + report/violation helpers; sub-packages per backend (`networkpolicy/`, `dnsproxy/`, `toolgateway/`, `workspace/`). |
@@ -330,7 +333,7 @@ Phases (detail in `.cursor/relay-project-status.md`):
 - **3b (active — critical path):** runtime evidence loop (reporter → events → real images → violations → file impl).
 - **4:** observability & audit (usage metrics, timeline model, Prometheus, OTel, audit sink, log/artifact collection) — consumes the evidence loop.
 - **5:** scoped human approval workflows.
-- **6:** orchestrator adapters (Tekton/Argo/Temporal) + SessionTemplate.
+- **6 (in progress):** orchestrator-agnostic runtime backends. `runtimeBackend` interface + `status.runtimeRef` shipped; two in-tree backends (`kubernetes-job`, `kubernetes-pod`) done. Next: external adapter design (Tekton/Argo/Temporal) + SessionTemplate.
 - **7:** operational UI (governance/observability dashboard, not a chatbot).
 - **8:** enterprise platform (per-session identity, CredentialProfile, multi-tenancy, HA, sandboxes).
 

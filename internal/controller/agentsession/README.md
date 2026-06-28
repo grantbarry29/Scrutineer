@@ -10,7 +10,8 @@ binary ([`cmd/main.go`](../../../cmd/main.go) → `SetupWithManager`); the root
 Turn a declared `AgentSession` (task + policy + runtime profile) into a running, governed
 workload and keep its status a faithful record of what was validated, propagated, created,
 and observed. It stays **orchestrator-agnostic**: all orchestrator-specific work goes
-through the `runtimeBackend` interface (today only `kubernetes-job`).
+through the `runtimeBackend` interface (two backends today: `kubernetes-job` and
+`kubernetes-pod`).
 
 ## Responsibilities / Non-responsibilities
 
@@ -68,10 +69,10 @@ against an unchanged cluster makes no API mutations.
 
 ## Interfaces & artifacts
 
-- Reconciles `AgentSession`; owns `Job` + `NetworkPolicy` (owner refs).
-- Status subresource: `phase`, `observedGeneration`, `jobName`/`podName`
-  (`status.runtimeRef` is the planned backend-neutral generalization — Phase 6),
-  `conditions` (`Validated`, `PolicyResolved`, `RuntimeProfileResolved`,
+- Reconciles `AgentSession`; owns the runtime object (`Job` or `Pod`) + `NetworkPolicy` (owner refs).
+- Status subresource: `phase`, `observedGeneration`, `runtimeRef` (backend-neutral
+  runtime identity), `jobName`/`podName` (`jobName` is a deprecated alias of
+  `runtimeRef.name`), `conditions` (`Validated`, `PolicyResolved`, `RuntimeProfileResolved`,
   `PolicyPropagated`, `RuntimeCreated`, `Completed`, `Ready`), `result`, and
   reporter-populated `policyDecisions`/`violations`/`usage`.
 - RBAC is generated from the `+kubebuilder:rbac` markers in `reconciler.go` via

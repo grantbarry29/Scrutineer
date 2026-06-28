@@ -38,11 +38,11 @@ agents inside enterprise environments.
 - First-class policy violations as cluster events and CRD status
 - Audit + observability (Prometheus metrics, OpenTelemetry traces, OTLP audit sink, structured run records)
 - Human approval gates for sensitive actions (incl. mid-execution per-tool holds)
-- Reconcile into Kubernetes Jobs behind a backend-neutral `runtimeBackend` interface
+- Reconcile into Kubernetes Jobs **or** bare Pods behind a backend-neutral `runtimeBackend` interface
 
 **Future** (Phase 6+):
 
-- Additional orchestrators behind the same interface: Kubernetes Pods (in progress), then Tekton, Argo, Temporal
+- Additional orchestrators behind the same interface: Tekton, Argo, Temporal
 - Identity and credential isolation (per-session SA, KMS-scoped secrets)
 - Stronger / adversarial-grade enforcement: Envoy sidecars, Cilium/eBPF, generated NetworkPolicy, and sandboxes (gVisor / Kata / Firecracker)
 - An operational governance/observability UI
@@ -57,7 +57,7 @@ The authoritative, always-current roadmap and status live in
 **Control plane (the manager — [`cmd/main.go`](cmd/main.go)):**
 
 1. Defines namespaced CRDs (`relay.secureai.dev/v1alpha1`): `AgentSession`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`, `ApprovalRequest`.
-2. Reconciles each `AgentSession` into a `batch/v1` Job named `relay-session-<name>`, owned by the session, behind a backend-neutral `runtimeBackend` interface (`kubernetes-job` today).
+2. Reconciles each `AgentSession` into a runtime object named `relay-session-<name>`, owned by the session, behind a backend-neutral `runtimeBackend` interface: a `batch/v1` Job (`kubernetes-job`, default) or a bare `v1` Pod (`kubernetes-pod`). `status.runtimeRef` records which object was created.
 3. Merges reusable policies (`spec.policyRefs`) with inline `spec.policy` overrides → `status.effectivePolicy`, `status.policyDecisions`, and `AGENT_POLICY_*` env vars.
 4. Applies optional `RuntimeProfile` hardening and injects enabled enforcement sidecars into the Job pod template via `spec.runtimeProfileRef` / `spec.sidecars[]`.
 5. Tracks lifecycle in `status.phase` and structured `status.conditions` (including aggregate `Ready`), emits Kubernetes Events, supports cancellation and finalizer-gated deletion.
@@ -80,9 +80,9 @@ See [AgentSession controller reference](#agentsession-controller-reference) for 
   pod and ServiceAccount, so a fully compromised agent could tamper with or starve
   the data plane. Runtime evidence is stamped `self-reported` to reflect this.
   Adversarial-grade integrity (kernel/eBPF, out-of-pod observation) is future work.
-- **One orchestrator.** `runtime.orchestrator` only accepts `kubernetes-job` today;
-  a `kubernetes-pod` reference backend is in progress and `tekton` / `argo` /
-  `temporal` / `external` remain reserved.
+- **Two in-cluster orchestrators.** `runtime.orchestrator` accepts `kubernetes-job`
+  (default) and `kubernetes-pod`; external backends (`tekton` / `argo` / `temporal` /
+  `external`) remain reserved.
 - **No operational UI yet** (Phase 7), and **no per-session identity / multi-tenancy**
   hardening yet (Phase 8).
 
@@ -322,7 +322,8 @@ spec:
 | `startTime` | Yes | Set when the owned Job is first created |
 | `completionTime` | Yes | Set when the session reaches a terminal phase |
 | `conditions` | Yes | See [Conditions](#conditions) |
-| `jobName` / `podName` | Yes | Owned Job name; newest Job-owned Pod (when known) |
+| `runtimeRef` | Yes | Backend-neutral identity of the runtime object created (`apiVersion`/`kind`/`name`/`uid`); `kind` is `Job` or `Pod`. Prefer this over `jobName`. |
+| `jobName` / `podName` | Yes | `jobName`: owned Job name (**deprecated** alias of `runtimeRef.name`; empty for the `kubernetes-pod` backend). `podName`: the agent Pod (newest Job-owned Pod, or the Pod itself for `kubernetes-pod`). |
 | `matchedPolicies` | Yes | Policy CRDs that contributed to `effectivePolicy` |
 | `effectivePolicy` | Yes | Merged rules + mode propagated to the Job |
 | `policyDecisions` | Yes | Merge-time audit entries plus runtime decisions appended from sidecar reports (max 64) |
@@ -366,7 +367,7 @@ Plus any `spec.runtime.env` entries the user adds.
 
 ## AgentSession controller reference
 
-The controller lives in [`internal/controller/agentsession/`](internal/controller/agentsession/) (reconcile loop, policy/runtime watches, validation) and delegates pod/Job construction to [`internal/controller/job/`](internal/controller/job/) (build, sidecar injection, drift detection, status helpers). Orchestrator-specific work goes through a backend-neutral `runtimeBackend` interface (`kubernetes-job` today); the reconciler maps each backend's normalized observation onto status, so governance semantics stay backend-independent. See the [package README](internal/controller/agentsession/README.md).
+The controller lives in [`internal/controller/agentsession/`](internal/controller/agentsession/) (reconcile loop, policy/runtime watches, validation) and delegates pod/Job construction to [`internal/controller/job/`](internal/controller/job/) (build, sidecar injection, drift detection, status helpers). Orchestrator-specific work goes through a backend-neutral `runtimeBackend` interface with two backends today — `kubernetes-job` and `kubernetes-pod`, both built from the shared `job.BuildPodTemplateSpec`; the reconciler maps each backend's normalized observation onto status, so governance semantics stay backend-independent. See the [package README](internal/controller/agentsession/README.md).
 
 ### Reconcile triggers
 
@@ -430,7 +431,7 @@ Controller-side checks (in addition to CRD OpenAPI validation):
 |-------|---------------|
 | Task: description, prompt, or `promptConfigMapRef` required | `InvalidSpec` |
 | `runtime.image` and `model.provider` / `model.name` non-empty | `InvalidSpec` |
-| `runtime.orchestrator` must be `kubernetes-job` | `InvalidSpec` |
+| `runtime.orchestrator` must be `kubernetes-job` or `kubernetes-pod` | `InvalidSpec` |
 | Temperature in `[0, 2]`; `maxTokens >= 1`; `timeoutSeconds >= 1` | `InvalidSpec` |
 | Policy numeric caps `>= 0` | `InvalidSpec` |
 | `policyRefs[].kind` in `AgentPolicy`, `ToolPolicy` | `InvalidSpec` |
@@ -751,7 +752,7 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 
 | Capability | Shipped? | Notes |
 |------------|----------|-------|
-| Reconcile to Kubernetes runtime | Yes | `runtime.orchestrator: kubernetes-job` only (via `runtimeBackend` interface) |
+| Reconcile to Kubernetes runtime | Yes | `runtime.orchestrator: kubernetes-job` (default) or `kubernetes-pod`, via the `runtimeBackend` interface; `status.runtimeRef` records the object created |
 | Task prompt / ConfigMap prompt | Yes | `spec.task` or `promptConfigMapRef` (same namespace) |
 | `AgentPolicy` / `ToolPolicy` + `spec.policyRefs` | Yes | Same-namespace merge → `status.effectivePolicy`; inline `spec.policy` overrides win |
 | Policy modes (`audit-only` / `dry-run` / `enforced`) | Yes | Strictest mode in status + `AGENT_POLICY_MODE`; **enforced** by sidecars |
@@ -822,10 +823,11 @@ endpoint) and `SessionTemplate` (parameterized blueprints) remain future work.
 
 ### In progress / next
 
-- **Phase 6 — orchestrator adapters.** A `kubernetes-pod` reference backend +
-  backend-neutral `status.runtimeRef` are underway behind the existing
-  `runtimeBackend` interface, de-risking external adapters (`tekton`, `argo`,
-  `temporal`, `external`). Design: [`docs/design/phase-6-orchestrator-interface.md`](docs/design/phase-6-orchestrator-interface.md).
+- **Phase 6 — orchestrator adapters.** The backend-neutral `runtimeBackend`
+  interface, `status.runtimeRef`, and a second in-tree backend (`kubernetes-pod`)
+  have shipped, proving Relay is orchestrator-agnostic. Next is the external
+  adapter design (`tekton` first, then `argo`, `temporal`, `external`). Design:
+  [`docs/design/phase-6-orchestrator-interface.md`](docs/design/phase-6-orchestrator-interface.md).
 
 ### Future
 
