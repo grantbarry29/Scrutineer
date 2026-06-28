@@ -76,10 +76,15 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   scoped by a separate path-restricted `controller-gen` invocation so the reporter's
   permissions are *not* aggregated into the broad `manager-role`. The role is bound by
   `config/rbac/reporter_role_binding.yaml`.
-  > **Note:** the reporter runs in-process under the `relay-controller-manager`
-  > ServiceAccount today, so that SA is the binding subject and its *effective* runtime
-  > privilege is unchanged. Running the reporter under its own ServiceAccount — the change
-  > that actually reduces the manager SA's privilege — is tracked separately (issue #34).
+  > **Deployment modes:** by default the reporter runs **in-process** in the manager
+  > (`--enable-reporter=true`), under the `relay-controller-manager` ServiceAccount — so
+  > that SA holds both roles and the split is RBAC hygiene only. The opt-in
+  > [`config/reporter-standalone`](../../config/reporter-standalone) overlay runs the
+  > reporter as its **own Deployment** (`--reporter-only`) under a dedicated
+  > `relay-reporter` ServiceAccount and sets `--enable-reporter=false` on the manager, so
+  > the manager SA keeps only `manager-role` and the reporter's RBAC lives solely with the
+  > reporter identity. That overlay is what actually reduces the manager SA's runtime
+  > privilege (issue #34).
 
 ## Invariants & files that must change together
 

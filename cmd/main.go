@@ -58,6 +58,7 @@ func main() {
 		auditLogInsecure     bool
 		enableLeaderElection bool
 		reporterOnly         bool
+		reporterEnabled      bool
 		approvalWebhookURL   string
 		enableWebhooks       bool
 	)
@@ -79,6 +80,8 @@ func main() {
 		"Enable leader election for controller manager. Ensures only one active controller.")
 	flag.BoolVar(&reporterOnly, "reporter-only", false,
 		"Serve only the runtime evidence reporter (no AgentSession reconciler). Used for in-cluster e2e reporter deployments.")
+	flag.BoolVar(&reporterEnabled, "enable-reporter", true,
+		"Run the in-process runtime evidence reporter in the full manager. Set false when the reporter is deployed standalone (--reporter-only) so its RBAC need not be granted to the manager ServiceAccount.")
 	flag.StringVar(&approvalWebhookURL, "approval-webhook-url", "",
 		"Webhook URL notified (HTTP POST JSON) when a session opens a human-approval gate. Empty disables notifications.")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", false,
@@ -162,24 +165,32 @@ func main() {
 			}
 			setupLog.Info("admission webhooks enabled", "webhook", "ApprovalRequest identity stamper")
 		}
+	}
 
-		if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-			setupLog.Error(err, "unable to set up health check")
-			os.Exit(1)
-		}
-		if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-			setupLog.Error(err, "unable to set up ready check")
+	// The runtime reporter runs in reporter-only mode (the dedicated reporter
+	// Deployment) and, by default, in-process in the full manager. Set
+	// --enable-reporter=false on the manager when the reporter is deployed
+	// standalone so its RBAC need not be granted to the manager ServiceAccount.
+	if reporterOnly || reporterEnabled {
+		if err := mgr.Add(reporter.NewRunnable(reporter.Options{
+			BindAddress: reporterAddr,
+			Client:      mgr.GetClient(),
+			APIReader:   mgr.GetAPIReader(),
+			Recorder:    mgr.GetEventRecorderFor("relay-runtime-reporter"),
+		})); err != nil {
+			setupLog.Error(err, "unable to set up runtime reporter")
 			os.Exit(1)
 		}
 	}
 
-	if err := mgr.Add(reporter.NewRunnable(reporter.Options{
-		BindAddress: reporterAddr,
-		Client:      mgr.GetClient(),
-		APIReader:   mgr.GetAPIReader(),
-		Recorder:    mgr.GetEventRecorderFor("relay-runtime-reporter"),
-	})); err != nil {
-		setupLog.Error(err, "unable to set up runtime reporter")
+	// Registered in both modes so the standalone reporter Deployment is probeable
+	// on the health port.
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
 
