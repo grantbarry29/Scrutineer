@@ -116,6 +116,7 @@ See [AgentSession controller reference](#agentsession-controller-reference) for 
 │   ├── default/                  # top-level kustomization
 │   ├── manager/ · rbac/          # Deployment, Role/Binding/SA
 │   ├── webhook/ · webhooks/ · certmanager/  # opt-in approver-identity webhook + TLS
+│   ├── reporter-standalone/      # opt-in overlay: reporter as its own Deployment + SA
 │   └── samples/                  # sample manifests (make verify-samples)
 ├── Dockerfile · Dockerfile.dns-proxy · Dockerfile.tool-gateway · Dockerfile.fs-gateway
 ├── Makefile · PROJECT · go.mod · README.md
