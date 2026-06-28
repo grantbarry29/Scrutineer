@@ -1,6 +1,6 @@
 # Phase 5 — Human Approval Workflows
 
-> **Status:** Design (Phase 5 · slice 1). No code yet. Defines the CRD shapes, controller gate/resume state machine, and invariants for scoped, auditable approvals. Implementation lands in later slices (see `.cursor/relay-project-status.md` → *Phase 5 approval workflows*).
+> **Status:** Design (Phase 5 · slice 1). No code yet. Defines the CRD shapes, controller gate/resume state machine, and invariants for scoped, auditable approvals. Implementation lands in later slices (tracked in [GitHub Issues](https://github.com/grantbarry29/Relay/issues)).
 
 ## Purpose
 
@@ -148,7 +148,9 @@ Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope*
 
 ## Implementation slices (tracking)
 
-See `.cursor/relay-project-status.md` → *Discovered Follow-Up Tasks → Phase 5 approval workflows*:
+Phase 5 shipped (slices 1–8); remaining loose ends are tracked as GitHub Issues
+([#6](https://github.com/grantbarry29/Relay/issues/6) webhook e2e,
+[#7](https://github.com/grantbarry29/Relay/issues/7) concurrent multi-grant):
 
 1. **This doc** (design). — **done**
 2. `ApprovalPolicy` CRD (declarative only). — **done (2026-06-21)**
@@ -157,7 +159,7 @@ See `.cursor/relay-project-status.md` → *Discovered Follow-Up Tasks → Phase 
 5. Approver allowlist (best-effort `decidedBy`). — **done (2026-06-21)** — see open questions #1/#2.
 6. Multi-approver (`allOf`). — **done (2026-06-21)** — `status.approvedBy[]` accumulation; gate opens on full coverage; `ApprovalPartiallyApproved` event. See open question #3.
 7. Approval-decision audit records. — **done (2026-06-21)** — `approval.granted`/`approval.denied` OTLP records on the gate (see Audit trail above + `phase-4-observability-export.md`).
-8. Authenticated approver identity (mutating admission webhook). — **done (2026-06-24)** — `internal/webhook/v1alpha1/approvalrequest_webhook.go` stamps `spec.decidedBy` from the authenticated `req.UserInfo` on decision writes (opt-in via `--enable-webhooks`; cert-manager overlay `config/webhooks`); resolves open questions #1 and #3. **Remaining:** webhook-mode envtest + live e2e (needs cert-manager in kind) — tracked in `relay-project-status.md`.
+8. Authenticated approver identity (mutating admission webhook). — **done (2026-06-24)** — `internal/webhook/v1alpha1/approvalrequest_webhook.go` stamps `spec.decidedBy` from the authenticated `req.UserInfo` on decision writes (opt-in via `--enable-webhooks`; cert-manager overlay `config/webhooks`); resolves open questions #1 and #3. **Remaining:** committed opt-in webhook-mode e2e (needs cert-manager in kind) — GitHub Issue [#6](https://github.com/grantbarry29/Relay/issues/6).
 
 ## Related
 

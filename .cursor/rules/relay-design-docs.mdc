@@ -17,7 +17,7 @@ Relay keeps canonical architecture/design docs in [`docs/design/`](../../docs/de
 
 1. Before implementing or planning a non-trivial change, identify which design doc(s) cover the area (table below) and **read them** with the file-reading tool.
 2. Follow their stated invariants and non-goals. If code and a design doc disagree, reconcile rather than silently diverge.
-3. After shipping a slice, update the doc's status line and `.cursor/relay-project-status.md`.
+3. After shipping a slice, update the doc's status line and the **GitHub Issue**.
 4. Do not dump entire design docs into context speculatively — read the one(s) you need.
 
 ## Which doc for which task
@@ -38,4 +38,4 @@ Relay keeps canonical architecture/design docs in [`docs/design/`](../../docs/de
 | Observability export (Prometheus / OTel traces / OTLP audit logs) | [`docs/design/phase-4-observability-export.md`](../../docs/design/phase-4-observability-export.md) |
 | Orchestrator decoupling / `RuntimeBackend` interface / orchestrator adapters (Tekton/Argo/Temporal) | [`docs/design/phase-6-orchestrator-interface.md`](../../docs/design/phase-6-orchestrator-interface.md) |
 
-The folder index is [`docs/design/README.md`](../../docs/design/README.md). For current state/queue use `.cursor/relay-project-status.md`; for how to implement use `.cursor/relay-cursor-workflow.md`.
+The folder index is [`docs/design/README.md`](../../docs/design/README.md). For task state and roadmap use **GitHub Issues** (see `.cursor/rules/task-management.mdc`); for durable technical context use these design docs / component READMEs / code comments; for how to implement use `.cursor/relay-cursor-workflow.md`.

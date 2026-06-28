@@ -296,7 +296,7 @@ The reporter is itself an audited surface:
 - mTLS, signed reports, replay protection (§5.3 hardening).
 - Prometheus metric names (Phase 4).
 
-Each out-of-scope item above must already be a card in `.cursor/relay-project-status.md` (evidence loop or Phase 4) or be added there before the impl slice closes.
+Each out-of-scope item above must already be a GitHub Issue, or be filed as one before the impl slice closes.
 
 ---
 

@@ -81,6 +81,6 @@ Records are emitted as OTLP log records: body = human message, severity `INFO`, 
 - The propagator is installed even when trace export is off (so sidecars can still continue traces once export is enabled).
 - Telemetry exposes existing state only; it must not become a side channel for control decisions.
 
-## Follow-ups (tracked in `.cursor/relay-project-status.md`)
+## Follow-ups (tracked in [GitHub Issues](https://github.com/grantbarry29/Relay/issues))
 
 - Surface `assuranceLevel` in the **future UI** evidence views (audit records now carry `relay.audit.assurance`; see Runtime evidence integrity).

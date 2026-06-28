@@ -2,7 +2,7 @@
 
 Canonical design documentation for Relay. These docs describe **architecture and intent** — they are the reference an implementer (human or AI agent) should read before non-trivial work. They are **not** loaded into agent context automatically; consult the relevant doc during planning (see `.cursor/rules/relay-design-docs.mdc`).
 
-For *current state, queue, and roadmap*, see [`.cursor/relay-project-status.md`](../../.cursor/relay-project-status.md). For *how to implement tasks*, see [`.cursor/relay-cursor-workflow.md`](../../.cursor/relay-cursor-workflow.md). For *product direction*, see [`.cursor/rules/relay-product-vision.mdc`](../../.cursor/rules/relay-product-vision.mdc).
+For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://github.com/grantbarry29/Relay/issues). For *how to implement tasks*, see [`.cursor/relay-cursor-workflow.md`](../../.cursor/relay-cursor-workflow.md). For *product direction*, see [`.cursor/rules/relay-product-vision.mdc`](../../.cursor/rules/relay-product-vision.mdc).
 
 ## Index
 
@@ -25,6 +25,6 @@ For *current state, queue, and roadmap*, see [`.cursor/relay-project-status.md`]
 ## Conventions
 
 - **Diagrams** use [Mermaid](https://mermaid.js.org/) fenced code blocks so they render on GitHub and in editors without external assets.
-- Each design doc states its **status** (design / implemented), **scope**, and **non-goals**, and links back to the status tracker.
-- Keep docs in sync: when a slice ships, update its status line here and in `.cursor/relay-project-status.md`.
+- Each design doc states its **status** (design / implemented), **scope**, and **non-goals**, and links to its tracking GitHub Issue.
+- Keep docs in sync: when a slice ships, update its status line here and update the tracking GitHub Issue.
 - Design docs describe intent; if code and a design doc disagree, treat it as a bug in one of them and reconcile (do not silently diverge).

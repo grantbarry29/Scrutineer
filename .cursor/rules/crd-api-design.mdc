@@ -12,7 +12,7 @@ CRDs are long-lived user-facing contracts. Design declarative APIs, validate at 
 - Read the existing types, validation markers, and generated CRD first.
 - Identify which field/version/reference is changing and who consumes it.
 - Prefer additive, optional changes. If a change is breaking, stop and document it.
-- Out-of-scope future fields go to the task list (`.cursor/relay-project-status.md`), not silent implementation.
+- Out-of-scope future fields go to a **GitHub Issue** (see `.cursor/rules/task-management.mdc`), not silent implementation.
 
 ## API Shape
 
@@ -54,4 +54,4 @@ Building CRDs as mirrors of internal Go structs instead of user-facing APIs · i
 
 ## Highest Priority (on conflict, prioritize)
 
-1. Spec is desired state; status is observed state. 2. Every field needs validation/defaulting/immutability decisions. 3. Prefer CRD schema/CEL over webhooks. 4. Defaults must be safe and fail-closed for security/networking. 5. Do not store high-cardinality runtime data in status. 6. Out-of-scope future requirements go to the task list, not silent implementation.
+1. Spec is desired state; status is observed state. 2. Every field needs validation/defaulting/immutability decisions. 3. Prefer CRD schema/CEL over webhooks. 4. Defaults must be safe and fail-closed for security/networking. 5. Do not store high-cardinality runtime data in status. 6. Out-of-scope future requirements go to a GitHub Issue (see `task-management.mdc`), not silent implementation.

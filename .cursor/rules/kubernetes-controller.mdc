@@ -14,7 +14,7 @@ You are working on production-grade Kubernetes controller code. Optimize for cor
 - Prefer small, reviewable changes.
 - Do not introduce hidden global behavior, background goroutines, caches, retries, polling loops, or network calls without justification.
 - If a requirement is ambiguous, choose the safest Kubernetes-native behavior and document the assumption.
-- If you notice an eventual requirement that is out of scope, add it to the project task list (`.cursor/relay-project-status.md`) instead of implementing it silently.
+- If you notice an eventual requirement that is out of scope, file a **GitHub Issue** (see `.cursor/rules/task-management.mdc`) instead of implementing it silently.
 
 ## Reconciliation
 
@@ -96,4 +96,4 @@ Reconcile that only works on create events · external resource creation before 
 
 ## Highest Priority (on conflict, prioritize)
 
-1. Reconcile idempotent and level-based. 2. Spec is desired, status is observed. 3. Finalizers before creating external resources. 4. Every external op needs timeout + retry classification + idempotency. 5. Every controller change includes idempotency, deletion, failure, and status tests. 6. Never silently fail open for security/network policy. 7. Do not store high-cardinality runtime data in status. 8. Out-of-scope future requirements go to the task list, not silent implementation.
+1. Reconcile idempotent and level-based. 2. Spec is desired, status is observed. 3. Finalizers before creating external resources. 4. Every external op needs timeout + retry classification + idempotency. 5. Every controller change includes idempotency, deletion, failure, and status tests. 6. Never silently fail open for security/network policy. 7. Do not store high-cardinality runtime data in status. 8. Out-of-scope future requirements go to a GitHub Issue (see `task-management.mdc`), not silent implementation.

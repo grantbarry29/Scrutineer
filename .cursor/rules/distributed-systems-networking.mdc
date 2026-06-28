@@ -12,7 +12,7 @@ You are working on distributed-systems and networking code. Assume partial failu
 - Identify the reconcile path or networking path being changed and the failure modes it introduces.
 - Do not add hidden retries, polling loops, caches, goroutines, or network calls without justification.
 - Choose the safest behavior under ambiguity and document the assumption.
-- Out-of-scope future requirements go to the task list (`.cursor/relay-project-status.md`), not silent implementation.
+- Out-of-scope future requirements go to a **GitHub Issue** (see `.cursor/rules/task-management.mdc`), not silent implementation.
 
 ## Distributed Systems
 
@@ -66,4 +66,4 @@ Ignoring `context.Context` · infinite retries · hot-loop requeues · relying o
 
 ## Highest Priority (on conflict, prioritize)
 
-1. Assume partial failure; every external op needs timeout + bounded retry classification + idempotency. 2. Make every step safe to repeat (convergence over transactions). 3. Generated rules/config must be deterministic. 4. Never silently fail open for security/network policy. 5. Do not store high-cardinality runtime data in CR status. 6. Out-of-scope future requirements go to the task list, not silent implementation.
+1. Assume partial failure; every external op needs timeout + bounded retry classification + idempotency. 2. Make every step safe to repeat (convergence over transactions). 3. Generated rules/config must be deterministic. 4. Never silently fail open for security/network policy. 5. Do not store high-cardinality runtime data in CR status. 6. Out-of-scope future requirements go to a GitHub Issue (see `task-management.mdc`), not silent implementation.

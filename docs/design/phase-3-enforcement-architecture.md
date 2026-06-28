@@ -192,7 +192,7 @@ Design only. See [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-pol
 
 Slices 1–8 shipped contracts, design docs, and in-process merge helpers, but **nothing running in-cluster produces or reports runtime evidence**. `status.policyDecisions`, `status.violations`, and `status.usage` are empty at runtime. Phase 3b closes that gap and is a prerequisite for Phase 4 observability — it is the critical path, not optional hardening.
 
-Ordered slices (full cards in `.cursor/relay-project-status.md`):
+Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/Relay/issues)):
 
 1. **Runtime reporter mechanism design** — `docs/design/phase-3-runtime-reporter-contract.md`.
 2. **Runtime reporter loop (impl)** — controller-owned PATCH callback populates status.
@@ -212,4 +212,4 @@ Ordered slices (full cards in `.cursor/relay-project-status.md`):
 
 ## Recommended Next Work
 
-Phase 3 slices 1–8 are complete. Pick **Phase 4 structured session events** or optional **Phase 3 hardening** (first-party sidecar images, runtime reporter loop) from `.cursor/relay-project-status.md`.
+Phase 3 slices 1–8 are complete. Pick the next slice from [GitHub Issues](https://github.com/grantbarry29/Relay/issues).

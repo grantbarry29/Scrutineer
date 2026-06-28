@@ -22,7 +22,7 @@ gates sensitive actions behind human approval workflows.
 
 ---
 
-> **Design docs:** architecture and per-phase design live in [`docs/design/`](docs/design/) — start with [`architecture.md`](docs/design/architecture.md). Project tracking is in [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).
+> **Design docs:** architecture and per-phase design live in [`docs/design/`](docs/design/) — start with [`architecture.md`](docs/design/architecture.md). **Task tracking and the roadmap are in [GitHub Issues / Projects](https://github.com/grantbarry29/Relay/issues)**; durable technical context lives in `docs/design/` and component `README.md`s.
 
 ## Long-term product vision
 
@@ -47,8 +47,9 @@ agents inside enterprise environments.
 - Stronger / adversarial-grade enforcement: Envoy sidecars, Cilium/eBPF, generated NetworkPolicy, and sandboxes (gVisor / Kata / Firecracker)
 - An operational governance/observability UI
 
-The authoritative, always-current roadmap and status live in
-[`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).
+Live task state and the product roadmap are in
+[GitHub Issues / Projects](https://github.com/grantbarry29/Relay/issues); durable technical context
+lives in [`docs/design/`](docs/design/) and component `README.md`s.
 
 ---
 
@@ -225,7 +226,7 @@ kubectl apply -f config/samples/relay_v1alpha1_agentsession_runtimeprofile_sidec
 
 Platform teams can publish baseline governance once; sessions reference policies and add inline overrides.
 
-**Merge order** (see [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md) for full detail):
+**Merge order** (implemented in [`internal/policy/`](internal/policy/)):
 
 1. `spec.policyRefs` in list order (recommended: `AgentPolicy` entries, then `ToolPolicy`)
 2. `spec.policy` inline overrides last (wins on conflict)
@@ -770,7 +771,7 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | `status.artifacts` | Yes | Logs (ConfigMap) + workspace tar (Secret) when `spec.outputs` enabled |
 | Pod watch · `Ready` condition · finalizer cleanup · cancellation | Yes | See controller reference above |
 
-Authoritative status & roadmap: [`.cursor/relay-project-status.md`](.cursor/relay-project-status.md).
+Live task state & roadmap: [GitHub Issues](https://github.com/grantbarry29/Relay/issues). Durable context: [`docs/design/`](docs/design/).
 
 ### Deploying the controller into the cluster
 
@@ -811,9 +812,9 @@ After running the controller and applying the success sample:
 Phases 0–5 have shipped (control-plane reconciliation, reusable policy + runtime
 profiles, data-plane enforcement for network/tool/file, the runtime-evidence loop,
 observability/audit export, and human approval workflows). Phase 6 is in progress.
-The **authoritative, always-current** roadmap and status are in
-[`.cursor/relay-project-status.md`](.cursor/relay-project-status.md); design docs are
-in [`docs/design/`](docs/design/). Highlights of what remains:
+Live task state and the **roadmap** are in
+[GitHub Issues / Projects](https://github.com/grantbarry29/Relay/issues); durable technical context and
+design docs are in [`docs/design/`](docs/design/). Highlights of what remains:
 
 ### Shipped CRDs
 

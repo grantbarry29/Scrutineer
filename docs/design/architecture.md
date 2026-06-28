@@ -1,7 +1,7 @@
 # Relay Architecture & Design
 
 > **Canonical architecture reference for Relay.** Read this before implementing anything non-trivial.
-> **Companion docs:** product vision (`.cursor/rules/relay-product-vision.mdc`), status/roadmap (`.cursor/relay-project-status.md`), workflow rules (`.cursor/relay-cursor-workflow.md`), and the phase-specific design docs in this folder.
+> **Companion docs:** product vision (`.cursor/rules/relay-product-vision.mdc`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/Relay/issues)), workflow rules (`.cursor/relay-cursor-workflow.md`), and the phase-specific design docs in this folder.
 
 This document describes **what Relay is, how it is structured, and the invariants every change must preserve.** It is written to be precise enough that an implementer (human or model) can make a correct change without re-deriving the architecture.
 
@@ -319,14 +319,14 @@ Detailed per-backend designs: [`phase-3-enforcement-architecture.md`](phase-3-en
 6. **Bounded status** — decision/violation lists are capped with truncation summaries; never let status grow unbounded.
 7. **Least privilege** — agent pods get no Kubernetes API write access to their own governance record (see reporter contract).
 8. **Modes are real semantics** — `audit-only` / `dry-run` / `enforced` change recorded actions and whether the data plane blocks; respect them in any enforcement or reporting code.
-9. **Narrow slices** — one capability per change; out-of-scope work goes to `.cursor/relay-project-status.md`, not into the diff.
+9. **Narrow slices** — one capability per change; out-of-scope work becomes a GitHub Issue, not part of the diff.
 10. **No speculative architecture** — no new CRDs/sidecars/webhooks/enforcement backends unless the task explicitly calls for them.
 
 ---
 
 ## 10. Roadmap orientation
 
-Phases (detail in `.cursor/relay-project-status.md`):
+Phases (tracked as GitHub Issues / epics — see <https://github.com/grantbarry29/Relay/issues>):
 
 - **0–2 (done):** MVP foundation, MVP hardening, reusable policy model + RuntimeProfile.
 - **3 (contracts done):** data-plane enforcement contracts, NetworkPolicy baseline, sidecar injection, gateway/proxy/file design.
