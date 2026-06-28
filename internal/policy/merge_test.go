@@ -34,6 +34,39 @@ func TestMergeRules_unionsLists(t *testing.T) {
 	}
 }
 
+// Regression for #40: unionStrings must never mutate its inputs. `a` is given
+// spare capacity so the old `range append(a, b...)` would have written b's first
+// element into a's backing array at index len(a).
+func TestUnionStrings_doesNotMutateInputs(t *testing.T) {
+	backing := make([]string, 1, 4)
+	backing[0] = "a1"
+	a := backing[:1]
+	b := []string{"b1", "b2"}
+
+	got := unionStrings(a, b)
+
+	if len(a) != 1 || a[0] != "a1" {
+		t.Fatalf("a mutated: %v", a)
+	}
+	// The shared backing array beyond len(a) must remain zero (old code wrote "b1").
+	if full := backing[:cap(backing)]; full[1] != "" {
+		t.Fatalf("append wrote into a's backing array: %v", full)
+	}
+	if len(b) != 2 || b[0] != "b1" || b[1] != "b2" {
+		t.Fatalf("b mutated: %v", b)
+	}
+
+	want := []string{"a1", "b1", "b2"}
+	if len(got) != len(want) {
+		t.Fatalf("union = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("union = %v, want %v", got, want)
+		}
+	}
+}
+
 func TestMergeRules_minCaps(t *testing.T) {
 	a := int32(100)
 	b := int32(25)

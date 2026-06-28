@@ -108,13 +108,20 @@ func unionStrings(a, b []string) []string {
 	}
 	seen := make(map[string]struct{}, len(a)+len(b))
 	out := make([]string, 0, len(a)+len(b))
-	for _, s := range append(a, b...) {
-		if _, ok := seen[s]; ok {
-			continue
+	// Iterate a and b separately rather than `range append(a, b...)`: that append
+	// can write b's elements into a's backing array when a has spare capacity,
+	// mutating a caller-owned (potentially CRD-cache-owned) slice.
+	add := func(values []string) {
+		for _, s := range values {
+			if _, ok := seen[s]; ok {
+				continue
+			}
+			seen[s] = struct{}{}
+			out = append(out, s)
 		}
-		seen[s] = struct{}{}
-		out = append(out, s)
 	}
+	add(a)
+	add(b)
 	return out
 }
 
