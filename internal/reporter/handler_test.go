@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -308,6 +310,78 @@ func TestHandler_idempotentRedelivery(t *testing.T) {
 	}
 	if len(updated.Status.Violations) != 1 {
 		t.Fatalf("violations = %d, want 1", len(updated.Status.Violations))
+	}
+}
+
+// Regression for #37: a RuntimeViolation event must be emitted for every report
+// carrying a violating decision, even after the session already has prior
+// violations. The old gate keyed off the prior violation count and suppressed
+// events for the second and later violating reports.
+func TestHandler_emitsViolationEventForEachViolatingReport(t *testing.T) {
+	ts := metav1.NewTime(time.Unix(400, 0))
+	session := &relayv1alpha1.AgentSession{
+		ObjectMeta: metav1.ObjectMeta{Name: "sess-v", Namespace: "ns1"},
+		Status: relayv1alpha1.AgentSessionStatus{
+			EffectivePolicy: &relayv1alpha1.EffectivePolicyStatus{
+				Mode: relayv1alpha1.PolicyModeEnforced,
+			},
+		},
+	}
+	cl := newFakeClient(session)
+	rec := record.NewFakeRecorder(10)
+	h := &Handler{
+		Writer:   cl.Status(),
+		Reader:   cl,
+		Verifier: stubVerifier{identity: CallerIdentity{Namespace: "ns1", PodName: "pod-a"}},
+		Recorder: rec,
+		Now:      func() time.Time { return ts.Time },
+	}
+
+	mkReport := func(target string) ReportRequest {
+		return ReportRequest{
+			Session: SessionRef{Namespace: "ns1", Name: "sess-v"},
+			Backend: "egress-proxy",
+			Decisions: []relayv1alpha1.PolicyDecision{{
+				Time:    ts,
+				Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+				Type:    "network",
+				Action:  relayv1alpha1.PolicyDecisionDeny,
+				Reason:  "DeniedDomain",
+				Target:  target,
+				Message: "egress blocked: " + target,
+			}},
+		}
+	}
+
+	// Two distinct violating reports; the second arrives after the session already
+	// has a recorded violation from the first.
+	if r := postReport(t, h, mkReport("evil1.example.com"), "Bearer ok"); r.Code != http.StatusAccepted {
+		t.Fatalf("first report status = %d body=%q", r.Code, r.Body.String())
+	}
+	if r := postReport(t, h, mkReport("evil2.example.com"), "Bearer ok"); r.Code != http.StatusAccepted {
+		t.Fatalf("second report status = %d body=%q", r.Code, r.Body.String())
+	}
+
+	events := drainEvents(rec.Events)
+	if len(events) != 2 {
+		t.Fatalf("RuntimeViolation events = %d, want 2: %v", len(events), events)
+	}
+	for _, e := range events {
+		if !strings.Contains(e, "RuntimeViolation") {
+			t.Fatalf("unexpected event: %q", e)
+		}
+	}
+}
+
+func drainEvents(ch <-chan string) []string {
+	var out []string
+	for {
+		select {
+		case e := <-ch:
+			out = append(out, e)
+		default:
+			return out
+		}
 	}
 }
 

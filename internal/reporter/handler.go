@@ -151,7 +151,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hadViolations := len(session.Status.Violations) == 0 && len(report.Decisions) > 0
 	if err := agentsession.PatchRuntimePolicyReport(r.Context(), h.Writer, h.Reader, sessionKey, report); err != nil {
 		if apierrors.IsNotFound(err) {
 			result = "not_found"
@@ -168,7 +167,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if hadViolations && h.Recorder != nil {
+	// Emit a RuntimeViolation event whenever *this* report carries a violating
+	// (Deny/DryRun) decision — independent of how many violations the session has
+	// already accumulated. One event per violating report.
+	if h.Recorder != nil {
 		for _, d := range report.Decisions {
 			if d.Action == relayv1alpha1.PolicyDecisionDeny || d.Action == relayv1alpha1.PolicyDecisionDryRun {
 				h.Recorder.Event(&session, "Warning", "RuntimeViolation", d.Message)
