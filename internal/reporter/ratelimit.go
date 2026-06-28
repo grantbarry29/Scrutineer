@@ -32,10 +32,23 @@ func newSessionRateLimiter(interval time.Duration) *sessionRateLimiter {
 func (l *sessionRateLimiter) allow(sessionKey string, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.evictExpiredLocked(now)
 	prev, ok := l.last[sessionKey]
 	if ok && now.Sub(prev) < l.interval {
 		return false
 	}
 	l.last[sessionKey] = now
 	return true
+}
+
+// evictExpiredLocked drops sessions whose last request is at least one interval
+// old. Such entries no longer affect any rate decision (the next request would be
+// allowed regardless), so removing them keeps the map bounded to sessions seen
+// within the last interval rather than growing without limit. Caller holds l.mu.
+func (l *sessionRateLimiter) evictExpiredLocked(now time.Time) {
+	for k, t := range l.last {
+		if now.Sub(t) >= l.interval {
+			delete(l.last, k)
+		}
+	}
 }
