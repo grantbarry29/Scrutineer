@@ -22,9 +22,11 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
+// NOTE: tests in this file are intentionally not t.Parallel(): they set the
+// process-global OTel tracer provider (otel.SetTracerProvider) and resolve the
+// tracer from it lazily via otel.Tracer, so running them concurrently makes them
+// clobber each other's provider and record spans onto the wrong SpanRecorder.
 func TestSetup_noopWhenEndpointEmpty(t *testing.T) {
-	t.Parallel()
-
 	shutdown, err := Setup(context.Background(), Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -41,8 +43,6 @@ func TestSetup_noopWhenEndpointEmpty(t *testing.T) {
 }
 
 func TestStartReconcileSpan_recordsAttributes(t *testing.T) {
-	t.Parallel()
-
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
 	otel.SetTracerProvider(tp)
@@ -75,8 +75,6 @@ func spanAttribute(sp sdktrace.ReadOnlySpan, key string) (attribute.Value, bool)
 }
 
 func TestSetReconcileSpanResult_recordsError(t *testing.T) {
-	t.Parallel()
-
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
 	otel.SetTracerProvider(tp)
@@ -86,7 +84,11 @@ func TestSetReconcileSpanResult_recordsError(t *testing.T) {
 	SetReconcileSpanResult(ctx, "Failed", 0, errors.New("boom"))
 	span.End()
 
-	got := sr.Ended()[0]
+	ended := sr.Ended()
+	if len(ended) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(ended))
+	}
+	got := ended[0]
 	if got.Status().Code != codes.Error {
 		t.Fatalf("status = %+v", got.Status())
 	}
