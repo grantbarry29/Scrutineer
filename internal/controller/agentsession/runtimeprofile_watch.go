@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func (r *AgentSessionReconciler) mapRuntimeProfileToSessions(ctx context.Context, obj client.Object) []reconcile.Request {
-	rp, ok := obj.(*relayv1alpha1.RuntimeProfile)
+	rp, ok := obj.(*scrutineerv1alpha1.RuntimeProfile)
 	if !ok {
 		return nil
 	}
@@ -29,7 +29,7 @@ func (r *AgentSessionReconciler) mapRuntimeProfileToSessions(ctx context.Context
 }
 
 func (r *AgentSessionReconciler) sessionsReferencingRuntimeProfile(ctx context.Context, namespace, name string) []reconcile.Request {
-	var sessions relayv1alpha1.AgentSessionList
+	var sessions scrutineerv1alpha1.AgentSessionList
 	if err := r.List(ctx, &sessions, client.InNamespace(namespace)); err != nil {
 		return nil
 	}
@@ -48,7 +48,7 @@ func (r *AgentSessionReconciler) sessionsReferencingRuntimeProfile(ctx context.C
 	return out
 }
 
-func sessionReferencesRuntimeProfile(session *relayv1alpha1.AgentSession, profileName string) bool {
+func sessionReferencesRuntimeProfile(session *scrutineerv1alpha1.AgentSession, profileName string) bool {
 	ref := session.Spec.RuntimeProfileRef
 	if ref == nil {
 		return false

@@ -1,6 +1,6 @@
 # agentsession controller
 
-The core Relay control-plane controller. Reconciles `AgentSession` custom resources into a
+The core Scrutineer control-plane controller. Reconciles `AgentSession` custom resources into a
 governed runtime workload and tracks observed governance status. Compiled into the manager
 binary ([`cmd/main.go`](../../../cmd/main.go) → `SetupWithManager`); the root
 [`README.md`](../../../README.md) is the manager/deployment overview.

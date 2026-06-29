@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 type stubVerifier struct {
@@ -46,11 +46,11 @@ func (s stubVerifier) Verify(_ context.Context, _ *http.Request, _ SessionRef) (
 
 func TestHandler_acceptsDenyReport(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(100, 0))
-	session := &relayv1alpha1.AgentSession{
+	session := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "sess-a", Namespace: "ns1"},
-		Status: relayv1alpha1.AgentSessionStatus{
-			EffectivePolicy: &relayv1alpha1.EffectivePolicyStatus{
-				Mode: relayv1alpha1.PolicyModeEnforced,
+		Status: scrutineerv1alpha1.AgentSessionStatus{
+			EffectivePolicy: &scrutineerv1alpha1.EffectivePolicyStatus{
+				Mode: scrutineerv1alpha1.PolicyModeEnforced,
 			},
 		},
 	}
@@ -66,11 +66,11 @@ func TestHandler_acceptsDenyReport(t *testing.T) {
 	body := ReportRequest{
 		Session: SessionRef{Namespace: "ns1", Name: "sess-a"},
 		Backend: "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:    ts,
-			Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:    "network",
-			Action:  relayv1alpha1.PolicyDecisionDeny,
+			Action:  scrutineerv1alpha1.PolicyDecisionDeny,
 			Reason:  "DeniedDomain",
 			Target:  "evil.example.com",
 			Message: "egress blocked",
@@ -81,14 +81,14 @@ func TestHandler_acceptsDenyReport(t *testing.T) {
 		t.Fatalf("status = %d body=%q", rec.Code, rec.Body.String())
 	}
 
-	var updated relayv1alpha1.AgentSession
+	var updated scrutineerv1alpha1.AgentSession
 	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: "ns1", Name: "sess-a"}, &updated); err != nil {
 		t.Fatal(err)
 	}
 	if len(updated.Status.PolicyDecisions) != 1 {
 		t.Fatalf("decisions = %d", len(updated.Status.PolicyDecisions))
 	}
-	if updated.Status.PolicyDecisions[0].Phase != relayv1alpha1.PolicyDecisionPhaseRuntime {
+	if updated.Status.PolicyDecisions[0].Phase != scrutineerv1alpha1.PolicyDecisionPhaseRuntime {
 		t.Fatalf("phase = %s", updated.Status.PolicyDecisions[0].Phase)
 	}
 	if len(updated.Status.Violations) != 1 {
@@ -101,7 +101,7 @@ func TestHandler_acceptsDenyReport(t *testing.T) {
 
 func TestHandler_acceptsNetworkEvent(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(150, 0))
-	session := &relayv1alpha1.AgentSession{
+	session := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "sess-ev", Namespace: "ns1"},
 	}
 	cl := newFakeClient(session)
@@ -114,9 +114,9 @@ func TestHandler_acceptsNetworkEvent(t *testing.T) {
 	rec := postReport(t, h, ReportRequest{
 		Session: SessionRef{Namespace: "ns1", Name: "sess-ev"},
 		Backend: "egress-proxy",
-		Events: []relayv1alpha1.SessionEvent{{
+		Events: []scrutineerv1alpha1.SessionEvent{{
 			Time:    ts,
-			Type:    relayv1alpha1.SessionEventTypeNetwork,
+			Type:    scrutineerv1alpha1.SessionEventTypeNetwork,
 			Action:  "deny",
 			Target:  "evil.example.com",
 			Message: "egress blocked",
@@ -126,7 +126,7 @@ func TestHandler_acceptsNetworkEvent(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d body=%q", rec.Code, rec.Body.String())
 	}
-	var updated relayv1alpha1.AgentSession
+	var updated scrutineerv1alpha1.AgentSession
 	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: "ns1", Name: "sess-ev"}, &updated); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestHandler_acceptsNetworkEvent(t *testing.T) {
 }
 
 func TestHandler_rejectsUnauthorized(t *testing.T) {
-	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	session := &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
 	cl := newFakeClient(session)
 	h := &Handler{
 		Writer:   cl.Status(),
@@ -149,17 +149,17 @@ func TestHandler_rejectsUnauthorized(t *testing.T) {
 	rec := postReport(t, h, ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "network",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Reason: "DeniedDomain",
 		}},
 	}, "Bearer bad")
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	var updated relayv1alpha1.AgentSession
+	var updated scrutineerv1alpha1.AgentSession
 	_ = cl.Get(context.Background(), types.NamespacedName{Namespace: "ns", Name: "s"}, &updated)
 	if len(updated.Status.PolicyDecisions) != 0 {
 		t.Fatalf("expected no decisions, got %d", len(updated.Status.PolicyDecisions))
@@ -167,7 +167,7 @@ func TestHandler_rejectsUnauthorized(t *testing.T) {
 }
 
 func TestHandler_rejectsForbidden(t *testing.T) {
-	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	session := &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
 	cl := newFakeClient(session)
 	h := &Handler{
 		Writer:   cl.Status(),
@@ -177,10 +177,10 @@ func TestHandler_rejectsForbidden(t *testing.T) {
 	rec := postReport(t, h, ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "network",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Reason: "DeniedDomain",
 		}},
 	}, "Bearer ok")
@@ -190,7 +190,7 @@ func TestHandler_rejectsForbidden(t *testing.T) {
 }
 
 func TestHandler_rejectsNonRuntimePhase(t *testing.T) {
-	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	session := &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
 	cl := newFakeClient(session)
 	h := &Handler{
 		Writer:   cl.Status(),
@@ -200,10 +200,10 @@ func TestHandler_rejectsNonRuntimePhase(t *testing.T) {
 	rec := postReport(t, h, ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{
-			Phase:  relayv1alpha1.PolicyDecisionPhaseMerge,
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseMerge,
 			Type:   "network",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Reason: "DeniedDomain",
 		}},
 	}, "Bearer ok")
@@ -214,7 +214,7 @@ func TestHandler_rejectsNonRuntimePhase(t *testing.T) {
 
 func TestHandler_usageOnlyReportIdIdempotent(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(300, 0))
-	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	session := &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
 	cl := newFakeClient(session)
 	cache := newReportIDCache(time.Hour)
 	h := &Handler{
@@ -228,7 +228,7 @@ func TestHandler_usageOnlyReportIdIdempotent(t *testing.T) {
 		Session:  SessionRef{Namespace: "ns", Name: "s"},
 		Backend:  "agent",
 		ReportID: "usage-batch-1",
-		Usage:    &relayv1alpha1.SessionUsage{InputTokens: 100, OutputTokens: 25},
+		Usage:    &scrutineerv1alpha1.SessionUsage{InputTokens: 100, OutputTokens: 25},
 	}
 	if rec := postReport(t, h, body, "Bearer ok"); rec.Code != http.StatusAccepted {
 		t.Fatalf("first status = %d", rec.Code)
@@ -237,7 +237,7 @@ func TestHandler_usageOnlyReportIdIdempotent(t *testing.T) {
 		t.Fatalf("second status = %d", rec.Code)
 	}
 
-	var updated relayv1alpha1.AgentSession
+	var updated scrutineerv1alpha1.AgentSession
 	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: "ns", Name: "s"}, &updated); err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestHandler_usageOnlyReportIdIdempotent(t *testing.T) {
 
 func TestHandler_usageOnlyWithoutReportIdDoubleCounts(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(301, 0))
-	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	session := &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
 	cl := newFakeClient(session)
 	h := &Handler{
 		Writer:   cl.Status(),
@@ -259,12 +259,12 @@ func TestHandler_usageOnlyWithoutReportIdDoubleCounts(t *testing.T) {
 	body := ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "agent",
-		Usage:   &relayv1alpha1.SessionUsage{InputTokens: 10},
+		Usage:   &scrutineerv1alpha1.SessionUsage{InputTokens: 10},
 	}
 	postReport(t, h, body, "Bearer ok")
 	postReport(t, h, body, "Bearer ok")
 
-	var updated relayv1alpha1.AgentSession
+	var updated scrutineerv1alpha1.AgentSession
 	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: "ns", Name: "s"}, &updated); err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestHandler_usageOnlyWithoutReportIdDoubleCounts(t *testing.T) {
 
 func TestHandler_idempotentRedelivery(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(200, 0))
-	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	session := &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
 	cl := newFakeClient(session)
 	h := &Handler{
 		Writer:   cl.Status(),
@@ -286,11 +286,11 @@ func TestHandler_idempotentRedelivery(t *testing.T) {
 	body := ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:    ts,
-			Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:    "tool",
-			Action:  relayv1alpha1.PolicyDecisionDeny,
+			Action:  scrutineerv1alpha1.PolicyDecisionDeny,
 			Reason:  "DeniedTools",
 			Target:  "bash",
 			Message: "tool denied",
@@ -302,7 +302,7 @@ func TestHandler_idempotentRedelivery(t *testing.T) {
 	if rec := postReport(t, h, body, "Bearer ok"); rec.Code != http.StatusAccepted {
 		t.Fatalf("second status = %d", rec.Code)
 	}
-	var updated relayv1alpha1.AgentSession
+	var updated scrutineerv1alpha1.AgentSession
 	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: "ns", Name: "s"}, &updated); err != nil {
 		t.Fatal(err)
 	}
@@ -320,11 +320,11 @@ func TestHandler_idempotentRedelivery(t *testing.T) {
 // events for the second and later violating reports.
 func TestHandler_emitsViolationEventForEachViolatingReport(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(400, 0))
-	session := &relayv1alpha1.AgentSession{
+	session := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "sess-v", Namespace: "ns1"},
-		Status: relayv1alpha1.AgentSessionStatus{
-			EffectivePolicy: &relayv1alpha1.EffectivePolicyStatus{
-				Mode: relayv1alpha1.PolicyModeEnforced,
+		Status: scrutineerv1alpha1.AgentSessionStatus{
+			EffectivePolicy: &scrutineerv1alpha1.EffectivePolicyStatus{
+				Mode: scrutineerv1alpha1.PolicyModeEnforced,
 			},
 		},
 	}
@@ -342,11 +342,11 @@ func TestHandler_emitsViolationEventForEachViolatingReport(t *testing.T) {
 		return ReportRequest{
 			Session: SessionRef{Namespace: "ns1", Name: "sess-v"},
 			Backend: "egress-proxy",
-			Decisions: []relayv1alpha1.PolicyDecision{{
+			Decisions: []scrutineerv1alpha1.PolicyDecision{{
 				Time:    ts,
-				Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+				Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 				Type:    "network",
-				Action:  relayv1alpha1.PolicyDecisionDeny,
+				Action:  scrutineerv1alpha1.PolicyDecisionDeny,
 				Reason:  "DeniedDomain",
 				Target:  target,
 				Message: "egress blocked: " + target,
@@ -379,11 +379,11 @@ func TestHandler_emitsViolationEventForEachViolatingReport(t *testing.T) {
 // so exactly-once processing means exactly one event.
 func TestHandler_concurrentDuplicateReportIdProcessedOnce(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(500, 0))
-	session := &relayv1alpha1.AgentSession{
+	session := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "sess-c", Namespace: "ns1"},
-		Status: relayv1alpha1.AgentSessionStatus{
-			EffectivePolicy: &relayv1alpha1.EffectivePolicyStatus{
-				Mode: relayv1alpha1.PolicyModeEnforced,
+		Status: scrutineerv1alpha1.AgentSessionStatus{
+			EffectivePolicy: &scrutineerv1alpha1.EffectivePolicyStatus{
+				Mode: scrutineerv1alpha1.PolicyModeEnforced,
 			},
 		},
 	}
@@ -401,11 +401,11 @@ func TestHandler_concurrentDuplicateReportIdProcessedOnce(t *testing.T) {
 		Session:  SessionRef{Namespace: "ns1", Name: "sess-c"},
 		Backend:  "egress-proxy",
 		ReportID: "dup-1",
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:    ts,
-			Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:    "network",
-			Action:  relayv1alpha1.PolicyDecisionDeny,
+			Action:  scrutineerv1alpha1.PolicyDecisionDeny,
 			Reason:  "DeniedDomain",
 			Target:  "evil.example.com",
 			Message: "egress blocked",
@@ -451,12 +451,12 @@ func drainEvents(ch <-chan string) []string {
 }
 
 func TestValidateAndNormalizeReport_rejectsTooManyDecisions(t *testing.T) {
-	decisions := make([]relayv1alpha1.PolicyDecision, MaxDecisionsPerReport+1)
+	decisions := make([]scrutineerv1alpha1.PolicyDecision, MaxDecisionsPerReport+1)
 	for i := range decisions {
-		decisions[i] = relayv1alpha1.PolicyDecision{
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+		decisions[i] = scrutineerv1alpha1.PolicyDecision{
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "network",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Reason: "DeniedDomain",
 		}
 	}
@@ -464,7 +464,7 @@ func TestValidateAndNormalizeReport_rejectsTooManyDecisions(t *testing.T) {
 		Session:   SessionRef{Namespace: "ns", Name: "s"},
 		Backend:   "egress-proxy",
 		Decisions: decisions,
-	}, time.Now(), relayv1alpha1.PolicyModeEnforced)
+	}, time.Now(), scrutineerv1alpha1.PolicyModeEnforced)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -487,8 +487,8 @@ func postReport(t *testing.T, h *Handler, body ReportRequest, auth string) *http
 func newFakeClient(objs ...client.Object) client.Client {
 	s := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(s)
-	_ = relayv1alpha1.AddToScheme(s)
-	builder := fake.NewClientBuilder().WithScheme(s).WithStatusSubresource(&relayv1alpha1.AgentSession{}, &relayv1alpha1.ApprovalRequest{})
+	_ = scrutineerv1alpha1.AddToScheme(s)
+	builder := fake.NewClientBuilder().WithScheme(s).WithStatusSubresource(&scrutineerv1alpha1.AgentSession{}, &scrutineerv1alpha1.ApprovalRequest{})
 	for _, obj := range objs {
 		builder = builder.WithObjects(obj)
 	}

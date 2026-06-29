@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,17 +16,17 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestApplyStatus_writesEffectivePolicy(t *testing.T) {
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	resolved := Resolved{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{
 			DeniedDomains: []string{"evil.example"},
 		},
-		Matched: []relayv1alpha1.MatchedPolicyRef{{
+		Matched: []scrutineerv1alpha1.MatchedPolicyRef{{
 			Kind: "AgentPolicy",
 			Name: "baseline",
 		}},
@@ -37,7 +37,7 @@ func TestApplyStatus_writesEffectivePolicy(t *testing.T) {
 	if len(session.Status.MatchedPolicies) != 1 || session.Status.MatchedPolicies[0].Name != "baseline" {
 		t.Fatalf("matched = %+v", session.Status.MatchedPolicies)
 	}
-	if session.Status.EffectivePolicy == nil || session.Status.EffectivePolicy.Mode != relayv1alpha1.PolicyModeEnforced {
+	if session.Status.EffectivePolicy == nil || session.Status.EffectivePolicy.Mode != scrutineerv1alpha1.PolicyModeEnforced {
 		t.Fatalf("effective = %+v", session.Status.EffectivePolicy)
 	}
 	if len(session.Status.PolicyDecisions) == 0 {
@@ -48,7 +48,7 @@ func TestApplyStatus_writesEffectivePolicy(t *testing.T) {
 	}
 
 	ApplyStatus(session, resolved)
-	if session.Status.EffectivePolicy.Mode != relayv1alpha1.PolicyModeEnforced {
+	if session.Status.EffectivePolicy.Mode != scrutineerv1alpha1.PolicyModeEnforced {
 		t.Fatal("ApplyStatus should delegate to ApplyStatusAt")
 	}
 }

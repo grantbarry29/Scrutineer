@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -10,7 +10,7 @@ You may obtain a copy of the License at
 
 package toolgateway
 
-import "github.com/secureai/relay/internal/enforcement"
+import "github.com/grantbarry29/scrutineer/internal/enforcement"
 
 // Backend describes tool gateway desired configuration for AgentSession runtimes.
 type Backend struct{}

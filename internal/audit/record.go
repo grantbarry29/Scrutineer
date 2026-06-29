@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ const (
 	EventApprovalDenied     EventType = "approval.denied"
 )
 
-// Record is a structured audit entry emitted by the Relay control plane.
+// Record is a structured audit entry emitted by the Scrutineer control plane.
 type Record struct {
 	Time      time.Time
 	EventType EventType
@@ -57,7 +57,7 @@ func PolicyViolation(namespace, session, violationType, target, message, assuran
 		EventType: EventPolicyViolation,
 		Namespace: namespace,
 		Session:   session,
-		Actor:     "relay-controller",
+		Actor:     "scrutineer-controller",
 		Action:    "violation",
 		Type:      violationType,
 		Target:    target,
@@ -76,7 +76,7 @@ func SessionPhaseChange(namespace, session, fromPhase, toPhase string, at time.T
 		EventType: EventSessionPhaseChange,
 		Namespace: namespace,
 		Session:   session,
-		Actor:     "relay-controller",
+		Actor:     "scrutineer-controller",
 		FromPhase: fromPhase,
 		Phase:     toPhase,
 		Message:   "session phase changed",
@@ -86,7 +86,7 @@ func SessionPhaseChange(namespace, session, fromPhase, toPhase string, at time.T
 // ApprovalDecision builds a record when a human-approval gate is resolved. granted
 // selects the event type (approval.granted vs approval.denied); gatedAction is the
 // approved action type (e.g. "deploy"); actor is the approver identity (best-effort
-// self-declared, or the joined set for allOf), defaulting to relay-controller.
+// self-declared, or the joined set for allOf), defaulting to scrutineer-controller.
 func ApprovalDecision(namespace, session, gatedAction, actor, reason string, granted bool, at time.Time) Record {
 	if at.IsZero() {
 		at = time.Now()
@@ -98,7 +98,7 @@ func ApprovalDecision(namespace, session, gatedAction, actor, reason string, gra
 		verb = "granted"
 	}
 	if actor == "" {
-		actor = "relay-controller"
+		actor = "scrutineer-controller"
 	}
 	return Record{
 		Time:      at,

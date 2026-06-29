@@ -6,7 +6,7 @@
 
 ## Purpose
 
-The product vision is explicit: *"Keep Relay orchestrator-agnostic. Avoid coupling APIs or controllers permanently to Kubernetes Jobs"* and *"Treat Kubernetes Jobs, Tekton, Argo Workflows, Temporal … as execution backends Relay can govern, not systems Relay should replace."* Today the reconciler calls `batchv1.Job` directly in several places. This doc catalogs that coupling and proposes a narrow interface so the **governance logic** (validation, policy resolution, approval gate, evidence loop, status/conditions, audit) stays backend-independent while **runtime mechanics** (create/observe/stop) move behind a pluggable backend.
+The product vision is explicit: *"Keep Scrutineer orchestrator-agnostic. Avoid coupling APIs or controllers permanently to Kubernetes Jobs"* and *"Treat Kubernetes Jobs, Tekton, Argo Workflows, Temporal … as execution backends Scrutineer can govern, not systems Scrutineer should replace."* Today the reconciler calls `batchv1.Job` directly in several places. This doc catalogs that coupling and proposes a narrow interface so the **governance logic** (validation, policy resolution, approval gate, evidence loop, status/conditions, audit) stays backend-independent while **runtime mechanics** (create/observe/stop) move behind a pluggable backend.
 
 This is a **design-only** slice. Implementation (extracting the interface, making Jobs the first backend) is slice 2; concrete adapters are later slices.
 
@@ -68,10 +68,10 @@ type Backend interface {
 
 // EnsureInput is the resolved, approved session plus its effective policy/profile.
 type EnsureInput struct {
-    Session *relayv1alpha1.AgentSession
+    Session *scrutineerv1alpha1.AgentSession
     Task    *ResolvedTask
     Policy  *policy.Resolved
-    Profile *relayv1alpha1.RuntimeProfile
+    Profile *scrutineerv1alpha1.RuntimeProfile
 }
 
 // RuntimeRef identifies a session's runtime without leaking backend types.

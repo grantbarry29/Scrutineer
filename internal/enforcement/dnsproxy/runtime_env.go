@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,20 +15,20 @@ import (
 	"os"
 	"strings"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 // Sidecar env keys for the dns-proxy runtime binary (mirrors job builder propagation).
 const (
-	EnvSessionName      = "RELAY_SESSION_NAME"
-	EnvSessionNamespace = "RELAY_SESSION_NAMESPACE"
-	EnvReporterURL      = "RELAY_REPORTER_URL"
-	EnvReporterToken    = "RELAY_REPORTER_TOKEN_PATH"
+	EnvSessionName      = "SCRUTINEER_SESSION_NAME"
+	EnvSessionNamespace = "SCRUTINEER_SESSION_NAMESPACE"
+	EnvReporterURL      = "SCRUTINEER_REPORTER_URL"
+	EnvReporterToken    = "SCRUTINEER_REPORTER_TOKEN_PATH"
 )
 
 // DefaultDNSProxyImage is the first-party dns-proxy container image reference.
-const DefaultDNSProxyImage = "ghcr.io/secureai/relay-dns-proxy:latest"
+const DefaultDNSProxyImage = "ghcr.io/grantbarry29/scrutineer-dns-proxy:latest"
 
 // RuntimeEnv is configuration loaded from the sidecar container environment.
 type RuntimeEnv struct {
@@ -37,8 +37,8 @@ type RuntimeEnv struct {
 	ListenAddr       string
 	ReporterURL      string
 	ReporterToken    string
-	Mode             relayv1alpha1.PolicyMode
-	Policy           relayv1alpha1.PolicyRules
+	Mode             scrutineerv1alpha1.PolicyMode
+	Policy           scrutineerv1alpha1.PolicyRules
 }
 
 // LoadRuntimeEnv reads dns-proxy configuration from the process environment.
@@ -49,8 +49,8 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 		ListenAddr:       strings.TrimSpace(os.Getenv(EnvListenAddr)),
 		ReporterURL:      strings.TrimSpace(os.Getenv(EnvReporterURL)),
 		ReporterToken:    strings.TrimSpace(os.Getenv(EnvReporterToken)),
-		Mode:             relayv1alpha1.PolicyMode(strings.TrimSpace(os.Getenv(EnvPolicyMode))),
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyMode(strings.TrimSpace(os.Getenv(EnvPolicyMode))),
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedDomains: splitCSV(os.Getenv(EnvPolicyAllowedDomains)),
 			DeniedDomains:  splitCSV(os.Getenv(EnvPolicyDeniedDomains)),
 			AllowedCIDRs:   splitCSV(os.Getenv(EnvPolicyAllowedCIDRs)),
@@ -61,13 +61,13 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 		env.ListenAddr = DefaultListenAddr
 	}
 	if env.SessionNamespace == "" || env.SessionName == "" {
-		return RuntimeEnv{}, fmt.Errorf("RELAY_SESSION_NAMESPACE and RELAY_SESSION_NAME are required")
+		return RuntimeEnv{}, fmt.Errorf("SCRUTINEER_SESSION_NAMESPACE and SCRUTINEER_SESSION_NAME are required")
 	}
 	if env.ReporterURL == "" || env.ReporterToken == "" {
-		return RuntimeEnv{}, fmt.Errorf("RELAY_REPORTER_URL and RELAY_REPORTER_TOKEN_PATH are required")
+		return RuntimeEnv{}, fmt.Errorf("SCRUTINEER_REPORTER_URL and SCRUTINEER_REPORTER_TOKEN_PATH are required")
 	}
 	if env.Mode == "" {
-		env.Mode = relayv1alpha1.PolicyModeAuditOnly
+		env.Mode = scrutineerv1alpha1.PolicyModeAuditOnly
 	}
 	return env, nil
 }

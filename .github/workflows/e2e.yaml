@@ -27,8 +27,8 @@ jobs:
 
       - name: Create kind cluster
         run: |
-          kind create cluster --name relay-dev --config .devcontainer/kind-config.yaml --wait 90s
-          kubectl config use-context kind-relay-dev
+          kind create cluster --name scrutineer-dev --config .devcontainer/kind-config.yaml --wait 90s
+          kubectl config use-context kind-scrutineer-dev
 
       - name: Install CRDs
         run: make install

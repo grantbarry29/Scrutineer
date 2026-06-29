@@ -9,7 +9,7 @@ data:
     Clone the repository, inspect the README, and propose an updated version
     with clear installation instructions.
 ---
-apiVersion: relay.secureai.dev/v1alpha1
+apiVersion: scrutineer.sh/v1alpha1
 kind: AgentSession
 metadata:
   name: github-readme-from-cm

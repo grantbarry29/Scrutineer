@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,16 +24,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/enforcement/networkpolicy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/networkpolicy"
 )
 
-func jobNameFor(session *relayv1alpha1.AgentSession) string {
-	return relayjob.NameFor(session)
+func jobNameFor(session *scrutineerv1alpha1.AgentSession) string {
+	return scrutineerjob.NameFor(session)
 }
 
-func netpolNameFor(session *relayv1alpha1.AgentSession) string {
+func netpolNameFor(session *scrutineerv1alpha1.AgentSession) string {
 	return networkpolicy.NameFor(session.Namespace, session.Name)
 }
 
@@ -43,7 +43,7 @@ const (
 )
 
 func newTestNamespace() string {
-	name := "relay-ctrl-" + rand.String(5)
+	name := "scrutineer-ctrl-" + rand.String(5)
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
 	Expect(k8sClient.Create(testCtx, ns)).To(Succeed())
 	DeferCleanup(func() {
@@ -52,19 +52,19 @@ func newTestNamespace() string {
 	return name
 }
 
-func minimalAgentSession(namespace, name string) *relayv1alpha1.AgentSession {
-	return &relayv1alpha1.AgentSession{
+func minimalAgentSession(namespace, name string) *scrutineerv1alpha1.AgentSession {
+	return &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.AgentSessionSpec{
-			Task: relayv1alpha1.SessionTaskSpec{
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			Task: scrutineerv1alpha1.SessionTaskSpec{
 				Description: "envtest session",
 				Prompt:      "run the task",
 			},
-			Model: relayv1alpha1.ModelSpec{
+			Model: scrutineerv1alpha1.ModelSpec{
 				Provider: "openai",
 				Name:     "gpt-4",
 			},
-			Runtime: relayv1alpha1.RuntimeSpec{
+			Runtime: scrutineerv1alpha1.RuntimeSpec{
 				Orchestrator: OrchestratorKubernetesJob,
 				Image:        "busybox:latest",
 				Command:      []string{"true"},
@@ -73,10 +73,10 @@ func minimalAgentSession(namespace, name string) *relayv1alpha1.AgentSession {
 	}
 }
 
-func waitForPhase(key types.NamespacedName, want relayv1alpha1.AgentSessionPhase) {
+func waitForPhase(key types.NamespacedName, want scrutineerv1alpha1.AgentSessionPhase) {
 	GinkgoHelper()
 	Eventually(func(g Gomega) {
-		var session relayv1alpha1.AgentSession
+		var session scrutineerv1alpha1.AgentSession
 		g.Expect(k8sClient.Get(testCtx, key, &session)).To(Succeed())
 		g.Expect(session.Status.Phase).To(Equal(want))
 	}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
@@ -85,7 +85,7 @@ func waitForPhase(key types.NamespacedName, want relayv1alpha1.AgentSessionPhase
 func waitForFinalizer(key types.NamespacedName) {
 	GinkgoHelper()
 	Eventually(func(g Gomega) {
-		var session relayv1alpha1.AgentSession
+		var session scrutineerv1alpha1.AgentSession
 		g.Expect(k8sClient.Get(testCtx, key, &session)).To(Succeed())
 		g.Expect(controllerutil.ContainsFinalizer(&session, AgentSessionFinalizer)).To(BeTrue())
 	}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
@@ -94,13 +94,13 @@ func waitForFinalizer(key types.NamespacedName) {
 func waitForAgentSessionDeleted(key types.NamespacedName) {
 	GinkgoHelper()
 	Eventually(func() bool {
-		var session relayv1alpha1.AgentSession
+		var session scrutineerv1alpha1.AgentSession
 		err := k8sClient.Get(testCtx, key, &session)
 		return apierrors.IsNotFound(err)
 	}, controllerWaitTimeout, controllerPollInterval).Should(BeTrue())
 }
 
-func waitForJob(ns string, session *relayv1alpha1.AgentSession) {
+func waitForJob(ns string, session *scrutineerv1alpha1.AgentSession) {
 	GinkgoHelper()
 	jobKey := types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}
 	Eventually(func(g Gomega) {
@@ -109,7 +109,7 @@ func waitForJob(ns string, session *relayv1alpha1.AgentSession) {
 	}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 }
 
-func jobAbsent(ns string, session *relayv1alpha1.AgentSession) bool {
+func jobAbsent(ns string, session *scrutineerv1alpha1.AgentSession) bool {
 	var job batchv1.Job
 	err := k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)
 	if apierrors.IsNotFound(err) {
@@ -118,12 +118,12 @@ func jobAbsent(ns string, session *relayv1alpha1.AgentSession) bool {
 	return err == nil && !job.DeletionTimestamp.IsZero()
 }
 
-func expectJobAbsent(ns string, session *relayv1alpha1.AgentSession) {
+func expectJobAbsent(ns string, session *scrutineerv1alpha1.AgentSession) {
 	GinkgoHelper()
 	Expect(jobAbsent(ns, session)).To(BeTrue())
 }
 
-func getCondition(session *relayv1alpha1.AgentSession, condType string) *metav1.Condition {
+func getCondition(session *scrutineerv1alpha1.AgentSession, condType string) *metav1.Condition {
 	for i := range session.Status.Conditions {
 		if session.Status.Conditions[i].Type == condType {
 			return &session.Status.Conditions[i]
@@ -132,16 +132,16 @@ func getCondition(session *relayv1alpha1.AgentSession, condType string) *metav1.
 	return nil
 }
 
-func expectCancelled(session *relayv1alpha1.AgentSession) {
+func expectCancelled(session *scrutineerv1alpha1.AgentSession) {
 	GinkgoHelper()
-	Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseCancelled))
+	Expect(session.Status.Phase).To(Equal(scrutineerv1alpha1.PhaseCancelled))
 	completed := getCondition(session, ConditionCompleted)
 	Expect(completed).NotTo(BeNil())
 	Expect(completed.Reason).To(Equal("SessionCancelled"))
 }
 
-func expectCancelledG(g Gomega, session *relayv1alpha1.AgentSession) {
-	g.Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseCancelled))
+func expectCancelledG(g Gomega, session *scrutineerv1alpha1.AgentSession) {
+	g.Expect(session.Status.Phase).To(Equal(scrutineerv1alpha1.PhaseCancelled))
 	completed := getCondition(session, ConditionCompleted)
 	g.Expect(completed).NotTo(BeNil())
 	g.Expect(completed.Reason).To(Equal("SessionCancelled"))

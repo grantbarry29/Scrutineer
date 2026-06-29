@@ -1,6 +1,6 @@
 # reporter
 
-Relay's runtime-evidence and approval HTTP service. Ingests self-reported evidence from
+Scrutineer's runtime-evidence and approval HTTP service. Ingests self-reported evidence from
 cooperative data-plane sidecars and serves the per-tool approval channel, turning
 *propagated* governance into *observed* governance by writing `AgentSession.status`.
 Compiled into the manager binary ([`cmd/main.go`](../../cmd/main.go)); can run standalone
@@ -64,7 +64,7 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
 - **Endpoints:** `POST /v1/report`; `POST /v1/approvals` (register/lookup);
   `GET /v1/approvals/{id}` (poll).
 - **Auth:** `Authorization: Bearer <projected SA token>` with audience `TokenAudience`;
-  pod identity from the token's `pod-name` extra or the `X-Relay-Pod` header; the pod's
+  pod identity from the token's `pod-name` extra or the `X-Scrutineer-Pod` header; the pod's
   ServiceAccount must match the token and the pod must be owned by the session's Job
   (label `LabelSessionRef`).
 - **Limits:** `MaxReportBytes` / `MaxApprovalBodyBytes`; per-session rate limiting;
@@ -77,11 +77,11 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   permissions are *not* aggregated into the broad `manager-role`. The role is bound by
   `config/rbac/reporter_role_binding.yaml`.
   > **Deployment modes:** by default the reporter runs **in-process** in the manager
-  > (`--enable-reporter=true`), under the `relay-controller-manager` ServiceAccount — so
+  > (`--enable-reporter=true`), under the `scrutineer-controller-manager` ServiceAccount — so
   > that SA holds both roles and the split is RBAC hygiene only. The opt-in
   > [`config/reporter-standalone`](../../config/reporter-standalone) overlay runs the
   > reporter as its **own Deployment** (`--reporter-only`) under a dedicated
-  > `relay-reporter` ServiceAccount and sets `--enable-reporter=false` on the manager, so
+  > `scrutineer-reporter` ServiceAccount and sets `--enable-reporter=false` on the manager, so
   > the manager SA keeps only `manager-role` and the reporter's RBAC lives solely with the
   > reporter identity. That overlay is what actually reduces the manager SA's runtime
   > privilege (issue #34).

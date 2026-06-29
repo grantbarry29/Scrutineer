@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestRuntimeReport_enforcedDenyIncludesViolation(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		DeniedTools: []string{"kubectl"},
 	})
 	auth := EvaluateTool(ctx, ToolRequest{Tool: "kubectl", RequestID: "req-1"})
@@ -27,7 +27,7 @@ func TestRuntimeReport_enforcedDenyIncludesViolation(t *testing.T) {
 	if len(report.Decisions) != 1 {
 		t.Fatalf("decisions=%d", len(report.Decisions))
 	}
-	if report.Decisions[0].Phase != relayv1alpha1.PolicyDecisionPhaseRuntime {
+	if report.Decisions[0].Phase != scrutineerv1alpha1.PolicyDecisionPhaseRuntime {
 		t.Fatalf("phase=%q", report.Decisions[0].Phase)
 	}
 	if len(report.Violations) != 1 {
@@ -36,7 +36,7 @@ func TestRuntimeReport_enforcedDenyIncludesViolation(t *testing.T) {
 }
 
 func TestRuntimeReport_dryRunIncludesViolation(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeDryRun, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeDryRun, scrutineerv1alpha1.PolicyRules{
 		DeniedTools: []string{"kubectl"},
 	})
 	auth := EvaluateTool(ctx, ToolRequest{Tool: "kubectl"})
@@ -47,7 +47,7 @@ func TestRuntimeReport_dryRunIncludesViolation(t *testing.T) {
 }
 
 func TestRuntimeReport_allowedAndApprovalMessages(t *testing.T) {
-	allowedCtx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	allowedCtx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		AllowedTools: []string{"shell"},
 	})
 	allowed := EvaluateTool(allowedCtx, ToolRequest{Tool: "shell"})
@@ -56,7 +56,7 @@ func TestRuntimeReport_allowedAndApprovalMessages(t *testing.T) {
 		t.Fatalf("allowed decision = %+v", report.Decisions[0])
 	}
 
-	approvalCtx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	approvalCtx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		RequireHumanApproval: []string{"deploy"},
 	})
 	auth := EvaluateTool(approvalCtx, ToolRequest{Tool: "deploy"})
@@ -65,7 +65,7 @@ func TestRuntimeReport_allowedAndApprovalMessages(t *testing.T) {
 		t.Fatalf("rule=%q", report.Decisions[0].Rule)
 	}
 
-	denyListCtx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	denyListCtx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		AllowedTools: []string{"shell"},
 	})
 	auth = EvaluateTool(denyListCtx, ToolRequest{Tool: "deploy"})
@@ -76,7 +76,7 @@ func TestRuntimeReport_allowedAndApprovalMessages(t *testing.T) {
 }
 
 func TestRuntimeReport_auditNoViolation(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeAuditOnly, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeAuditOnly, scrutineerv1alpha1.PolicyRules{
 		DeniedTools: []string{"kubectl"},
 	})
 	auth := EvaluateTool(ctx, ToolRequest{Tool: "kubectl"})

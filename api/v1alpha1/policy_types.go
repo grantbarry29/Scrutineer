@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -74,7 +74,7 @@ type PolicyDecision struct {
 	// Action is allow, deny, audit, or dry-run (would-deny under dry-run mode).
 	Action PolicyDecisionAction `json:"action"`
 
-	// Actor is who or what produced the decision. Merge-time uses "relay-controller".
+	// Actor is who or what produced the decision. Merge-time uses "scrutineer-controller".
 	// +optional
 	Actor string `json:"actor,omitempty"`
 

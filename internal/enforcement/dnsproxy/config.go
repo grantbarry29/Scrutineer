@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/secureai/relay/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 // BuildConfig renders desired proxy configuration for a session, or nil when not applicable.

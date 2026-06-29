@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestRuntimeReportFromEvent_enforcedViolation(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		DeniedDomains: []string{"evil.example"},
 	})
 	report := RuntimeReportFromEvent(ctx, RuntimeEvent{Host: "evil.example"}, time.Unix(0, 0))
@@ -31,7 +31,7 @@ func TestRuntimeReportFromEvent_enforcedViolation(t *testing.T) {
 }
 
 func TestRuntimeReportFromEvent_allowedMessage(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		AllowedDomains: []string{"github.com"},
 	})
 	report := RuntimeReportFromEvent(ctx, RuntimeEvent{Host: "github.com"}, time.Unix(0, 0))
@@ -47,7 +47,7 @@ func TestRuntimeReportFromEvent_allowedMessage(t *testing.T) {
 }
 
 func TestRuntimeReportFromEvent_cidrReasons(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		DeniedCIDRs: []string{"10.0.0.0/8"},
 	})
 	report := RuntimeReportFromEvent(ctx, RuntimeEvent{Host: "10.1.2.3"}, time.Unix(0, 0))
@@ -57,7 +57,7 @@ func TestRuntimeReportFromEvent_cidrReasons(t *testing.T) {
 }
 
 func TestRuntimeReportFromEvent_auditNoViolation(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeAuditOnly, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeAuditOnly, scrutineerv1alpha1.PolicyRules{
 		DeniedDomains: []string{"evil.example"},
 	})
 	report := RuntimeReportFromEvent(ctx, RuntimeEvent{Host: "evil.example"}, time.Unix(0, 0))

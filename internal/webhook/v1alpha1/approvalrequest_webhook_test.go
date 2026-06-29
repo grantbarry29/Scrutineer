@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,14 +21,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestStampDecidedBy(t *testing.T) {
 	cases := []struct {
 		name        string
-		decision    relayv1alpha1.ApprovalDecision
-		oldDecision relayv1alpha1.ApprovalDecision
+		decision    scrutineerv1alpha1.ApprovalDecision
+		oldDecision scrutineerv1alpha1.ApprovalDecision
 		decidedBy   string
 		username    string
 		wantChanged bool
@@ -36,14 +36,14 @@ func TestStampDecidedBy(t *testing.T) {
 	}{
 		{
 			name:        "pending decision is not stamped (controller create)",
-			decision:    relayv1alpha1.ApprovalDecisionPending,
-			username:    "system:serviceaccount:relay-system:relay-controller",
+			decision:    scrutineerv1alpha1.ApprovalDecisionPending,
+			username:    "system:serviceaccount:scrutineer-system:scrutineer-controller",
 			wantChanged: false,
 			wantBy:      "",
 		},
 		{
 			name:        "fresh grant stamps authenticated user, ignoring client value",
-			decision:    relayv1alpha1.ApprovalDecisionGranted,
+			decision:    scrutineerv1alpha1.ApprovalDecisionGranted,
 			decidedBy:   "mallory",
 			username:    "alice@example.com",
 			wantChanged: true,
@@ -51,16 +51,16 @@ func TestStampDecidedBy(t *testing.T) {
 		},
 		{
 			name:        "deny transition from pending stamps the denier",
-			decision:    relayv1alpha1.ApprovalDecisionDenied,
-			oldDecision: relayv1alpha1.ApprovalDecisionPending,
+			decision:    scrutineerv1alpha1.ApprovalDecisionDenied,
+			oldDecision: scrutineerv1alpha1.ApprovalDecisionPending,
 			username:    "bob",
 			wantChanged: true,
 			wantBy:      "bob",
 		},
 		{
 			name:        "no-op resubmit with matching authenticated decidedBy does not re-stamp",
-			decision:    relayv1alpha1.ApprovalDecisionGranted,
-			oldDecision: relayv1alpha1.ApprovalDecisionGranted,
+			decision:    scrutineerv1alpha1.ApprovalDecisionGranted,
+			oldDecision: scrutineerv1alpha1.ApprovalDecisionGranted,
 			decidedBy:   "alice",
 			username:    "alice",
 			wantChanged: false,
@@ -68,8 +68,8 @@ func TestStampDecidedBy(t *testing.T) {
 		},
 		{
 			name:        "spoofed decidedBy on an unchanged decision is corrected",
-			decision:    relayv1alpha1.ApprovalDecisionGranted,
-			oldDecision: relayv1alpha1.ApprovalDecisionGranted,
+			decision:    scrutineerv1alpha1.ApprovalDecisionGranted,
+			oldDecision: scrutineerv1alpha1.ApprovalDecisionGranted,
 			decidedBy:   "mallory",
 			username:    "alice",
 			wantChanged: true,
@@ -77,7 +77,7 @@ func TestStampDecidedBy(t *testing.T) {
 		},
 		{
 			name:        "empty username (should be unreachable post-authn) leaves object untouched",
-			decision:    relayv1alpha1.ApprovalDecisionGranted,
+			decision:    scrutineerv1alpha1.ApprovalDecisionGranted,
 			decidedBy:   "mallory",
 			username:    "",
 			wantChanged: false,
@@ -87,8 +87,8 @@ func TestStampDecidedBy(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			obj := &relayv1alpha1.ApprovalRequest{
-				Spec: relayv1alpha1.ApprovalRequestSpec{
+			obj := &scrutineerv1alpha1.ApprovalRequest{
+				Spec: scrutineerv1alpha1.ApprovalRequestSpec{
 					Decision:  tc.decision,
 					DecidedBy: tc.decidedBy,
 				},
@@ -107,15 +107,15 @@ func TestStampDecidedBy(t *testing.T) {
 func newStamper(t *testing.T) *ApprovalRequestIdentityStamper {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	if err := relayv1alpha1.AddToScheme(scheme); err != nil {
+	if err := scrutineerv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add scheme: %v", err)
 	}
 	return &ApprovalRequestIdentityStamper{decoder: admission.NewDecoder(scheme)}
 }
 
-func mustRaw(t *testing.T, ar *relayv1alpha1.ApprovalRequest) []byte {
+func mustRaw(t *testing.T, ar *scrutineerv1alpha1.ApprovalRequest) []byte {
 	t.Helper()
-	ar.TypeMeta = metav1.TypeMeta{APIVersion: "relay.secureai.dev/v1alpha1", Kind: "ApprovalRequest"}
+	ar.TypeMeta = metav1.TypeMeta{APIVersion: "scrutineer.sh/v1alpha1", Kind: "ApprovalRequest"}
 	b, err := json.Marshal(ar)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -125,12 +125,12 @@ func mustRaw(t *testing.T, ar *relayv1alpha1.ApprovalRequest) []byte {
 
 func TestHandle_grantStampsAuthenticatedUser(t *testing.T) {
 	s := newStamper(t)
-	incoming := &relayv1alpha1.ApprovalRequest{
+	incoming := &scrutineerv1alpha1.ApprovalRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "sess", Namespace: "team-a"},
-		Spec: relayv1alpha1.ApprovalRequestSpec{
-			SessionRef: relayv1alpha1.ApprovalSessionRef{Name: "sess"},
+		Spec: scrutineerv1alpha1.ApprovalRequestSpec{
+			SessionRef: scrutineerv1alpha1.ApprovalSessionRef{Name: "sess"},
 			Action:     "deploy",
-			Decision:   relayv1alpha1.ApprovalDecisionGranted,
+			Decision:   scrutineerv1alpha1.ApprovalDecisionGranted,
 			DecidedBy:  "mallory", // spoof attempt
 		},
 	}
@@ -164,17 +164,17 @@ func TestHandle_grantStampsAuthenticatedUser(t *testing.T) {
 
 func TestHandle_pendingCreateIsNoOp(t *testing.T) {
 	s := newStamper(t)
-	incoming := &relayv1alpha1.ApprovalRequest{
+	incoming := &scrutineerv1alpha1.ApprovalRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "sess", Namespace: "team-a"},
-		Spec: relayv1alpha1.ApprovalRequestSpec{
-			SessionRef: relayv1alpha1.ApprovalSessionRef{Name: "sess"},
+		Spec: scrutineerv1alpha1.ApprovalRequestSpec{
+			SessionRef: scrutineerv1alpha1.ApprovalSessionRef{Name: "sess"},
 			Action:     "deploy",
-			Decision:   relayv1alpha1.ApprovalDecisionPending,
+			Decision:   scrutineerv1alpha1.ApprovalDecisionPending,
 		},
 	}
 	req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
 		Operation: admissionv1.Create,
-		UserInfo:  authenticationv1.UserInfo{Username: "system:serviceaccount:relay-system:relay-controller"},
+		UserInfo:  authenticationv1.UserInfo{Username: "system:serviceaccount:scrutineer-system:scrutineer-controller"},
 		Object:    runtime.RawExtension{Raw: mustRaw(t, incoming)},
 	}}
 

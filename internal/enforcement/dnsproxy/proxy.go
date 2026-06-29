@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // Proxy is a minimal HTTP(S) egress proxy that evaluates policy and reports evidence.
@@ -77,7 +77,7 @@ func (p *Proxy) dial(network, address string) (net.Conn, error) {
 }
 
 func shouldReport(auth EgressAuthorization) bool {
-	return auth.Reason != ReasonAllowed || auth.Action != relayv1alpha1.PolicyDecisionAllow
+	return auth.Reason != ReasonAllowed || auth.Action != scrutineerv1alpha1.PolicyDecisionAllow
 }
 
 func hostPortFromRequest(r *http.Request) (host string, port int32) {

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
-const loggerName = "relay.audit"
+const loggerName = "scrutineer.audit"
 
 // Config controls OTLP audit log export. An empty Endpoint disables export.
 type Config struct {
@@ -66,7 +66,7 @@ func Setup(ctx context.Context, cfg Config) (func(context.Context) error, error)
 
 		serviceName := cfg.ServiceName
 		if serviceName == "" {
-			serviceName = "relay-controller"
+			serviceName = "scrutineer-controller"
 		}
 
 		opts := []otlploghttp.Option{
@@ -124,40 +124,40 @@ func (s otlpSink) emit(ctx context.Context, rec Record) {
 	}
 
 	attrs := []otellog.KeyValue{
-		otellog.String("relay.audit.event_type", string(rec.EventType)),
+		otellog.String("scrutineer.audit.event_type", string(rec.EventType)),
 	}
 	if rec.Namespace != "" {
-		attrs = append(attrs, otellog.String("relay.session.namespace", rec.Namespace))
+		attrs = append(attrs, otellog.String("scrutineer.session.namespace", rec.Namespace))
 	}
 	if rec.Session != "" {
-		attrs = append(attrs, otellog.String("relay.session.name", rec.Session))
+		attrs = append(attrs, otellog.String("scrutineer.session.name", rec.Session))
 	}
 	if rec.Actor != "" {
-		attrs = append(attrs, otellog.String("relay.audit.actor", rec.Actor))
+		attrs = append(attrs, otellog.String("scrutineer.audit.actor", rec.Actor))
 	}
 	if rec.Phase != "" {
-		attrs = append(attrs, otellog.String("relay.session.phase", rec.Phase))
+		attrs = append(attrs, otellog.String("scrutineer.session.phase", rec.Phase))
 	}
 	if rec.FromPhase != "" {
-		attrs = append(attrs, otellog.String("relay.session.from_phase", rec.FromPhase))
+		attrs = append(attrs, otellog.String("scrutineer.session.from_phase", rec.FromPhase))
 	}
 	if rec.Action != "" {
-		attrs = append(attrs, otellog.String("relay.audit.action", rec.Action))
+		attrs = append(attrs, otellog.String("scrutineer.audit.action", rec.Action))
 	}
 	if rec.Target != "" {
-		attrs = append(attrs, otellog.String("relay.audit.target", rec.Target))
+		attrs = append(attrs, otellog.String("scrutineer.audit.target", rec.Target))
 	}
 	if rec.Type != "" {
-		attrs = append(attrs, otellog.String("relay.audit.type", rec.Type))
+		attrs = append(attrs, otellog.String("scrutineer.audit.type", rec.Type))
 	}
 	if rec.Backend != "" {
-		attrs = append(attrs, otellog.String("relay.report.backend", rec.Backend))
+		attrs = append(attrs, otellog.String("scrutineer.report.backend", rec.Backend))
 	}
 	if rec.Assurance != "" {
-		attrs = append(attrs, otellog.String("relay.audit.assurance", rec.Assurance))
+		attrs = append(attrs, otellog.String("scrutineer.audit.assurance", rec.Assurance))
 	}
 	if rec.Count > 0 {
-		attrs = append(attrs, otellog.Int("relay.audit.count", rec.Count))
+		attrs = append(attrs, otellog.Int("scrutineer.audit.count", rec.Count))
 	}
 	lr.AddAttributes(attrs...)
 	s.logger.Emit(ctx, lr)

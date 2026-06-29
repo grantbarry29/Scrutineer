@@ -1,6 +1,6 @@
 # dns-proxy
 
-Relay's network-egress enforcement sidecar. A minimal HTTP(S) forward proxy that the
+Scrutineer's network-egress enforcement sidecar. A minimal HTTP(S) forward proxy that the
 agent container routes outbound traffic through, so per-session network policy can be
 evaluated and reported at runtime.
 
@@ -31,7 +31,7 @@ reports.
 
 Agent → `HTTP_PROXY`/`HTTPS_PROXY` → this proxy → `EvaluateEgress(host:port)` →
 allowed forwards upstream / denied returns `403`; non-allow outcomes are submitted to
-the reporter (`RELAY_REPORTER_URL`) as self-reported evidence.
+the reporter (`SCRUTINEER_REPORTER_URL`) as self-reported evidence.
 
 ## Major internal packages / directories
 
@@ -49,14 +49,14 @@ env + defaults, `report.go`/`reporter_client.go` evidence).
 
 ## Interfaces & artifacts
 
-- **Listen:** `RELAY_EGRESS_PROXY_LISTEN` (default `127.0.0.1:15053`); proxy URL handed
-  to the agent via `RELAY_EGRESS_PROXY_HTTP` (default `http://127.0.0.1:15053`).
-- **Required env:** `RELAY_SESSION_NAMESPACE`, `RELAY_SESSION_NAME`, `RELAY_REPORTER_URL`,
-  `RELAY_REPORTER_TOKEN_PATH`.
+- **Listen:** `SCRUTINEER_EGRESS_PROXY_LISTEN` (default `127.0.0.1:15053`); proxy URL handed
+  to the agent via `SCRUTINEER_EGRESS_PROXY_HTTP` (default `http://127.0.0.1:15053`).
+- **Required env:** `SCRUTINEER_SESSION_NAMESPACE`, `SCRUTINEER_SESSION_NAME`, `SCRUTINEER_REPORTER_URL`,
+  `SCRUTINEER_REPORTER_TOKEN_PATH`.
 - **Policy env:** `AGENT_POLICY_MODE` (default `audit-only`),
   `AGENT_POLICY_ALLOWED_DOMAINS` / `AGENT_POLICY_DENIED_DOMAINS` /
   `AGENT_POLICY_ALLOWED_CIDRS` / `AGENT_POLICY_DENIED_CIDRS` (CSV).
-- **Image:** `ghcr.io/secureai/relay-dns-proxy` (`dnsproxy.DefaultDNSProxyImage`),
+- **Image:** `ghcr.io/grantbarry29/scrutineer-dns-proxy` (`dnsproxy.DefaultDNSProxyImage`),
   distroless `nonroot` (UID 65532).
 
 ## Invariants & files that must change together

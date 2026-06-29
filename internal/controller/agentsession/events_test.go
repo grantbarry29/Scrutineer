@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,24 +16,24 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 func TestAppendSessionEvents_idempotentByEventID(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(1, 0))
-	session := &relayv1alpha1.AgentSession{}
-	ev := relayv1alpha1.SessionEvent{
+	session := &scrutineerv1alpha1.AgentSession{}
+	ev := scrutineerv1alpha1.SessionEvent{
 		Time:    ts,
-		Type:    relayv1alpha1.SessionEventTypeNetwork,
+		Type:    scrutineerv1alpha1.SessionEventTypeNetwork,
 		Source:  "egress-proxy",
 		Action:  "deny",
 		Target:  "evil.example.com",
 		Message: "blocked",
 		EventID: "evt-1",
 	}
-	AppendSessionEvents(session, []relayv1alpha1.SessionEvent{ev})
-	AppendSessionEvents(session, []relayv1alpha1.SessionEvent{ev})
+	AppendSessionEvents(session, []scrutineerv1alpha1.SessionEvent{ev})
+	AppendSessionEvents(session, []scrutineerv1alpha1.SessionEvent{ev})
 	if len(session.Status.Events) != 1 {
 		t.Fatalf("events = %d, want 1", len(session.Status.Events))
 	}
@@ -41,11 +41,11 @@ func TestAppendSessionEvents_idempotentByEventID(t *testing.T) {
 
 func TestApplyRuntimePolicyReport_appendsEvents(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(2, 0))
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Events: []relayv1alpha1.SessionEvent{{
+		Events: []scrutineerv1alpha1.SessionEvent{{
 			Time:    ts,
-			Type:    relayv1alpha1.SessionEventTypeNetwork,
+			Type:    scrutineerv1alpha1.SessionEventTypeNetwork,
 			Source:  "egress-proxy",
 			Action:  "deny",
 			Target:  "evil.example.com",
@@ -56,18 +56,18 @@ func TestApplyRuntimePolicyReport_appendsEvents(t *testing.T) {
 	if len(session.Status.Events) != 1 {
 		t.Fatalf("events = %d", len(session.Status.Events))
 	}
-	if session.Status.Events[0].Type != relayv1alpha1.SessionEventTypeNetwork {
+	if session.Status.Events[0].Type != scrutineerv1alpha1.SessionEventTypeNetwork {
 		t.Fatalf("type = %s", session.Status.Events[0].Type)
 	}
 }
 
 func TestAppendSessionEvents_truncatesWithSummary(t *testing.T) {
-	session := &relayv1alpha1.AgentSession{}
-	incoming := make([]relayv1alpha1.SessionEvent, MaxSessionEvents+10)
+	session := &scrutineerv1alpha1.AgentSession{}
+	incoming := make([]scrutineerv1alpha1.SessionEvent, MaxSessionEvents+10)
 	for i := range incoming {
-		incoming[i] = relayv1alpha1.SessionEvent{
+		incoming[i] = scrutineerv1alpha1.SessionEvent{
 			Time:    metav1.NewTime(time.Unix(int64(i), 0)),
-			Type:    relayv1alpha1.SessionEventTypeNetwork,
+			Type:    scrutineerv1alpha1.SessionEventTypeNetwork,
 			Source:  "egress-proxy",
 			Action:  "deny",
 			Target:  "host",
@@ -81,16 +81,16 @@ func TestAppendSessionEvents_truncatesWithSummary(t *testing.T) {
 		t.Fatalf("events = %d, want %d", len(session.Status.Events), MaxSessionEvents)
 	}
 	last := session.Status.Events[len(session.Status.Events)-1]
-	if last.Type != relayv1alpha1.SessionEventTypeSystem || last.Action != "truncate" {
+	if last.Type != scrutineerv1alpha1.SessionEventTypeSystem || last.Action != "truncate" {
 		t.Fatalf("expected truncation summary, got %+v", last)
 	}
 }
 
 func TestMergeEventsInPlace_preservesReporterEvents(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(3, 0))
-	dst := []relayv1alpha1.SessionEvent{}
-	preserve := []relayv1alpha1.SessionEvent{{
-		Time: ts, Type: relayv1alpha1.SessionEventTypeTool, Source: "tool-gateway", EventID: "tool-1",
+	dst := []scrutineerv1alpha1.SessionEvent{}
+	preserve := []scrutineerv1alpha1.SessionEvent{{
+		Time: ts, Type: scrutineerv1alpha1.SessionEventTypeTool, Source: "tool-gateway", EventID: "tool-1",
 	}}
 	mergeEventsInPlace(&dst, preserve)
 	if len(dst) != 1 {

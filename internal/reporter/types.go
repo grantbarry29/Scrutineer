@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,14 +13,14 @@ You may obtain a copy of the License at
 package reporter
 
 import (
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 const (
 	// DefaultBindAddress is the HTTP listen address for POST /v1/report.
 	DefaultBindAddress = ":8088"
 	// TokenAudience is the projected service account token audience for sidecar auth.
-	TokenAudience = "relay-reporter"
+	TokenAudience = "scrutineer-reporter"
 	// MaxReportBytes bounds the request body size.
 	MaxReportBytes = 64 * 1024
 	// MaxDecisionsPerReport caps decisions in a single report payload.
@@ -37,13 +37,13 @@ type SessionRef struct {
 
 // ReportRequest is the JSON body for POST /v1/report.
 type ReportRequest struct {
-	Session    SessionRef                      `json:"session"`
-	Backend    string                          `json:"backend"`
-	ReportID   string                          `json:"reportId,omitempty"`
-	Decisions  []relayv1alpha1.PolicyDecision  `json:"decisions"`
-	Violations []relayv1alpha1.PolicyViolation `json:"violations,omitempty"`
-	Events     []relayv1alpha1.SessionEvent    `json:"events,omitempty"`
-	Usage      *relayv1alpha1.SessionUsage     `json:"usage,omitempty"`
+	Session    SessionRef                           `json:"session"`
+	Backend    string                               `json:"backend"`
+	ReportID   string                               `json:"reportId,omitempty"`
+	Decisions  []scrutineerv1alpha1.PolicyDecision  `json:"decisions"`
+	Violations []scrutineerv1alpha1.PolicyViolation `json:"violations,omitempty"`
+	Events     []scrutineerv1alpha1.SessionEvent    `json:"events,omitempty"`
+	Usage      *scrutineerv1alpha1.SessionUsage     `json:"usage,omitempty"`
 }
 
 // CallerIdentity is an authenticated sidecar pod authorized to report evidence.

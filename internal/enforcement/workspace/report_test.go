@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 func TestRuntimeReport_enforcedDeny(t *testing.T) {
 	ctx := enforcement.SessionContext{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedPaths: []string{"/etc/**"},
 		},
 	}
@@ -37,8 +37,8 @@ func TestRuntimeReport_enforcedDeny(t *testing.T) {
 
 func TestRuntimeReport_allowedAndAllowlistMessages(t *testing.T) {
 	ctx := enforcement.SessionContext{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedPaths: []string{"/workspace/**"},
 		},
 	}
@@ -56,7 +56,7 @@ func TestRuntimeReport_allowedAndAllowlistMessages(t *testing.T) {
 }
 
 func TestRuntimeReport_emptyPathTarget(t *testing.T) {
-	ctx := enforcement.SessionContext{Mode: relayv1alpha1.PolicyModeAuditOnly}
+	ctx := enforcement.SessionContext{Mode: scrutineerv1alpha1.PolicyModeAuditOnly}
 	auth := EvaluateFile(ctx, FileRequest{})
 	report := RuntimeReport(ctx, FileRequest{}, auth, time.Unix(0, 0))
 	if report.Decisions[0].Target != "unknown" {

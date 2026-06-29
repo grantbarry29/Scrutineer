@@ -10,12 +10,12 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-relay-secureai-dev-v1alpha1-approvalrequest
+      path: /mutate-scrutineer-sh-v1alpha1-approvalrequest
   failurePolicy: Fail
-  name: mapprovalrequest.relay.secureai.dev
+  name: mapprovalrequest.scrutineer.sh
   rules:
   - apiGroups:
-    - relay.secureai.dev
+    - scrutineer.sh
     apiVersions:
     - v1alpha1
     operations:

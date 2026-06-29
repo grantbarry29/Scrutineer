@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@ import (
 )
 
 var managedEnvKeys = []string{
-	EnvRelaySessionName,
-	EnvRelaySessionNamespace,
+	EnvScrutineerSessionName,
+	EnvScrutineerSessionNamespace,
 	EnvTaskDescription,
 	EnvTaskPrompt,
 	EnvModelProvider,
@@ -39,7 +39,7 @@ var managedEnvKeys = []string{
 	EnvPolicyMode,
 }
 
-// PolicyEnvDrift reports whether Relay-managed env on the Job differs from desired.
+// PolicyEnvDrift reports whether Scrutineer-managed env on the Job differs from desired.
 func PolicyEnvDrift(existing, desired *batchv1.Job) bool {
 	cur := agentContainerEnv(existing)
 	want := agentContainerEnv(desired)

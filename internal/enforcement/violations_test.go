@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,15 +16,15 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestViolationFromDecision_enforcedDeny(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	v, ok := ViolationFromDecision(relayv1alpha1.PolicyDecision{
+	v, ok := ViolationFromDecision(scrutineerv1alpha1.PolicyDecision{
 		Time:   ts,
 		Type:   "network",
-		Action: relayv1alpha1.PolicyDecisionDeny,
+		Action: scrutineerv1alpha1.PolicyDecisionDeny,
 		Target: "10.0.0.1",
 	})
 	if !ok {
@@ -37,10 +37,10 @@ func TestViolationFromDecision_enforcedDeny(t *testing.T) {
 
 func TestViolationFromDecision_dryRun(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	v, ok := ViolationFromDecision(relayv1alpha1.PolicyDecision{
+	v, ok := ViolationFromDecision(scrutineerv1alpha1.PolicyDecision{
 		Time:    ts,
 		Type:    "tool",
-		Action:  relayv1alpha1.PolicyDecisionDryRun,
+		Action:  scrutineerv1alpha1.PolicyDecisionDryRun,
 		Target:  "kubectl",
 		Message: "would deny tool call",
 	})
@@ -50,10 +50,10 @@ func TestViolationFromDecision_dryRun(t *testing.T) {
 }
 
 func TestViolationFromDecision_auditOnlySkipped(t *testing.T) {
-	_, ok := ViolationFromDecision(relayv1alpha1.PolicyDecision{
+	_, ok := ViolationFromDecision(scrutineerv1alpha1.PolicyDecision{
 		Time:   metav1.Now(),
 		Type:   "network",
-		Action: relayv1alpha1.PolicyDecisionAudit,
+		Action: scrutineerv1alpha1.PolicyDecisionAudit,
 	})
 	if ok {
 		t.Fatal("audit action should not produce violation")
@@ -62,10 +62,10 @@ func TestViolationFromDecision_auditOnlySkipped(t *testing.T) {
 
 func TestViolationsFromDecisions_filtersActions(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	got := ViolationsFromDecisions([]relayv1alpha1.PolicyDecision{
-		{Time: ts, Type: "network", Action: relayv1alpha1.PolicyDecisionDeny, Target: "a"},
-		{Time: ts, Type: "network", Action: relayv1alpha1.PolicyDecisionAudit, Target: "b"},
-		{Time: ts, Type: "tool", Action: relayv1alpha1.PolicyDecisionDryRun, Target: "c"},
+	got := ViolationsFromDecisions([]scrutineerv1alpha1.PolicyDecision{
+		{Time: ts, Type: "network", Action: scrutineerv1alpha1.PolicyDecisionDeny, Target: "a"},
+		{Time: ts, Type: "network", Action: scrutineerv1alpha1.PolicyDecisionAudit, Target: "b"},
+		{Time: ts, Type: "tool", Action: scrutineerv1alpha1.PolicyDecisionDryRun, Target: "c"},
 	})
 	if len(got) != 2 {
 		t.Fatalf("len = %d", len(got))
@@ -74,11 +74,11 @@ func TestViolationsFromDecisions_filtersActions(t *testing.T) {
 
 func TestAppendViolations_truncatesWithSummary(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	existing := make([]relayv1alpha1.PolicyViolation, MaxViolations)
+	existing := make([]scrutineerv1alpha1.PolicyViolation, MaxViolations)
 	for i := range existing {
-		existing[i] = relayv1alpha1.PolicyViolation{Time: ts, Type: "network", Message: "blocked"}
+		existing[i] = scrutineerv1alpha1.PolicyViolation{Time: ts, Type: "network", Message: "blocked"}
 	}
-	got := AppendViolations(existing, []relayv1alpha1.PolicyViolation{{
+	got := AppendViolations(existing, []scrutineerv1alpha1.PolicyViolation{{
 		Time: ts, Type: "network", Message: "one more",
 	}}, MaxViolations)
 	if len(got) != MaxViolations {

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 func TestReporterClient_Submit_success(t *testing.T) {
@@ -36,7 +36,7 @@ func TestReporterClient_Submit_success(t *testing.T) {
 	client := NewReporterClient(srv.URL, writeTempToken(t, "test-token"), srv.Client())
 	env := RuntimeEnv{SessionNamespace: "ns", SessionName: "s"}
 	report := enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{Type: "network", Action: relayv1alpha1.PolicyDecisionDeny}},
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{Type: "network", Action: scrutineerv1alpha1.PolicyDecisionDeny}},
 	}
 	if err := client.Submit(context.Background(), env, report); err != nil {
 		t.Fatal(err)

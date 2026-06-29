@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,15 +13,15 @@ package agentsession
 import (
 	"context"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/audit"
-	"github.com/secureai/relay/internal/enforcement"
-	"github.com/secureai/relay/internal/metrics"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/audit"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/metrics"
 )
 
 // AppendRuntimeViolations appends policy violations onto session status without
 // exceeding the shared cap. Duplicate violations (same violationKey) are skipped.
-func AppendRuntimeViolations(session *relayv1alpha1.AgentSession, incoming []relayv1alpha1.PolicyViolation) {
+func AppendRuntimeViolations(session *scrutineerv1alpha1.AgentSession, incoming []scrutineerv1alpha1.PolicyViolation) {
 	if session == nil || len(incoming) == 0 {
 		return
 	}
@@ -29,7 +29,7 @@ func AppendRuntimeViolations(session *relayv1alpha1.AgentSession, incoming []rel
 	for _, v := range session.Status.Violations {
 		keys[violationKey(v)] = struct{}{}
 	}
-	var novel []relayv1alpha1.PolicyViolation
+	var novel []scrutineerv1alpha1.PolicyViolation
 	for _, v := range incoming {
 		if _, ok := keys[violationKey(v)]; ok {
 			continue
@@ -50,7 +50,7 @@ func AppendRuntimeViolations(session *relayv1alpha1.AgentSession, incoming []rel
 		assurance := v.AssuranceLevel
 		if assurance == "" {
 			// Empty is treated as self-reported (see PolicyViolation.AssuranceLevel).
-			assurance = relayv1alpha1.EvidenceSelfReported
+			assurance = scrutineerv1alpha1.EvidenceSelfReported
 		}
 		audit.Emit(context.Background(), audit.PolicyViolation(
 			session.Namespace,
@@ -64,11 +64,11 @@ func AppendRuntimeViolations(session *relayv1alpha1.AgentSession, incoming []rel
 	}
 }
 
-func violationKey(v relayv1alpha1.PolicyViolation) string {
+func violationKey(v scrutineerv1alpha1.PolicyViolation) string {
 	return v.Time.String() + "\x00" + v.Type + "\x00" + v.Target + "\x00" + v.Message
 }
 
-func violationTypes(violations []relayv1alpha1.PolicyViolation) []string {
+func violationTypes(violations []scrutineerv1alpha1.PolicyViolation) []string {
 	out := make([]string, len(violations))
 	for i, v := range violations {
 		out[i] = v.Type
@@ -77,7 +77,7 @@ func violationTypes(violations []relayv1alpha1.PolicyViolation) []string {
 }
 
 // mergeViolationsInPlace appends violations from preserve that are absent from dst.
-func mergeViolationsInPlace(dst *[]relayv1alpha1.PolicyViolation, preserve []relayv1alpha1.PolicyViolation) {
+func mergeViolationsInPlace(dst *[]scrutineerv1alpha1.PolicyViolation, preserve []scrutineerv1alpha1.PolicyViolation) {
 	if dst == nil || len(preserve) == 0 {
 		return
 	}
@@ -85,7 +85,7 @@ func mergeViolationsInPlace(dst *[]relayv1alpha1.PolicyViolation, preserve []rel
 	for _, v := range *dst {
 		keys[violationKey(v)] = struct{}{}
 	}
-	var missing []relayv1alpha1.PolicyViolation
+	var missing []scrutineerv1alpha1.PolicyViolation
 	for _, v := range preserve {
 		if _, ok := keys[violationKey(v)]; !ok {
 			missing = append(missing, v)

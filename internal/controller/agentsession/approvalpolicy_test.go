@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // ApprovalPolicy is declarative-only in this slice: there is no controller gate
@@ -26,30 +26,30 @@ import (
 var _ = Describe("ApprovalPolicy CRD", func() {
 	It("accepts a valid policy and applies schema defaults", func() {
 		ns := newTestNamespace()
-		policy := &relayv1alpha1.ApprovalPolicy{
+		policy := &scrutineerv1alpha1.ApprovalPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "prod-deploys", Namespace: ns},
-			Spec: relayv1alpha1.ApprovalPolicySpec{
+			Spec: scrutineerv1alpha1.ApprovalPolicySpec{
 				Actions: []string{"deploy"},
-				Approvers: []relayv1alpha1.ApprovalSubject{
-					{Kind: relayv1alpha1.ApprovalSubjectGroup, Name: "platform-oncall"},
+				Approvers: []scrutineerv1alpha1.ApprovalSubject{
+					{Kind: scrutineerv1alpha1.ApprovalSubjectGroup, Name: "platform-oncall"},
 				},
 			},
 		}
 		Expect(k8sClient.Create(testCtx, policy)).To(Succeed())
 
-		var got relayv1alpha1.ApprovalPolicy
+		var got scrutineerv1alpha1.ApprovalPolicy
 		Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(policy), &got)).To(Succeed())
-		Expect(got.Spec.Requirement).To(Equal(relayv1alpha1.ApprovalRequirementDefault))
-		Expect(got.Spec.OnTimeout).To(Equal(relayv1alpha1.ApprovalTimeoutDeny))
+		Expect(got.Spec.Requirement).To(Equal(scrutineerv1alpha1.ApprovalRequirementDefault))
+		Expect(got.Spec.OnTimeout).To(Equal(scrutineerv1alpha1.ApprovalTimeoutDeny))
 	})
 
 	It("rejects an unknown onTimeout value", func() {
 		ns := newTestNamespace()
-		policy := &relayv1alpha1.ApprovalPolicy{
+		policy := &scrutineerv1alpha1.ApprovalPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "bad-timeout", Namespace: ns},
-			Spec: relayv1alpha1.ApprovalPolicySpec{
+			Spec: scrutineerv1alpha1.ApprovalPolicySpec{
 				Actions:   []string{"deploy"},
-				OnTimeout: relayv1alpha1.ApprovalTimeoutAction("escalate"),
+				OnTimeout: scrutineerv1alpha1.ApprovalTimeoutAction("escalate"),
 			},
 		}
 		Expect(k8sClient.Create(testCtx, policy)).NotTo(Succeed())
@@ -57,9 +57,9 @@ var _ = Describe("ApprovalPolicy CRD", func() {
 
 	It("rejects a policy with no actions", func() {
 		ns := newTestNamespace()
-		policy := &relayv1alpha1.ApprovalPolicy{
+		policy := &scrutineerv1alpha1.ApprovalPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "no-actions", Namespace: ns},
-			Spec:       relayv1alpha1.ApprovalPolicySpec{Actions: []string{}},
+			Spec:       scrutineerv1alpha1.ApprovalPolicySpec{Actions: []string{}},
 		}
 		Expect(k8sClient.Create(testCtx, policy)).NotTo(Succeed())
 	})

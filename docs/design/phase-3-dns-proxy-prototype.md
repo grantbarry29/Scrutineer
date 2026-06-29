@@ -1,6 +1,6 @@
 # Phase 3 DNS / Egress Proxy Prototype
 
-Relay enforces domain and CIDR egress policy through an in-pod **dns-proxy** sidecar. Phase 3 slice 7 ships the **contract and configuration propagation**; the first-party **`cmd/dns-proxy`** sidecar image performs HTTP(S) egress evaluation and reports to `POST /v1/report`.
+Scrutineer enforces domain and CIDR egress policy through an in-pod **dns-proxy** sidecar. Phase 3 slice 7 ships the **contract and configuration propagation**; the first-party **`cmd/dns-proxy`** sidecar image performs HTTP(S) egress evaluation and reports to `POST /v1/report`.
 
 ## Role
 
@@ -14,8 +14,8 @@ When `RuntimeProfile.spec.sidecars[]` includes an enabled `dns-proxy` entry, the
 
 | Env var | Purpose |
 |---------|---------|
-| `RELAY_EGRESS_PROXY_LISTEN` | Listen address (`127.0.0.1:15053`) |
-| `RELAY_EGRESS_PROXY_HTTP` | HTTP proxy URL for agents |
+| `SCRUTINEER_EGRESS_PROXY_LISTEN` | Listen address (`127.0.0.1:15053`) |
+| `SCRUTINEER_EGRESS_PROXY_HTTP` | HTTP proxy URL for agents |
 | `AGENT_POLICY_*` domain/CIDR lists | Effective policy propagation |
 | `AGENT_POLICY_MODE` | `audit-only` / `dry-run` / `enforced` |
 
@@ -34,7 +34,7 @@ Evaluates `allowedDomains`, `deniedDomains`, `allowedCIDRs`, and `deniedCIDRs` w
 ## Runtime reporting handshake
 
 1. Sidecar observes egress to `host` (domain or IP).
-2. Sidecar evaluates policy locally (`dnsproxy.EvaluateEgress`) and POSTs `RuntimeReport` JSON to `{RELAY_REPORTER_URL}/v1/report` with the projected token (`RELAY_REPORTER_TOKEN_PATH`, audience `relay-reporter`).
+2. Sidecar evaluates policy locally (`dnsproxy.EvaluateEgress`) and POSTs `RuntimeReport` JSON to `{SCRUTINEER_REPORTER_URL}/v1/report` with the projected token (`SCRUTINEER_REPORTER_TOKEN_PATH`, audience `scrutineer-reporter`).
 3. Controller reporter merges via `ApplyRuntimePolicyReport` into `status.policyDecisions` / `status.violations`.
 
 In-process helper (tests / controller integration):
@@ -45,7 +45,7 @@ ApplyEgressProxyRuntimeEvent(session, profile, dnsproxy.RuntimeEvent{Host: "evil
 
 ## Live evidence path (e2e)
 
-With `relay-controller-reporter` reachable from session pods (`make deploy` or e2e in-cluster reporter), enforced denies flow:
+With `scrutineer-controller-reporter` reachable from session pods (`make deploy` or e2e in-cluster reporter), enforced denies flow:
 
 1. Agent egress via `HTTP_PROXY` hits the dns-proxy sidecar.
 2. Sidecar evaluates policy, returns `403`, POSTs to `/v1/report`.

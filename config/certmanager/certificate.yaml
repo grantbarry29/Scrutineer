@@ -7,7 +7,7 @@ apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   name: selfsigned-issuer
-  namespace: relay-system
+  namespace: scrutineer-system
 spec:
   selfSigned: {}
 ---
@@ -15,12 +15,12 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: serving-cert
-  namespace: relay-system
+  namespace: scrutineer-system
 spec:
-  # DNS names match the webhook Service (relay-system/webhook-service).
+  # DNS names match the webhook Service (scrutineer-system/webhook-service).
   dnsNames:
-  - webhook-service.relay-system.svc
-  - webhook-service.relay-system.svc.cluster.local
+  - webhook-service.scrutineer-system.svc
+  - webhook-service.scrutineer-system.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: selfsigned-issuer

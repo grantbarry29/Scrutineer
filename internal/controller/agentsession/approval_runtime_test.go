@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,36 +21,36 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // newRuntimeApprovalRequest builds a mid-execution (trigger=runtime) ApprovalRequest
 // for a session's tool call, scoped to a tool target with a post-grant window.
-func newRuntimeApprovalRequest(ns, name, sessionName, action, target, policyRef string) *relayv1alpha1.ApprovalRequest {
-	return &relayv1alpha1.ApprovalRequest{
+func newRuntimeApprovalRequest(ns, name, sessionName, action, target, policyRef string) *scrutineerv1alpha1.ApprovalRequest {
+	return &scrutineerv1alpha1.ApprovalRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec: relayv1alpha1.ApprovalRequestSpec{
-			SessionRef: relayv1alpha1.ApprovalSessionRef{Name: sessionName},
-			Trigger:    relayv1alpha1.ApprovalTriggerRuntime,
+		Spec: scrutineerv1alpha1.ApprovalRequestSpec{
+			SessionRef: scrutineerv1alpha1.ApprovalSessionRef{Name: sessionName},
+			Trigger:    scrutineerv1alpha1.ApprovalTriggerRuntime,
 			RequestID:  name + "-rid",
 			PolicyRef:  policyRef,
 			Action:     action,
-			Scope: relayv1alpha1.ApprovalScope{
+			Scope: scrutineerv1alpha1.ApprovalScope{
 				Target:    target,
 				ArgDigest: "sha256:deadbeef",
 				Window:    &metav1.Duration{Duration: time.Hour},
 			},
-			Decision: relayv1alpha1.ApprovalDecisionPending,
+			Decision: scrutineerv1alpha1.ApprovalDecisionPending,
 		},
 	}
 }
 
 // patchApprovalDecision sets the human decision on an ApprovalRequest spec, retrying
 // on optimistic-concurrency conflicts with the controller's status writes.
-func patchApprovalDecision(key types.NamespacedName, decision relayv1alpha1.ApprovalDecision, decidedBy string) {
+func patchApprovalDecision(key types.NamespacedName, decision scrutineerv1alpha1.ApprovalDecision, decidedBy string) {
 	GinkgoHelper()
 	Eventually(func(g Gomega) {
-		var req relayv1alpha1.ApprovalRequest
+		var req scrutineerv1alpha1.ApprovalRequest
 		g.Expect(k8sClient.Get(testCtx, key, &req)).To(Succeed())
 		req.Spec.Decision = decision
 		req.Spec.DecidedBy = decidedBy
@@ -58,9 +58,9 @@ func patchApprovalDecision(key types.NamespacedName, decision relayv1alpha1.Appr
 	}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 }
 
-func waitForApprovalState(key types.NamespacedName, want relayv1alpha1.ApprovalState) *relayv1alpha1.ApprovalRequest {
+func waitForApprovalState(key types.NamespacedName, want scrutineerv1alpha1.ApprovalState) *scrutineerv1alpha1.ApprovalRequest {
 	GinkgoHelper()
-	var got relayv1alpha1.ApprovalRequest
+	var got scrutineerv1alpha1.ApprovalRequest
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 		g.Expect(got.Status.State).To(Equal(want))
@@ -82,41 +82,41 @@ var _ = Describe("Runtime per-tool approval", func() {
 		reqKey := types.NamespacedName{Namespace: ns, Name: "rt-grant-deploy"}
 		req := newRuntimeApprovalRequest(ns, reqKey.Name, session.Name, "deploy", "deploy-prod", "")
 		Expect(k8sClient.Create(testCtx, req)).To(Succeed())
-		waitForApprovalState(reqKey, relayv1alpha1.ApprovalStatePending)
+		waitForApprovalState(reqKey, scrutineerv1alpha1.ApprovalStatePending)
 
 		// While the hold is undecided the session surfaces it (redaction-safe) so
 		// UI/operators can see what needs approval — argDigest only, no raw args.
 		Eventually(func(g Gomega) {
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
 			g.Expect(got.Status.PendingApprovals).To(HaveLen(1))
 			p := got.Status.PendingApprovals[0]
 			g.Expect(p.Name).To(Equal(reqKey.Name))
 			g.Expect(p.Target).To(Equal("deploy-prod"))
 			g.Expect(p.ArgDigest).To(Equal("sha256:deadbeef"))
-			g.Expect(p.State).To(Equal(relayv1alpha1.ApprovalStatePending))
+			g.Expect(p.State).To(Equal(scrutineerv1alpha1.ApprovalStatePending))
 		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
-		patchApprovalDecision(reqKey, relayv1alpha1.ApprovalDecisionGranted, "alice")
+		patchApprovalDecision(reqKey, scrutineerv1alpha1.ApprovalDecisionGranted, "alice")
 
-		granted := waitForApprovalState(reqKey, relayv1alpha1.ApprovalStateGranted)
+		granted := waitForApprovalState(reqKey, scrutineerv1alpha1.ApprovalStateGranted)
 		Expect(granted.Status.DecidedBy).To(Equal("alice"))
 		Expect(granted.Status.DecidedAt).NotTo(BeNil())
 		Expect(granted.Status.ExpiresAt).NotTo(BeNil(), "scope.window should yield a post-grant expiry")
 
 		// Once decided, the hold drops off the pending surface.
 		Eventually(func(g Gomega) {
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
 			g.Expect(got.Status.PendingApprovals).To(BeEmpty())
 		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
 		// The session itself must never enter the human-approval gate or be denied
 		// because of a runtime tool approval.
-		var got relayv1alpha1.AgentSession
+		var got scrutineerv1alpha1.AgentSession
 		Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
-		Expect(got.Status.Phase).NotTo(Equal(relayv1alpha1.PhaseAwaitingApproval))
-		Expect(got.Status.Phase).NotTo(Equal(relayv1alpha1.PhaseDenied))
+		Expect(got.Status.Phase).NotTo(Equal(scrutineerv1alpha1.PhaseAwaitingApproval))
+		Expect(got.Status.Phase).NotTo(Equal(scrutineerv1alpha1.PhaseDenied))
 	})
 
 	It("denies a held tool call without failing the session", func() {
@@ -128,14 +128,14 @@ var _ = Describe("Runtime per-tool approval", func() {
 		reqKey := types.NamespacedName{Namespace: ns, Name: "rt-deny-deploy"}
 		req := newRuntimeApprovalRequest(ns, reqKey.Name, session.Name, "deploy", "deploy-prod", "")
 		Expect(k8sClient.Create(testCtx, req)).To(Succeed())
-		waitForApprovalState(reqKey, relayv1alpha1.ApprovalStatePending)
+		waitForApprovalState(reqKey, scrutineerv1alpha1.ApprovalStatePending)
 
-		patchApprovalDecision(reqKey, relayv1alpha1.ApprovalDecisionDenied, "alice")
-		waitForApprovalState(reqKey, relayv1alpha1.ApprovalStateDenied)
+		patchApprovalDecision(reqKey, scrutineerv1alpha1.ApprovalDecisionDenied, "alice")
+		waitForApprovalState(reqKey, scrutineerv1alpha1.ApprovalStateDenied)
 
-		var got relayv1alpha1.AgentSession
+		var got scrutineerv1alpha1.AgentSession
 		Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
-		Expect(got.Status.Phase).NotTo(Equal(relayv1alpha1.PhaseDenied))
+		Expect(got.Status.Phase).NotTo(Equal(scrutineerv1alpha1.PhaseDenied))
 	})
 
 	It("does not honor a grant from an unlisted approver when a policy scopes it", func() {
@@ -144,12 +144,12 @@ var _ = Describe("Runtime per-tool approval", func() {
 		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 		waitForJob(ns, session)
 
-		policy := &relayv1alpha1.ApprovalPolicy{
+		policy := &scrutineerv1alpha1.ApprovalPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "deploy-approvers", Namespace: ns},
-			Spec: relayv1alpha1.ApprovalPolicySpec{
+			Spec: scrutineerv1alpha1.ApprovalPolicySpec{
 				Actions: []string{"deploy"},
-				Approvers: []relayv1alpha1.ApprovalSubject{
-					{Kind: relayv1alpha1.ApprovalSubjectUser, Name: "alice"},
+				Approvers: []scrutineerv1alpha1.ApprovalSubject{
+					{Kind: scrutineerv1alpha1.ApprovalSubjectUser, Name: "alice"},
 				},
 			},
 		}
@@ -158,44 +158,44 @@ var _ = Describe("Runtime per-tool approval", func() {
 		reqKey := types.NamespacedName{Namespace: ns, Name: "rt-approver-deploy"}
 		req := newRuntimeApprovalRequest(ns, reqKey.Name, session.Name, "deploy", "deploy-prod", policy.Name)
 		Expect(k8sClient.Create(testCtx, req)).To(Succeed())
-		waitForApprovalState(reqKey, relayv1alpha1.ApprovalStatePending)
+		waitForApprovalState(reqKey, scrutineerv1alpha1.ApprovalStatePending)
 
 		// An unlisted approver's grant is rejected: the request stays Pending.
-		patchApprovalDecision(reqKey, relayv1alpha1.ApprovalDecisionGranted, "mallory")
+		patchApprovalDecision(reqKey, scrutineerv1alpha1.ApprovalDecisionGranted, "mallory")
 		Consistently(func(g Gomega) {
-			var got relayv1alpha1.ApprovalRequest
+			var got scrutineerv1alpha1.ApprovalRequest
 			g.Expect(k8sClient.Get(testCtx, reqKey, &got)).To(Succeed())
-			g.Expect(got.Status.State).To(Equal(relayv1alpha1.ApprovalStatePending))
+			g.Expect(got.Status.State).To(Equal(scrutineerv1alpha1.ApprovalStatePending))
 		}, 2*time.Second, controllerPollInterval).Should(Succeed())
 
 		// A listed approver's grant is honored.
-		patchApprovalDecision(reqKey, relayv1alpha1.ApprovalDecisionGranted, "alice")
-		waitForApprovalState(reqKey, relayv1alpha1.ApprovalStateGranted)
+		patchApprovalDecision(reqKey, scrutineerv1alpha1.ApprovalDecisionGranted, "alice")
+		waitForApprovalState(reqKey, scrutineerv1alpha1.ApprovalStateGranted)
 	})
 })
 
 var _ = Describe("Runtime approval helpers", func() {
 	It("treats only trigger=runtime as a runtime hold", func() {
-		Expect(relayv1alpha1.ApprovalRequestSpec{Trigger: relayv1alpha1.ApprovalTriggerRuntime}.IsRuntime()).To(BeTrue())
-		Expect(relayv1alpha1.ApprovalRequestSpec{Trigger: relayv1alpha1.ApprovalTriggerSession}.IsRuntime()).To(BeFalse())
-		Expect(relayv1alpha1.ApprovalRequestSpec{}.IsRuntime()).To(BeFalse(), "empty trigger means session")
+		Expect(scrutineerv1alpha1.ApprovalRequestSpec{Trigger: scrutineerv1alpha1.ApprovalTriggerRuntime}.IsRuntime()).To(BeTrue())
+		Expect(scrutineerv1alpha1.ApprovalRequestSpec{Trigger: scrutineerv1alpha1.ApprovalTriggerSession}.IsRuntime()).To(BeFalse())
+		Expect(scrutineerv1alpha1.ApprovalRequestSpec{}.IsRuntime()).To(BeFalse(), "empty trigger means session")
 	})
 
 	It("prefers scope.target then action for the decision subject", func() {
-		withTarget := &relayv1alpha1.ApprovalRequest{Spec: relayv1alpha1.ApprovalRequestSpec{
-			Action: "deploy", Scope: relayv1alpha1.ApprovalScope{Target: "deploy-prod"},
+		withTarget := &scrutineerv1alpha1.ApprovalRequest{Spec: scrutineerv1alpha1.ApprovalRequestSpec{
+			Action: "deploy", Scope: scrutineerv1alpha1.ApprovalScope{Target: "deploy-prod"},
 		}}
-		withoutTarget := &relayv1alpha1.ApprovalRequest{Spec: relayv1alpha1.ApprovalRequestSpec{Action: "deploy"}}
+		withoutTarget := &scrutineerv1alpha1.ApprovalRequest{Spec: scrutineerv1alpha1.ApprovalRequestSpec{Action: "deploy"}}
 		Expect(runtimeApprovalTarget(withTarget)).To(Equal("deploy-prod"))
 		Expect(runtimeApprovalTarget(withoutTarget)).To(Equal("deploy"))
 	})
 
 	It("reports decided states as final", func() {
-		Expect(approvalStateDecided(relayv1alpha1.ApprovalStateGranted)).To(BeTrue())
-		Expect(approvalStateDecided(relayv1alpha1.ApprovalStateDenied)).To(BeTrue())
-		Expect(approvalStateDecided(relayv1alpha1.ApprovalStateExpired)).To(BeTrue())
-		Expect(approvalStateDecided(relayv1alpha1.ApprovalStatePending)).To(BeFalse())
-		Expect(approvalStateDecided(relayv1alpha1.ApprovalState(""))).To(BeFalse())
+		Expect(approvalStateDecided(scrutineerv1alpha1.ApprovalStateGranted)).To(BeTrue())
+		Expect(approvalStateDecided(scrutineerv1alpha1.ApprovalStateDenied)).To(BeTrue())
+		Expect(approvalStateDecided(scrutineerv1alpha1.ApprovalStateExpired)).To(BeTrue())
+		Expect(approvalStateDecided(scrutineerv1alpha1.ApprovalStatePending)).To(BeFalse())
+		Expect(approvalStateDecided(scrutineerv1alpha1.ApprovalState(""))).To(BeFalse())
 	})
 
 	It("projects a redaction-safe summary (argDigest, never raw args) and defaults empty state to Pending", func() {
@@ -213,19 +213,19 @@ var _ = Describe("Runtime approval helpers", func() {
 		Expect(s.PolicyRef).To(Equal("deploy-approvers"))
 		Expect(s.Reason).To(Equal("awaiting decision"))
 		Expect(s.RequestedAt).NotTo(BeNil())
-		Expect(s.State).To(Equal(relayv1alpha1.ApprovalStatePending), "empty observed state surfaces as Pending")
+		Expect(s.State).To(Equal(scrutineerv1alpha1.ApprovalStatePending), "empty observed state surfaces as Pending")
 	})
 
 	It("sorts, caps, and clears the pending-approval summary", func() {
-		session := &relayv1alpha1.AgentSession{}
-		setPendingApprovals(session, []relayv1alpha1.RuntimeApprovalSummary{
+		session := &scrutineerv1alpha1.AgentSession{}
+		setPendingApprovals(session, []scrutineerv1alpha1.RuntimeApprovalSummary{
 			{Name: "b"}, {Name: "a"}, {Name: "c"},
 		})
 		Expect(session.Status.PendingApprovals).To(HaveLen(3))
 		Expect(session.Status.PendingApprovals[0].Name).To(Equal("a"))
 		Expect(session.Status.PendingApprovals[2].Name).To(Equal("c"))
 
-		over := make([]relayv1alpha1.RuntimeApprovalSummary, maxPendingApprovals+5)
+		over := make([]scrutineerv1alpha1.RuntimeApprovalSummary, maxPendingApprovals+5)
 		for i := range over {
 			over[i].Name = fmt.Sprintf("h-%03d", i)
 		}
@@ -237,14 +237,14 @@ var _ = Describe("Runtime approval helpers", func() {
 	})
 
 	It("derives the validity window from policy first, then scope.window", func() {
-		policy := &relayv1alpha1.ApprovalPolicy{Spec: relayv1alpha1.ApprovalPolicySpec{
+		policy := &scrutineerv1alpha1.ApprovalPolicy{Spec: scrutineerv1alpha1.ApprovalPolicySpec{
 			ExpiresAfter: &metav1.Duration{Duration: 30 * time.Minute},
 		}}
-		reqWindow := &relayv1alpha1.ApprovalRequest{Spec: relayv1alpha1.ApprovalRequestSpec{
-			Scope: relayv1alpha1.ApprovalScope{Window: &metav1.Duration{Duration: 5 * time.Minute}},
+		reqWindow := &scrutineerv1alpha1.ApprovalRequest{Spec: scrutineerv1alpha1.ApprovalRequestSpec{
+			Scope: scrutineerv1alpha1.ApprovalScope{Window: &metav1.Duration{Duration: 5 * time.Minute}},
 		}}
 		Expect(approvalValidityWindow(policy, reqWindow)).To(Equal(30 * time.Minute))
 		Expect(approvalValidityWindow(nil, reqWindow)).To(Equal(5 * time.Minute))
-		Expect(approvalValidityWindow(nil, &relayv1alpha1.ApprovalRequest{})).To(BeZero())
+		Expect(approvalValidityWindow(nil, &scrutineerv1alpha1.ApprovalRequest{})).To(BeZero())
 	})
 })

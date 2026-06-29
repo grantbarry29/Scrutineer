@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,11 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/approval"
-	"github.com/secureai/relay/internal/audit"
-	"github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/tracing"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/approval"
+	"github.com/grantbarry29/scrutineer/internal/audit"
+	"github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/tracing"
 )
 
 // AgentSessionReconciler reconciles an AgentSession object.
@@ -66,7 +66,7 @@ func (r *AgentSessionReconciler) ensureBackends() {
 
 // runtimeBackendFor selects the backend for a session's orchestrator. An empty
 // orchestrator defaults to kubernetes-job (validateSpec enforces accepted values).
-func (r *AgentSessionReconciler) runtimeBackendFor(session *relayv1alpha1.AgentSession) (runtimeBackend, error) {
+func (r *AgentSessionReconciler) runtimeBackendFor(session *scrutineerv1alpha1.AgentSession) (runtimeBackend, error) {
 	r.ensureBackends()
 	orchestrator := session.Spec.Runtime.Orchestrator
 	if orchestrator == "" {
@@ -86,17 +86,17 @@ const requeueAfter = 15 * time.Second
 // deletionRequeueAfter is used while finalizer cleanup waits for the owned Job to finish deleting.
 const deletionRequeueAfter = 2 * time.Second
 
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentpolicies,verbs=get;list;watch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=toolpolicies,verbs=get;list;watch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=runtimeprofiles,verbs=get;list;watch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=agentpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=toolpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=runtimeprofiles,verbs=get;list;watch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=approvalpolicies,verbs=get;list;watch
 // ApprovalRequests are created+mutated by the controller (owner-ref GC handles deletion, so no delete verb).
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests,verbs=get;list;watch;create;update;patch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=approvalrequests,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=approvalrequests/status,verbs=get;update;patch
 // AgentSession is the primary resource: read+mutate (status/finalizers) only; the controller never creates or deletes it.
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=agentsessions,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=agentsessions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=agentsessions/finalizers,verbs=update
 // Runtime objects: the kubernetes-job backend owns Jobs; the kubernetes-pod backend owns Pods (create/update/delete).
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -112,8 +112,8 @@ const deletionRequeueAfter = 2 * time.Second
 //
 // Flow:
 //  1. Fetch the AgentSession (return cleanly on NotFound).
-//  2. If deleting: delete the owned Job, then remove the Relay finalizer.
-//  3. Ensure the Relay finalizer is present on live sessions.
+//  2. If deleting: delete the owned Job, then remove the Scrutineer finalizer.
+//  3. Ensure the Scrutineer finalizer is present on live sessions.
 //  4. Initialize status.phase=Pending on first observation.
 //  5. Validate the spec. On failure -> Denied, emit ValidationFailed, return.
 //  6. If spec.cancelRequested, delete the owned Job (if any), set Phase=Cancelled, and return.
@@ -124,7 +124,7 @@ const deletionRequeueAfter = 2 * time.Second
 // Reconcile is idempotent: re-running it against an unchanged cluster makes no API mutations.
 func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	ctx, span := tracing.StartReconcileSpan(ctx, req.Namespace, req.Name)
-	var tracedSession *relayv1alpha1.AgentSession
+	var tracedSession *scrutineerv1alpha1.AgentSession
 	var initialPhase string
 	defer func() {
 		phase := ""
@@ -164,16 +164,16 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Take a working copy so we can compute a single status patch at the end.
 	original := session.DeepCopy()
 	initialPhase = string(original.Status.Phase)
-	var resolvedProfile *relayv1alpha1.RuntimeProfile
+	var resolvedProfile *scrutineerv1alpha1.RuntimeProfile
 
 	if session.Status.Phase == "" {
-		session.Status.Phase = relayv1alpha1.PhasePending
+		session.Status.Phase = scrutineerv1alpha1.PhasePending
 	}
 	session.Status.ObservedGeneration = session.Generation
 
 	if verr := validateSpec(session); verr != nil {
 		logger.Info("AgentSession spec rejected", "reason", verr.Error())
-		session.Status.Phase = relayv1alpha1.PhaseDenied
+		session.Status.Phase = scrutineerv1alpha1.PhaseDenied
 		setCompletionTime(session)
 		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidSpec", verr.Error())
 		setReadyCondition(session)
@@ -190,7 +190,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	resolvedTask, err := r.resolveTask(ctx, session)
 	if err != nil {
 		logger.Info("AgentSession task resolution failed", "reason", err.Error())
-		session.Status.Phase = relayv1alpha1.PhaseDenied
+		session.Status.Phase = scrutineerv1alpha1.PhaseDenied
 		setCompletionTime(session)
 		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidTask", err.Error())
 		setReadyCondition(session)
@@ -202,7 +202,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	resolvedPolicy, err := r.resolvePolicy(ctx, session, original.Status.PolicyDecisions)
 	if err != nil {
 		logger.Info("AgentSession policy resolution failed", "reason", err.Error())
-		session.Status.Phase = relayv1alpha1.PhaseDenied
+		session.Status.Phase = scrutineerv1alpha1.PhaseDenied
 		setCompletionTime(session)
 		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidPolicy", err.Error())
 		setReadyCondition(session)
@@ -218,7 +218,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	resolvedProfile, err = r.resolveRuntimeProfile(ctx, session)
 	if err != nil {
 		logger.Info("AgentSession runtime profile resolution failed", "reason", err.Error())
-		session.Status.Phase = relayv1alpha1.PhaseDenied
+		session.Status.Phase = scrutineerv1alpha1.PhaseDenied
 		setCompletionTime(session)
 		setCondition(session, ConditionValidated, metav1.ConditionFalse, "InvalidRuntimeProfile", err.Error())
 		setReadyCondition(session)
@@ -260,7 +260,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		setReadyCondition(session)
 		return ctrl.Result{}, r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile)
 	case outcome == approvalPending:
-		session.Status.Phase = relayv1alpha1.PhaseAwaitingApproval
+		session.Status.Phase = scrutineerv1alpha1.PhaseAwaitingApproval
 		setReadyCondition(session)
 		if perr := r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile); perr != nil {
 			return ctrl.Result{}, perr
@@ -281,7 +281,7 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	obs, err := backend.ensure(ctx, session, resolvedTask, resolvedPolicy, resolvedProfile)
 	if err != nil {
 		if errors.Is(err, ErrJobNotOwned) {
-			session.Status.Phase = relayv1alpha1.PhaseDenied
+			session.Status.Phase = scrutineerv1alpha1.PhaseDenied
 			setCondition(session, ConditionValidated, metav1.ConditionFalse, "JobConflict", err.Error())
 			setReadyCondition(session)
 			r.recordWarning(session, EventReasonSessionDenied, err.Error())
@@ -302,13 +302,13 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
-func (r *AgentSessionReconciler) getAgentSession(ctx context.Context, key client.ObjectKey) (*relayv1alpha1.AgentSession, error) {
-	var session relayv1alpha1.AgentSession
+func (r *AgentSessionReconciler) getAgentSession(ctx context.Context, key client.ObjectKey) (*scrutineerv1alpha1.AgentSession, error) {
+	var session scrutineerv1alpha1.AgentSession
 	if err := r.Get(ctx, key, &session); err != nil {
 		return nil, err
 	}
 	if r.APIReader != nil && session.DeletionTimestamp.IsZero() {
-		var latest relayv1alpha1.AgentSession
+		var latest scrutineerv1alpha1.AgentSession
 		if err := r.APIReader.Get(ctx, key, &latest); err == nil {
 			session = latest
 		}
@@ -317,8 +317,8 @@ func (r *AgentSessionReconciler) getAgentSession(ctx context.Context, key client
 }
 
 // handleDeletion runs finalizer cleanup: stop the owned runtime, wait until it is gone,
-// then remove the Relay finalizer so the AgentSession object can be removed.
-func (r *AgentSessionReconciler) handleDeletion(ctx context.Context, session *relayv1alpha1.AgentSession) (ctrl.Result, error) {
+// then remove the Scrutineer finalizer so the AgentSession object can be removed.
+func (r *AgentSessionReconciler) handleDeletion(ctx context.Context, session *scrutineerv1alpha1.AgentSession) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(session, AgentSessionFinalizer) {
 		return ctrl.Result{}, nil
 	}
@@ -350,9 +350,9 @@ func (r *AgentSessionReconciler) handleDeletion(ctx context.Context, session *re
 	return ctrl.Result{}, nil
 }
 
-// ensureFinalizer adds the Relay finalizer if missing. Returns true when an update was
+// ensureFinalizer adds the Scrutineer finalizer if missing. Returns true when an update was
 // applied and reconcile should return before other work (finalizer was just added).
-func (r *AgentSessionReconciler) ensureFinalizer(ctx context.Context, session *relayv1alpha1.AgentSession) (bool, error) {
+func (r *AgentSessionReconciler) ensureFinalizer(ctx context.Context, session *scrutineerv1alpha1.AgentSession) (bool, error) {
 	if controllerutil.ContainsFinalizer(session, AgentSessionFinalizer) {
 		return false, nil
 	}
@@ -360,7 +360,7 @@ func (r *AgentSessionReconciler) ensureFinalizer(ctx context.Context, session *r
 	key := client.ObjectKeyFromObject(session)
 	var added bool
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var latest relayv1alpha1.AgentSession
+		var latest scrutineerv1alpha1.AgentSession
 		if err := r.Get(ctx, key, &latest); err != nil {
 			return err
 		}
@@ -379,10 +379,10 @@ func (r *AgentSessionReconciler) ensureFinalizer(ctx context.Context, session *r
 	return added, err
 }
 
-func (r *AgentSessionReconciler) removeFinalizer(ctx context.Context, session *relayv1alpha1.AgentSession) error {
+func (r *AgentSessionReconciler) removeFinalizer(ctx context.Context, session *scrutineerv1alpha1.AgentSession) error {
 	key := client.ObjectKeyFromObject(session)
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var latest relayv1alpha1.AgentSession
+		var latest scrutineerv1alpha1.AgentSession
 		if err := r.Get(ctx, key, &latest); err != nil {
 			if apierrors.IsNotFound(err) {
 				return nil
@@ -415,16 +415,16 @@ func needsBlockOwnerDeletionPatch(obj metav1.Object) bool {
 }
 
 // applyCancellationStatus marks the session terminal after cancellation is processed.
-func (r *AgentSessionReconciler) applyCancellationStatus(session *relayv1alpha1.AgentSession) {
+func (r *AgentSessionReconciler) applyCancellationStatus(session *scrutineerv1alpha1.AgentSession) {
 	const msg = "Session cancelled by user request"
-	if session.Status.Phase != relayv1alpha1.PhaseCancelled {
+	if session.Status.Phase != scrutineerv1alpha1.PhaseCancelled {
 		r.recordNormal(session, EventReasonSessionCancelled, msg)
 	}
-	session.Status.Phase = relayv1alpha1.PhaseCancelled
+	session.Status.Phase = scrutineerv1alpha1.PhaseCancelled
 	setCompletionTime(session)
 	setCondition(session, ConditionCompleted, metav1.ConditionTrue, "SessionCancelled", msg)
 	if session.Status.Result == nil {
-		session.Status.Result = &relayv1alpha1.SessionResult{
+		session.Status.Result = &scrutineerv1alpha1.SessionResult{
 			Outcome: "cancelled",
 			Summary: msg,
 		}
@@ -434,7 +434,7 @@ func (r *AgentSessionReconciler) applyCancellationStatus(session *relayv1alpha1.
 // applyObservation maps a backend's normalized observation onto the AgentSession status,
 // conditions, events, and result. The reconciler — not the backend — owns this mapping
 // so governance/status semantics stay backend-independent.
-func (r *AgentSessionReconciler) applyObservation(session *relayv1alpha1.AgentSession, obs observation) {
+func (r *AgentSessionReconciler) applyObservation(session *scrutineerv1alpha1.AgentSession, obs observation) {
 	if obs.runtimeName != "" {
 		session.Status.JobName = obs.runtimeName
 	}
@@ -461,7 +461,7 @@ func (r *AgentSessionReconciler) applyObservation(session *relayv1alpha1.AgentSe
 		setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
 			fmt.Sprintf("Created Job %q", obs.runtimeName))
 		r.recordNormal(session, EventReasonJobCreated, fmt.Sprintf("Created Job %s", obs.runtimeName))
-		session.Status.Phase = relayv1alpha1.PhaseStarting
+		session.Status.Phase = scrutineerv1alpha1.PhaseStarting
 	} else {
 		setCondition(session, ConditionRuntimeCreated, metav1.ConditionTrue, "JobCreated",
 			fmt.Sprintf("Job %q exists", obs.runtimeName))
@@ -477,21 +477,21 @@ func (r *AgentSessionReconciler) applyObservation(session *relayv1alpha1.AgentSe
 // applyRuntimePhase maps a backend-neutral runtimePhase onto AgentSessionPhase, the
 // Completed condition, result, and lifecycle events. Terminal sessions are never
 // overwritten. Events fire only on a phase transition.
-func (r *AgentSessionReconciler) applyRuntimePhase(session *relayv1alpha1.AgentSession, phase runtimePhase) {
+func (r *AgentSessionReconciler) applyRuntimePhase(session *scrutineerv1alpha1.AgentSession, phase runtimePhase) {
 	if isTerminal(session.Status.Phase) {
 		return
 	}
 
 	switch phase {
 	case runtimeSucceeded:
-		if session.Status.Phase != relayv1alpha1.PhaseSucceeded {
+		if session.Status.Phase != scrutineerv1alpha1.PhaseSucceeded {
 			r.recordNormal(session, EventReasonJobSucceeded, "Job completed successfully")
 		}
-		session.Status.Phase = relayv1alpha1.PhaseSucceeded
+		session.Status.Phase = scrutineerv1alpha1.PhaseSucceeded
 		setCompletionTime(session)
 		setCondition(session, ConditionCompleted, metav1.ConditionTrue, "JobSucceeded", "Underlying Job completed successfully")
 		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
+			session.Status.Result = &scrutineerv1alpha1.SessionResult{
 				Outcome: "completed",
 				Summary: "Job completed successfully",
 			}
@@ -499,14 +499,14 @@ func (r *AgentSessionReconciler) applyRuntimePhase(session *relayv1alpha1.AgentS
 
 	case runtimeTimedOut:
 		msg := "Underlying Job exceeded its activeDeadlineSeconds"
-		if session.Status.Phase != relayv1alpha1.PhaseTimedOut {
+		if session.Status.Phase != scrutineerv1alpha1.PhaseTimedOut {
 			r.recordWarning(session, EventReasonJobFailed, msg)
 		}
-		session.Status.Phase = relayv1alpha1.PhaseTimedOut
+		session.Status.Phase = scrutineerv1alpha1.PhaseTimedOut
 		setCompletionTime(session)
 		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobTimedOut", msg)
 		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
+			session.Status.Result = &scrutineerv1alpha1.SessionResult{
 				Outcome: "failed",
 				Summary: msg,
 			}
@@ -514,29 +514,29 @@ func (r *AgentSessionReconciler) applyRuntimePhase(session *relayv1alpha1.AgentS
 
 	case runtimeFailed:
 		msg := "Underlying Job failed"
-		if session.Status.Phase != relayv1alpha1.PhaseFailed {
+		if session.Status.Phase != scrutineerv1alpha1.PhaseFailed {
 			r.recordWarning(session, EventReasonJobFailed, msg)
 		}
-		session.Status.Phase = relayv1alpha1.PhaseFailed
+		session.Status.Phase = scrutineerv1alpha1.PhaseFailed
 		setCompletionTime(session)
 		setCondition(session, ConditionCompleted, metav1.ConditionFalse, "JobFailed", msg)
 		if session.Status.Result == nil {
-			session.Status.Result = &relayv1alpha1.SessionResult{
+			session.Status.Result = &scrutineerv1alpha1.SessionResult{
 				Outcome: "failed",
 				Summary: msg,
 			}
 		}
 
 	case runtimeRunning:
-		if session.Status.Phase != relayv1alpha1.PhaseRunning {
+		if session.Status.Phase != scrutineerv1alpha1.PhaseRunning {
 			r.recordNormal(session, EventReasonJobRunning, "Job is running")
 		}
-		session.Status.Phase = relayv1alpha1.PhaseRunning
+		session.Status.Phase = scrutineerv1alpha1.PhaseRunning
 
 	default:
 		// runtimeStarting / indeterminate: only advance a fresh session.
-		if session.Status.Phase == "" || session.Status.Phase == relayv1alpha1.PhasePending {
-			session.Status.Phase = relayv1alpha1.PhaseStarting
+		if session.Status.Phase == "" || session.Status.Phase == scrutineerv1alpha1.PhasePending {
+			session.Status.Phase = scrutineerv1alpha1.PhaseStarting
 		}
 	}
 }
@@ -548,14 +548,14 @@ func toJobTask(task *ResolvedTask) *job.Task {
 	return &job.Task{Description: task.Description, Prompt: task.Prompt}
 }
 
-func (r *AgentSessionReconciler) recordNormal(session *relayv1alpha1.AgentSession, reason, msg string) {
+func (r *AgentSessionReconciler) recordNormal(session *scrutineerv1alpha1.AgentSession, reason, msg string) {
 	if r.Recorder == nil {
 		return
 	}
 	r.Recorder.Event(session, corev1.EventTypeNormal, reason, msg)
 }
 
-func (r *AgentSessionReconciler) recordWarning(session *relayv1alpha1.AgentSession, reason, msg string) {
+func (r *AgentSessionReconciler) recordWarning(session *scrutineerv1alpha1.AgentSession, reason, msg string) {
 	if r.Recorder == nil {
 		return
 	}
@@ -567,7 +567,7 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.RESTConfig = mgr.GetConfig()
 	r.ensureBackends()
 	builder := ctrl.NewControllerManagedBy(mgr).
-		For(&relayv1alpha1.AgentSession{}).
+		For(&scrutineerv1alpha1.AgentSession{}).
 		Owns(&networkingv1.NetworkPolicy{})
 	// Watch each registered backend's runtime object so completions trigger reconciles,
 	// deduping in case two backends ever share an owned type.
@@ -587,19 +587,19 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.mapPodToSessions),
 		).
 		Watches(
-			&relayv1alpha1.AgentPolicy{},
+			&scrutineerv1alpha1.AgentPolicy{},
 			handler.EnqueueRequestsFromMapFunc(r.mapAgentPolicyToSessions),
 		).
 		Watches(
-			&relayv1alpha1.ToolPolicy{},
+			&scrutineerv1alpha1.ToolPolicy{},
 			handler.EnqueueRequestsFromMapFunc(r.mapToolPolicyToSessions),
 		).
 		Watches(
-			&relayv1alpha1.RuntimeProfile{},
+			&scrutineerv1alpha1.RuntimeProfile{},
 			handler.EnqueueRequestsFromMapFunc(r.mapRuntimeProfileToSessions),
 		).
 		Watches(
-			&relayv1alpha1.ApprovalRequest{},
+			&scrutineerv1alpha1.ApprovalRequest{},
 			handler.EnqueueRequestsFromMapFunc(r.mapApprovalRequestToSessions),
 		).
 		Complete(r)
@@ -610,7 +610,7 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Resolution events (PolicyResolved, RuntimeProfileResolved) are gated on this so
 // they are emitted once per real transition instead of on every requeue, which
 // otherwise spams Events on a single unchanged resourceVersion.
-func conditionChanged(snapshot, current *relayv1alpha1.AgentSession, condType string) bool {
+func conditionChanged(snapshot, current *scrutineerv1alpha1.AgentSession, condType string) bool {
 	cur := meta.FindStatusCondition(current.Status.Conditions, condType)
 	if cur == nil {
 		return false
@@ -623,7 +623,7 @@ func conditionChanged(snapshot, current *relayv1alpha1.AgentSession, condType st
 }
 
 // setCondition upserts a condition by Type onto the AgentSession status.
-func setCondition(session *relayv1alpha1.AgentSession, condType string, status metav1.ConditionStatus, reason, msg string) {
+func setCondition(session *scrutineerv1alpha1.AgentSession, condType string, status metav1.ConditionStatus, reason, msg string) {
 	meta.SetStatusCondition(&session.Status.Conditions, metav1.Condition{
 		Type:               condType,
 		Status:             status,
@@ -633,33 +633,33 @@ func setCondition(session *relayv1alpha1.AgentSession, condType string, status m
 	})
 }
 
-func setCompletionTime(session *relayv1alpha1.AgentSession) {
+func setCompletionTime(session *scrutineerv1alpha1.AgentSession) {
 	if session.Status.CompletionTime == nil {
 		now := metav1.Now()
 		session.Status.CompletionTime = &now
 	}
 }
 
-func setReadyCondition(session *relayv1alpha1.AgentSession) {
+func setReadyCondition(session *scrutineerv1alpha1.AgentSession) {
 	phase := session.Status.Phase
 	if phase == "" {
-		phase = relayv1alpha1.PhasePending
+		phase = scrutineerv1alpha1.PhasePending
 	}
 
 	switch phase {
-	case relayv1alpha1.PhaseRunning:
+	case scrutineerv1alpha1.PhaseRunning:
 		setCondition(session, ConditionReady, metav1.ConditionTrue, "JobRunning", "Underlying Job is running")
-	case relayv1alpha1.PhaseSucceeded:
+	case scrutineerv1alpha1.PhaseSucceeded:
 		setCondition(session, ConditionReady, metav1.ConditionTrue, "JobSucceeded", "Underlying Job completed successfully")
-	case relayv1alpha1.PhaseDenied:
+	case scrutineerv1alpha1.PhaseDenied:
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "SessionDenied", "Session was denied by validation or policy")
-	case relayv1alpha1.PhaseFailed:
+	case scrutineerv1alpha1.PhaseFailed:
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "JobFailed", "Underlying Job failed")
-	case relayv1alpha1.PhaseTimedOut:
+	case scrutineerv1alpha1.PhaseTimedOut:
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "JobTimedOut", "Underlying Job exceeded its activeDeadlineSeconds")
-	case relayv1alpha1.PhaseCancelled:
+	case scrutineerv1alpha1.PhaseCancelled:
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "SessionCancelled", "Session was cancelled by user request")
-	case relayv1alpha1.PhaseAwaitingApproval:
+	case scrutineerv1alpha1.PhaseAwaitingApproval:
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "AwaitingApproval", "Session is blocked on a human approval gate")
 	default:
 		// Pending/Validating/Starting and any unknown phase.
@@ -675,13 +675,13 @@ func setBlockOwnerDeletion(obj metav1.Object, block bool) {
 	obj.SetOwnerReferences(refs)
 }
 
-func isTerminal(phase relayv1alpha1.AgentSessionPhase) bool {
+func isTerminal(phase scrutineerv1alpha1.AgentSessionPhase) bool {
 	switch phase {
-	case relayv1alpha1.PhaseSucceeded,
-		relayv1alpha1.PhaseFailed,
-		relayv1alpha1.PhaseDenied,
-		relayv1alpha1.PhaseTimedOut,
-		relayv1alpha1.PhaseCancelled:
+	case scrutineerv1alpha1.PhaseSucceeded,
+		scrutineerv1alpha1.PhaseFailed,
+		scrutineerv1alpha1.PhaseDenied,
+		scrutineerv1alpha1.PhaseTimedOut,
+		scrutineerv1alpha1.PhaseCancelled:
 		return true
 	}
 	return false

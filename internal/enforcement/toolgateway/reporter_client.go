@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const (
@@ -56,11 +56,11 @@ type approvalResponse struct {
 }
 
 type reportRequest struct {
-	Session    sessionRef                      `json:"session"`
-	Backend    string                          `json:"backend"`
-	Decisions  []relayv1alpha1.PolicyDecision  `json:"decisions"`
-	Violations []relayv1alpha1.PolicyViolation `json:"violations,omitempty"`
-	Events     []relayv1alpha1.SessionEvent    `json:"events,omitempty"`
+	Session    sessionRef                           `json:"session"`
+	Backend    string                               `json:"backend"`
+	Decisions  []scrutineerv1alpha1.PolicyDecision  `json:"decisions"`
+	Violations []scrutineerv1alpha1.PolicyViolation `json:"violations,omitempty"`
+	Events     []scrutineerv1alpha1.SessionEvent    `json:"events,omitempty"`
 }
 
 // ReporterClient posts runtime evidence to the controller-owned reporter endpoint.

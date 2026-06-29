@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,12 +16,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
-	"github.com/secureai/relay/internal/enforcement/dnsproxy"
-	"github.com/secureai/relay/internal/enforcement/toolgateway"
-	"github.com/secureai/relay/internal/enforcement/workspace"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/dnsproxy"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/workspace"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 // Known RuntimeProfile sidecar types injected in Phase 3 slice 5.
@@ -38,14 +38,14 @@ const (
 )
 
 const (
-	EnvRelaySidecarType       = "RELAY_SIDECAR_TYPE"
-	EnvRelayToolGatewayURL    = "RELAY_TOOL_GATEWAY_URL"
-	EnvRelayFSGatewayURL      = "RELAY_FS_GATEWAY_URL"
-	EnvRelayReporterURL       = "RELAY_REPORTER_URL"
-	EnvRelayReporterTokenPath = "RELAY_REPORTER_TOKEN_PATH"
-	EnvHTTPProxy              = "HTTP_PROXY"
-	EnvHTTPSProxy             = "HTTPS_PROXY"
-	EnvNoProxy                = "NO_PROXY"
+	EnvScrutineerSidecarType       = "SCRUTINEER_SIDECAR_TYPE"
+	EnvScrutineerToolGatewayURL    = "SCRUTINEER_TOOL_GATEWAY_URL"
+	EnvScrutineerFSGatewayURL      = "SCRUTINEER_FS_GATEWAY_URL"
+	EnvScrutineerReporterURL       = "SCRUTINEER_REPORTER_URL"
+	EnvScrutineerReporterTokenPath = "SCRUTINEER_REPORTER_TOKEN_PATH"
+	EnvHTTPProxy                   = "HTTP_PROXY"
+	EnvHTTPSProxy                  = "HTTPS_PROXY"
+	EnvNoProxy                     = "NO_PROXY"
 	// Lowercase proxy variants: many common tools (notably BusyBox wget, curl, and
 	// Go's net/http) read the lowercase names, and BusyBox wget reads ONLY the
 	// lowercase form. Setting both ensures agent egress is actually routed through
@@ -57,12 +57,12 @@ const (
 )
 
 // DefaultReporterURL is the in-cluster base URL for POST /v1/report (no path suffix).
-// Matches the relay-controller-reporter Service in config/manager/reporter_service.yaml.
-const DefaultReporterURL = "http://relay-controller-reporter.relay-system.svc:8088"
+// Matches the scrutineer-controller-reporter Service in config/manager/reporter_service.yaml.
+const DefaultReporterURL = "http://scrutineer-controller-reporter.scrutineer-system.svc:8088"
 
 const (
-	ReporterTokenVolumeName    = "relay-reporter-token"
-	ReporterTokenMountPath     = "/var/run/secrets/relay/reporter-token"
+	ReporterTokenVolumeName    = "scrutineer-reporter-token"
+	ReporterTokenMountPath     = "/var/run/secrets/scrutineer/reporter-token"
 	ReporterTokenFileName      = "token"
 	reporterTokenExpirationSec = int64(600)
 )
@@ -76,7 +76,7 @@ var knownSidecarTypes = map[string]struct{}{
 
 // injectSidecars appends enabled, known sidecar containers from a RuntimeProfile.
 // Unknown or disabled entries are skipped.
-func injectSidecars(spec *corev1.PodSpec, session *relayv1alpha1.AgentSession, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) {
+func injectSidecars(spec *corev1.PodSpec, session *scrutineerv1alpha1.AgentSession, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) {
 	if spec == nil || profile == nil || len(profile.Spec.Sidecars) == 0 {
 		return
 	}
@@ -92,7 +92,7 @@ func injectSidecars(spec *corev1.PodSpec, session *relayv1alpha1.AgentSession, p
 	}
 }
 
-func hasEnabledReportingSidecar(profile *relayv1alpha1.RuntimeProfile) bool {
+func hasEnabledReportingSidecar(profile *scrutineerv1alpha1.RuntimeProfile) bool {
 	if profile == nil {
 		return false
 	}
@@ -106,7 +106,7 @@ func hasEnabledReportingSidecar(profile *relayv1alpha1.RuntimeProfile) bool {
 	return false
 }
 
-func wireReporterAccess(spec *corev1.PodSpec, profile *relayv1alpha1.RuntimeProfile) {
+func wireReporterAccess(spec *corev1.PodSpec, profile *scrutineerv1alpha1.RuntimeProfile) {
 	if spec == nil || !hasEnabledReportingSidecar(profile) {
 		return
 	}
@@ -134,8 +134,8 @@ func wireReporterAccess(spec *corev1.PodSpec, profile *relayv1alpha1.RuntimeProf
 
 func reporterSidecarEnv() []corev1.EnvVar {
 	return []corev1.EnvVar{
-		{Name: EnvRelayReporterURL, Value: DefaultReporterURL},
-		{Name: EnvRelayReporterTokenPath, Value: ReporterTokenMountPath + "/" + ReporterTokenFileName},
+		{Name: EnvScrutineerReporterURL, Value: DefaultReporterURL},
+		{Name: EnvScrutineerReporterTokenPath, Value: ReporterTokenMountPath + "/" + ReporterTokenFileName},
 	}
 }
 
@@ -147,11 +147,11 @@ func reporterVolumeMount() corev1.VolumeMount {
 	}
 }
 
-func sidecarEnabled(sc relayv1alpha1.RuntimeProfileSidecar) bool {
+func sidecarEnabled(sc scrutineerv1alpha1.RuntimeProfileSidecar) bool {
 	return sc.Enabled == nil || *sc.Enabled
 }
 
-func buildSidecarContainer(sc relayv1alpha1.RuntimeProfileSidecar, session *relayv1alpha1.AgentSession, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) corev1.Container {
+func buildSidecarContainer(sc scrutineerv1alpha1.RuntimeProfileSidecar, session *scrutineerv1alpha1.AgentSession, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) corev1.Container {
 	name := strings.TrimSpace(sc.Name)
 	if name == "" {
 		name = sc.Type
@@ -180,7 +180,7 @@ func sidecarCommand(sidecarType string) []string {
 	}
 }
 
-func sidecarVolumeMounts(profile *relayv1alpha1.RuntimeProfile) []corev1.VolumeMount {
+func sidecarVolumeMounts(profile *scrutineerv1alpha1.RuntimeProfile) []corev1.VolumeMount {
 	if !hasEnabledReportingSidecar(profile) {
 		return nil
 	}
@@ -202,21 +202,21 @@ func placeholderImageForType(sidecarType string) string {
 	}
 }
 
-func sidecarBaseEnv(sidecarType string, session *relayv1alpha1.AgentSession, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) []corev1.EnvVar {
-	mode := relayv1alpha1.PolicyModeAuditOnly
+func sidecarBaseEnv(sidecarType string, session *scrutineerv1alpha1.AgentSession, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) []corev1.EnvVar {
+	mode := scrutineerv1alpha1.PolicyModeAuditOnly
 	rules := session.Spec.Policy.PolicyRules
 	if pol != nil {
 		mode = pol.Mode
 		rules = pol.Rules
 	}
 	env := []corev1.EnvVar{
-		{Name: EnvRelaySessionName, Value: session.Name},
-		{Name: EnvRelaySessionNamespace, Value: session.Namespace},
-		{Name: EnvRelaySidecarType, Value: sidecarType},
+		{Name: EnvScrutineerSessionName, Value: session.Name},
+		{Name: EnvScrutineerSessionNamespace, Value: session.Namespace},
+		{Name: EnvScrutineerSidecarType, Value: sidecarType},
 		{Name: EnvPolicyMode, Value: string(mode)},
 	}
 	if sidecarType == SidecarTypeToolGateway {
-		env = append(env, corev1.EnvVar{Name: EnvRelayToolGatewayURL, Value: toolgateway.DefaultListenAddr})
+		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultListenAddr})
 		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))
 		ctx.Mode = mode
 		ctx.Policy = rules
@@ -241,12 +241,12 @@ func sidecarBaseEnv(sidecarType string, session *relayv1alpha1.AgentSession, pol
 }
 
 // applyAgentSidecarEnv adds agent env vars when governance sidecars are enabled.
-func applyAgentSidecarEnv(env []corev1.EnvVar, profile *relayv1alpha1.RuntimeProfile) []corev1.EnvVar {
+func applyAgentSidecarEnv(env []corev1.EnvVar, profile *scrutineerv1alpha1.RuntimeProfile) []corev1.EnvVar {
 	if profile == nil {
 		return env
 	}
 	if hasEnabledSidecar(profile, SidecarTypeToolGateway) {
-		env = append(env, corev1.EnvVar{Name: EnvRelayToolGatewayURL, Value: toolgateway.DefaultListenAddr})
+		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultListenAddr})
 	}
 	if hasEnabledSidecar(profile, SidecarTypeDNSProxy) {
 		const noProxy = "localhost,127.0.0.1"
@@ -263,12 +263,12 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, profile *relayv1alpha1.RuntimePro
 		)
 	}
 	if hasEnabledSidecar(profile, SidecarTypeFSGateway) {
-		env = append(env, corev1.EnvVar{Name: EnvRelayFSGatewayURL, Value: workspace.DefaultListenAddr})
+		env = append(env, corev1.EnvVar{Name: EnvScrutineerFSGatewayURL, Value: workspace.DefaultListenAddr})
 	}
 	return env
 }
 
-func hasEnabledSidecar(profile *relayv1alpha1.RuntimeProfile, sidecarType string) bool {
+func hasEnabledSidecar(profile *scrutineerv1alpha1.RuntimeProfile, sidecarType string) bool {
 	if profile == nil {
 		return false
 	}

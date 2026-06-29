@@ -1,14 +1,14 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: relay-manager-rolebinding
+  name: scrutineer-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   # controller-gen renders this role as "manager-role" (Makefile rbac:roleName);
-  # config/default sets namePrefix: "" so no transformer adds a relay- prefix.
+  # config/default sets namePrefix: "" so no transformer adds a scrutineer- prefix.
   name: manager-role
 subjects:
 - kind: ServiceAccount
-  name: relay-controller-manager
-  namespace: relay-system
+  name: scrutineer-controller-manager
+  namespace: scrutineer-system

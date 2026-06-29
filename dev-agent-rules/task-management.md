@@ -5,16 +5,16 @@
 in progress, blocked, review, done — plus ownership, priority, dependencies, and
 blockers. **Repository markdown is the source of truth for durable technical context** —
 design notes, architecture decisions, and agent guidance
-(`docs/design/`, `dev-agent-rules/`, component `README.md`s, `dev-agent-rules/relay-cursor-workflow.md`).
+(`docs/design/`, `dev-agent-rules/`, component `README.md`s, `dev-agent-rules/scrutineer-cursor-workflow.md`).
 
 > The board is the **only** task tracker — there is no markdown queue/status file (the old
-> `.cursor/relay-project-status.md` was removed; do not recreate it). **The board must always reflect
+> `.cursor/scrutineer-project-status.md` was removed; do not recreate it). **The board must always reflect
 > reality.** Discover work → file an issue. Start work → move it to in-progress. Make progress →
 > comment. Get blocked → mark blocked. Finish → update + close. Never let the board go stale, and never
 > track task state in chat or markdown.
 
-Repo: [`grantbarry29/Relay`](https://github.com/grantbarry29/Relay) ·
-Issues: <https://github.com/grantbarry29/Relay/issues> ·
+Repo: [`grantbarry29/scrutineer`](https://github.com/grantbarry29/scrutineer) ·
+Issues: <https://github.com/grantbarry29/scrutineer/issues> ·
 Board: <https://github.com/users/grantbarry29/projects/1> (user project **#1**).
 
 ## Label model
@@ -26,8 +26,8 @@ Board: <https://github.com/users/grantbarry29/projects/1> (user project **#1**).
 - **Agent:** `agent-ready`, `agent-discovered`, `agent-in-progress`, `agent-needs-human`, `agent-blocked`
 
 Useful queries:
-- Ready for an agent: [`is:issue is:open label:status/ready label:agent-ready`](https://github.com/grantbarry29/Relay/issues?q=is%3Aissue+is%3Aopen+label%3Astatus%2Fready+label%3Aagent-ready)
-- Needs human triage: [`is:issue is:open label:status/needs-triage`](https://github.com/grantbarry29/Relay/issues?q=is%3Aissue+is%3Aopen+label%3Astatus%2Fneeds-triage)
+- Ready for an agent: [`is:issue is:open label:status/ready label:agent-ready`](https://github.com/grantbarry29/scrutineer/issues?q=is%3Aissue+is%3Aopen+label%3Astatus%2Fready+label%3Aagent-ready)
+- Needs human triage: [`is:issue is:open label:status/needs-triage`](https://github.com/grantbarry29/scrutineer/issues?q=is%3Aissue+is%3Aopen+label%3Astatus%2Fneeds-triage)
 
 ## Work precedence (choosing the next issue)
 
@@ -78,7 +78,7 @@ authenticated but **lacks `project` scope** (run `gh auth refresh -s project` to
 | Find work / check duplicates | `search_issues`, `list_issues`, `issue_read` | Search before creating to avoid duplicates |
 | Create / update an issue, set labels, change state, close | `issue_write` | `method: create|update`; `labels`, `state: open|closed`, `state_reason: completed|not_planned|duplicate` |
 | Add a progress/blocked/handoff note | `add_issue_comment` | Use for transient status; do **not** put transient notes in repo markdown |
-| Add an issue to the board | `projects_write` (`add_project_item`) | `owner: grantbarry29`, `owner_type: user`, `project_number: 1`, `item_owner: grantbarry29`, `item_repo: Relay` |
+| Add an issue to the board | `projects_write` (`add_project_item`) | `owner: grantbarry29`, `owner_type: user`, `project_number: 1`, `item_owner: grantbarry29`, `item_repo: Scrutineer` |
 | Link a child to an epic/parent | `sub_issue_write` (`add`) | `sub_issue_id` is the child's **node/database id** (get it from `issue_read`), not its issue number |
 | Create a missing label | `label_write` | Only when a needed label from the model above doesn't exist yet |
 
@@ -91,7 +91,7 @@ When you discover any out-of-scope work, bug, gap, doc debt, test hole, or "we s
 
 1. **Search first** (`search_issues`) — don't duplicate an existing issue. If it exists, reference it.
 2. **Create it** (`issue_write` `create`) using the canonical **Issue Body Template** in
-   `relay-cursor-workflow.md` (Summary, Context, Acceptance criteria, Non-goals, Implementation notes,
+   `scrutineer-cursor-workflow.md` (Summary, Context, Acceptance criteria, Non-goals, Implementation notes,
    Dependencies/blockers, Verification).
 3. **Label it fully** — exactly one `status/*` (usually `backlog`, or `needs-triage` + `agent-needs-human`
    if unclear), one `type/*` (**`type/bug` for bugs**), a `priority/*`, and at least one `area/*`. Add
@@ -136,9 +136,9 @@ When you discover any out-of-scope work, bug, gap, doc debt, test hole, or "we s
 
 ## Implementation contract (summary)
 
-Full detail: [`dev-agent-rules/relay-cursor-workflow.md`](relay-cursor-workflow.md).
+Full detail: [`dev-agent-rules/scrutineer-cursor-workflow.md`](scrutineer-cursor-workflow.md).
 
-1. Read `relay-product-vision.md`, this file, and `relay-cursor-workflow.md` when implementing; pull
+1. Read `scrutineer-product-vision.md`, this file, and `scrutineer-cursor-workflow.md` when implementing; pull
    durable technical context from `docs/design/` / component READMEs / code comments.
 2. Pick **one** GitHub Issue (`status/ready` + `agent-ready`, by *Work precedence* + priority) — or ask
    the user. Claim it (→ `status/in-progress`, `agent-in-progress`) before editing code.
@@ -148,7 +148,7 @@ Full detail: [`dev-agent-rules/relay-cursor-workflow.md`](relay-cursor-workflow.
 6. End the user-facing summary with **### Out-of-scope future work noticed**.
 7. **No lost work:** every out-of-scope item becomes a **GitHub Issue** (`agent-discovered`, linked
    from the current issue) in the same session — not chat-only.
-8. **End-of-Task Handoff Protocol** (see `relay-cursor-workflow.md`): sync the board (done + close) →
+8. **End-of-Task Handoff Protocol** (see `scrutineer-cursor-workflow.md`): sync the board (done + close) →
    commit (don't push unless asked) → offer 2–4 selectable next-task options with a recommendation.
 
 Unless explicitly selected by the user, do **not** add new CRDs, webhooks, sidecars, policy engines,
@@ -157,8 +157,8 @@ multi-cluster support, a new orchestrator adapter, or a replacement for Kubernet
 
 ## Relationship to other rules
 
-- `relay-product-vision.md` — product direction and MVP boundaries.
-- `relay-cursor-workflow.md` — implementation contract (full), scope rules, Issue Body Template, and the
+- `scrutineer-product-vision.md` — product direction and MVP boundaries.
+- `scrutineer-cursor-workflow.md` — implementation contract (full), scope rules, Issue Body Template, and the
   End-of-Task Handoff Protocol. Authoritative for **how** to implement; task state lives on the board.
 - `docs/design/`, component `README.md`s, code comments — durable technical context.
 

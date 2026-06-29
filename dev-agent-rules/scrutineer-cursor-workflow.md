@@ -1,10 +1,10 @@
-# Relay Cursor Workflow
+# Scrutineer Cursor Workflow
 
-> Rules and templates for **Cursor-assisted implementation** on Relay.
+> Rules and templates for **Cursor-assisted implementation** on Scrutineer.
 > **Task state lives in GitHub Issues / Projects** — see [`dev-agent-rules/task-management.md`](task-management.md).
 > Durable technical context lives in [`docs/design/`](../docs/design/), component `README.md`s, and code comments. There is no markdown task tracker.
 
-Companion always-on rules: [`dev-agent-rules/task-management.md`](task-management.md) (issue/board protocol) and [`dev-agent-rules/relay-product-vision.md`](relay-product-vision.md) (product direction).
+Companion always-on rules: [`dev-agent-rules/task-management.md`](task-management.md) (issue/board protocol) and [`dev-agent-rules/scrutineer-product-vision.md`](scrutineer-product-vision.md) (product direction).
 
 ---
 
@@ -14,19 +14,19 @@ Companion always-on rules: [`dev-agent-rules/task-management.md`](task-managemen
 |------|----------|----------|
 | **GitHub Issues / Projects** | Humans + agents | **Live task state** — backlog/ready/in-progress/blocked/review/done, ownership, priority, blockers |
 | **`rules/task-management.md`** | Agents | Label model + start/during/done issue protocol |
-| **`docs/design/` + component READMEs + code comments** | Humans + agents | Durable technical context — canonical architecture & per-phase design, semantics, invariants, trust posture (read during planning; see `rules/relay-design-docs.md`) |
-| **`relay-cursor-workflow.md`** (this file) | Primarily agents | Implementation contract, scope rules, task templates |
-| **`rules/relay-product-vision.md`** | Agents | Product vision, MVP boundaries, long-term direction |
+| **`docs/design/` + component READMEs + code comments** | Humans + agents | Durable technical context — canonical architecture & per-phase design, semantics, invariants, trust posture (read during planning; see `rules/scrutineer-design-docs.md`) |
+| **`scrutineer-cursor-workflow.md`** (this file) | Primarily agents | Implementation contract, scope rules, task templates |
+| **`rules/scrutineer-product-vision.md`** | Agents | Product vision, MVP boundaries, long-term direction |
 
 ---
 
 ## Cursor Implementation Contract
 
-When asked to implement a Relay task, Cursor must:
+When asked to implement a Scrutineer task, Cursor must:
 
-1. Read `relay-product-vision.md`, `task-management.md`, and this file when implementing. Pull **durable technical context** from the relevant [`docs/design/`](../docs/design/) doc, component READMEs, and code comments.
+1. Read `scrutineer-product-vision.md`, `task-management.md`, and this file when implementing. Pull **durable technical context** from the relevant [`docs/design/`](../docs/design/) doc, component READMEs, and code comments.
 2. Identify the **exact selected task** — a **GitHub Issue** (`status/ready` + `agent-ready`, per `task-management.md`) or the user prompt. If unclear, ask or propose a short list. Do not pick multiple roadmap phases automatically. Claim the issue (assign / `agent-in-progress`) before editing code.
-3. Before editing code, provide a short plan: selected task, acceptance criterion, expected files, verification command, non-goals. **During planning, read the relevant design doc(s) in [`docs/design/`](../docs/design/)** — start with `architecture.md`, then the phase/area doc that matches the task (see `relay-design-docs.md`). Follow their invariants and non-goals. Do not load all design docs at once; read the one(s) you need.
+3. Before editing code, provide a short plan: selected task, acceptance criterion, expected files, verification command, non-goals. **During planning, read the relevant design doc(s) in [`docs/design/`](../docs/design/)** — start with `architecture.md`, then the phase/area doc that matches the task (see `scrutineer-design-docs.md`). Follow their invariants and non-goals. Do not load all design docs at once; read the one(s) you need.
 4. Implement **only** that task. Do not add adjacent roadmap items unless explicitly requested.
 5. Keep changes reviewable. Prefer **1–4 non-generated files**; if more are needed, stop and explain.
 6. **Explain as you go** (see below).

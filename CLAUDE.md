@@ -6,7 +6,7 @@ Claude Code's entry point for this repo. **All rule content lives once in
 (Cursor uses the `.mdc` frontmatter for glob auto-attach; Claude uses the table
 below). Edit rules in `dev-agent-rules/`, never in the pointers.
 
-**Relay** is a Kubernetes-native governance and runtime control plane for autonomous
+**Scrutineer** is a Kubernetes-native governance and runtime control plane for autonomous
 AI agents — not an orchestrator, workflow engine, or agent framework. A Kubebuilder
 operator around the `AgentSession` CRD; controllers declare/propagate governance,
 cooperative in-pod sidecars enforce it. Orientation:
@@ -16,7 +16,7 @@ cooperative in-pod sidecars enforce it. Orientation:
 
 These are the always-on rules — read them before doing work in this repo:
 
-- [`dev-agent-rules/relay-product-vision.md`](dev-agent-rules/relay-product-vision.md) — product direction, threat model, scope boundaries (one slice at a time; don't overstate enforcement strength; control-plane/data-plane split).
+- [`dev-agent-rules/scrutineer-product-vision.md`](dev-agent-rules/scrutineer-product-vision.md) — product direction, threat model, scope boundaries (one slice at a time; don't overstate enforcement strength; control-plane/data-plane split).
 - [`dev-agent-rules/task-management.md`](dev-agent-rules/task-management.md) — GitHub Issues/Projects are the sole source of task state; claim one issue before editing; out-of-scope work → an issue in the same session.
 - [`dev-agent-rules/component-docs.md`](dev-agent-rules/component-docs.md) — every component keeps a local README; update it in the same change.
 
@@ -28,8 +28,8 @@ These are the always-on rules — read them before doing work in this repo:
 | CRD / API types (`api/**`, `config/crd/**`, `config/samples/**`) | [`crd-api-design.md`](dev-agent-rules/crd-api-design.md) |
 | Distributed-systems / networking code (`internal/**`, `cmd/**`) | [`distributed-systems-networking.md`](dev-agent-rules/distributed-systems-networking.md) |
 | Binaries / sidecars (`cmd/**`, `internal/enforcement/**`, `Dockerfile*`) | [`component-binaries.md`](dev-agent-rules/component-binaries.md) |
-| Any non-trivial change in `api/`, `internal/{controller,enforcement,policy,reporter}` — find the matching design doc | [`relay-design-docs.md`](dev-agent-rules/relay-design-docs.md) → routes into [`docs/design/`](docs/design/) |
-| **How** to implement (contract, Issue Body Template, end-of-task handoff) | [`relay-cursor-workflow.md`](dev-agent-rules/relay-cursor-workflow.md) |
+| Any non-trivial change in `api/`, `internal/{controller,enforcement,policy,reporter}` — find the matching design doc | [`scrutineer-design-docs.md`](dev-agent-rules/scrutineer-design-docs.md) → routes into [`docs/design/`](docs/design/) |
+| **How** to implement (contract, Issue Body Template, end-of-task handoff) | [`scrutineer-cursor-workflow.md`](dev-agent-rules/scrutineer-cursor-workflow.md) |
 
 ## After making code changes — self-review against the rules
 
@@ -49,4 +49,4 @@ front:
    intentional.
 4. Confirm the always-on rules held: component README updated in the same change
    (component-docs), scope stayed narrow with out-of-scope work filed as issues
-   (task-management / relay-product-vision).
+   (task-management / scrutineer-product-vision).

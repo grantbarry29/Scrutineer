@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 var _ = Describe("status patch strategy", func() {
@@ -50,10 +50,10 @@ var _ = Describe("status patch strategy", func() {
 		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 		key := client.ObjectKeyFromObject(session)
 
-		var live relayv1alpha1.AgentSession
+		var live scrutineerv1alpha1.AgentSession
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
-			live.Status.Phase = relayv1alpha1.PhaseRunning
+			live.Status.Phase = scrutineerv1alpha1.PhaseRunning
 			setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
 			setCondition(&live, ConditionPolicyResolved, metav1.ConditionTrue, "PoliciesMerged", "merged 0 referenced policies")
 			setCondition(&live, ConditionRuntimeProfileResolved, metav1.ConditionTrue, "NoProfileRef", "no runtime profile referenced")
@@ -66,7 +66,7 @@ var _ = Describe("status patch strategy", func() {
 
 		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
 		Eventually(func(g Gomega) {
-			var current relayv1alpha1.AgentSession
+			var current scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &current)).To(Succeed())
 
 			staleSnap := current.DeepCopy()
@@ -75,7 +75,7 @@ var _ = Describe("status patch strategy", func() {
 			}
 
 			desired := current.DeepCopy()
-			desired.Status.Phase = relayv1alpha1.PhaseSucceeded
+			desired.Status.Phase = scrutineerv1alpha1.PhaseSucceeded
 			desired.Status.Conditions = []metav1.Condition{
 				*findConditionByType(current.Status.Conditions, ConditionValidated),
 			}
@@ -83,7 +83,7 @@ var _ = Describe("status patch strategy", func() {
 
 			g.Expect(reconciler.patchStatus(testCtx, staleSnap, desired)).To(Succeed())
 
-			var after relayv1alpha1.AgentSession
+			var after scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
 			g.Expect(conditionTypes(after.Status.Conditions)).To(ConsistOf(
 				ConditionValidated,
@@ -94,7 +94,7 @@ var _ = Describe("status patch strategy", func() {
 				ConditionCompleted,
 				ConditionReady,
 			))
-			g.Expect(after.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
+			g.Expect(after.Status.Phase).To(Equal(scrutineerv1alpha1.PhaseSucceeded))
 		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 	})
 
@@ -106,10 +106,10 @@ var _ = Describe("status patch strategy", func() {
 
 		violationTS := metav1.Now()
 		Eventually(func(g Gomega) {
-			var live relayv1alpha1.AgentSession
+			var live scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
-			live.Status.Phase = relayv1alpha1.PhaseRunning
-			AppendRuntimeViolations(&live, []relayv1alpha1.PolicyViolation{{
+			live.Status.Phase = scrutineerv1alpha1.PhaseRunning
+			AppendRuntimeViolations(&live, []scrutineerv1alpha1.PolicyViolation{{
 				Time:    violationTS,
 				Type:    "network",
 				Message: "egress blocked",
@@ -120,7 +120,7 @@ var _ = Describe("status patch strategy", func() {
 
 		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
 		Eventually(func(g Gomega) {
-			var current relayv1alpha1.AgentSession
+			var current scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &current)).To(Succeed())
 			g.Expect(current.Status.Violations).NotTo(BeEmpty())
 
@@ -128,12 +128,12 @@ var _ = Describe("status patch strategy", func() {
 			staleSnap.Status.Violations = nil
 
 			desired := current.DeepCopy()
-			desired.Status.Phase = relayv1alpha1.PhaseSucceeded
+			desired.Status.Phase = scrutineerv1alpha1.PhaseSucceeded
 			desired.Status.Violations = nil
 
 			g.Expect(reconciler.patchStatus(testCtx, staleSnap, desired)).To(Succeed())
 
-			var after relayv1alpha1.AgentSession
+			var after scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
 			g.Expect(after.Status.Violations).To(HaveLen(1))
 			g.Expect(after.Status.Violations[0].Target).To(Equal("10.0.0.0/8"))
@@ -148,14 +148,14 @@ var _ = Describe("status patch strategy", func() {
 
 		runtimeTS := metav1.Now()
 		Eventually(func(g Gomega) {
-			var live relayv1alpha1.AgentSession
+			var live scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
-			live.Status.Phase = relayv1alpha1.PhaseRunning
+			live.Status.Phase = scrutineerv1alpha1.PhaseRunning
 			setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
-			AppendRuntimePolicyDecisions(&live, []relayv1alpha1.PolicyDecision{{
+			AppendRuntimePolicyDecisions(&live, []scrutineerv1alpha1.PolicyDecision{{
 				Time:   runtimeTS,
 				Type:   "network",
-				Action: relayv1alpha1.PolicyDecisionDeny,
+				Action: scrutineerv1alpha1.PolicyDecisionDeny,
 				Reason: "DeniedDomains",
 				Target: "evil.example",
 			}})
@@ -164,30 +164,30 @@ var _ = Describe("status patch strategy", func() {
 
 		reconciler := &AgentSessionReconciler{Client: k8sClient, Scheme: mgr.GetScheme()}
 		Eventually(func(g Gomega) {
-			var current relayv1alpha1.AgentSession
+			var current scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &current)).To(Succeed())
 
 			staleSnap := current.DeepCopy()
 			staleSnap.Status.PolicyDecisions = nil
 
 			desired := current.DeepCopy()
-			desired.Status.Phase = relayv1alpha1.PhaseSucceeded
-			desired.Status.PolicyDecisions = []relayv1alpha1.PolicyDecision{{
+			desired.Status.Phase = scrutineerv1alpha1.PhaseSucceeded
+			desired.Status.PolicyDecisions = []scrutineerv1alpha1.PolicyDecision{{
 				Time:   runtimeTS,
-				Phase:  relayv1alpha1.PolicyDecisionPhaseMerge,
+				Phase:  scrutineerv1alpha1.PolicyDecisionPhaseMerge,
 				Type:   "mode",
-				Action: relayv1alpha1.PolicyDecisionAudit,
+				Action: scrutineerv1alpha1.PolicyDecisionAudit,
 				Reason: "StrictestMode",
 			}}
 
 			g.Expect(reconciler.patchStatus(testCtx, staleSnap, desired)).To(Succeed())
 
-			var after relayv1alpha1.AgentSession
+			var after scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
-			var runtimeDecision *relayv1alpha1.PolicyDecision
+			var runtimeDecision *scrutineerv1alpha1.PolicyDecision
 			for i := range after.Status.PolicyDecisions {
 				d := &after.Status.PolicyDecisions[i]
-				if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == "evil.example" {
+				if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == "evil.example" {
 					runtimeDecision = d
 				}
 			}
@@ -201,7 +201,7 @@ var _ = Describe("status patch strategy", func() {
 		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 		key := client.ObjectKeyFromObject(session)
 
-		var live relayv1alpha1.AgentSession
+		var live scrutineerv1alpha1.AgentSession
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
 			setCondition(&live, ConditionValidated, metav1.ConditionTrue, "SpecValid", "accepted")
@@ -225,7 +225,7 @@ var _ = Describe("status patch strategy", func() {
 		Expect(k8sClient.Status().Patch(testCtx, updated, patch)).To(Succeed())
 
 		Eventually(func(g Gomega) {
-			var after relayv1alpha1.AgentSession
+			var after scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
 			g.Expect(findConditionByType(after.Status.Conditions, ConditionRuntimeCreated)).To(BeNil(),
 				"JSON merge patch replaces the whole conditions array and drops RuntimeCreated")
@@ -242,18 +242,18 @@ var _ = Describe("PatchRuntimePolicyReport", func() {
 
 		ts := metav1.NewTime(time.Unix(4242, 0))
 		report := enforcement.RuntimeReport{
-			Decisions: []relayv1alpha1.PolicyDecision{{
+			Decisions: []scrutineerv1alpha1.PolicyDecision{{
 				Time:    ts,
-				Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+				Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 				Type:    "network",
-				Action:  relayv1alpha1.PolicyDecisionDeny,
+				Action:  scrutineerv1alpha1.PolicyDecisionDeny,
 				Reason:  "DeniedDomain",
 				Target:  "evil.example.com",
 				Message: "egress blocked",
 			}},
-			Events: []relayv1alpha1.SessionEvent{{
+			Events: []scrutineerv1alpha1.SessionEvent{{
 				Time:    ts,
-				Type:    relayv1alpha1.SessionEventTypeNetwork,
+				Type:    scrutineerv1alpha1.SessionEventTypeNetwork,
 				Source:  "egress-proxy",
 				Action:  "deny",
 				Target:  "evil.example.com",
@@ -264,7 +264,7 @@ var _ = Describe("PatchRuntimePolicyReport", func() {
 
 		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report)).To(Succeed())
 
-		var after relayv1alpha1.AgentSession
+		var after scrutineerv1alpha1.AgentSession
 		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
 		// The reconciler may also write merge-time decisions; assert on the
 		// runtime-phase evidence specifically rather than total counts.
@@ -286,10 +286,10 @@ var _ = Describe("PatchRuntimePolicyReport", func() {
 	})
 })
 
-func runtimeDecisionsWithTarget(decisions []relayv1alpha1.PolicyDecision, target string) []relayv1alpha1.PolicyDecision {
-	var out []relayv1alpha1.PolicyDecision
+func runtimeDecisionsWithTarget(decisions []scrutineerv1alpha1.PolicyDecision, target string) []scrutineerv1alpha1.PolicyDecision {
+	var out []scrutineerv1alpha1.PolicyDecision
 	for _, d := range decisions {
-		if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == target {
+		if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == target {
 			out = append(out, d)
 		}
 	}

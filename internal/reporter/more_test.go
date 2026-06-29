@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
 )
 
 func TestHandler_rejectsNonPostAndBadPath(t *testing.T) {
@@ -84,9 +84,9 @@ func TestHandler_notFoundSession(t *testing.T) {
 	rec := postReport(t, h, ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "missing"},
 		Backend: "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{
-			Phase: relayv1alpha1.PolicyDecisionPhaseRuntime, Type: "network",
-			Action: relayv1alpha1.PolicyDecisionDeny, Reason: "DeniedDomain",
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Phase: scrutineerv1alpha1.PolicyDecisionPhaseRuntime, Type: "network",
+			Action: scrutineerv1alpha1.PolicyDecisionDeny, Reason: "DeniedDomain",
 		}},
 	}, "Bearer ok")
 	if rec.Code != http.StatusNotFound {
@@ -96,7 +96,7 @@ func TestHandler_notFoundSession(t *testing.T) {
 
 func TestHandler_rateLimited(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(500, 0))
-	session := &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+	session := &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
 	cl := newFakeClient(session)
 	h := &Handler{
 		Writer:   cl.Status(),
@@ -108,9 +108,9 @@ func TestHandler_rateLimited(t *testing.T) {
 	body := ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{
-			Time: ts, Phase: relayv1alpha1.PolicyDecisionPhaseRuntime, Type: "network",
-			Action: relayv1alpha1.PolicyDecisionDeny, Reason: "DeniedDomain", Target: "a",
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Time: ts, Phase: scrutineerv1alpha1.PolicyDecisionPhaseRuntime, Type: "network",
+			Action: scrutineerv1alpha1.PolicyDecisionDeny, Reason: "DeniedDomain", Target: "a",
 		}},
 	}
 	if rec := postReport(t, h, body, "Bearer ok"); rec.Code != http.StatusAccepted {
@@ -133,14 +133,14 @@ func TestValidateAndNormalizeReport_fillsAndValidates(t *testing.T) {
 	report, err := ValidateAndNormalizeReport(ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{
-			Time: future, Type: "network", Action: relayv1alpha1.PolicyDecisionDeny, Reason: "x",
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Time: future, Type: "network", Action: scrutineerv1alpha1.PolicyDecisionDeny, Reason: "x",
 			// A malicious client tries to self-attest a higher assurance level;
 			// the controller-side reporter must override it.
-			AssuranceLevel: relayv1alpha1.EvidenceObserved,
+			AssuranceLevel: scrutineerv1alpha1.EvidenceObserved,
 		}},
-		Violations: []relayv1alpha1.PolicyViolation{{Type: "network", Message: "m"}},
-	}, now, relayv1alpha1.PolicyModeEnforced)
+		Violations: []scrutineerv1alpha1.PolicyViolation{{Type: "network", Message: "m"}},
+	}, now, scrutineerv1alpha1.PolicyModeEnforced)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,16 +150,16 @@ func TestValidateAndNormalizeReport_fillsAndValidates(t *testing.T) {
 	if report.Decisions[0].Actor != "egress-proxy" {
 		t.Fatalf("actor default = %q", report.Decisions[0].Actor)
 	}
-	if report.Decisions[0].Mode != relayv1alpha1.PolicyModeEnforced {
+	if report.Decisions[0].Mode != scrutineerv1alpha1.PolicyModeEnforced {
 		t.Fatalf("mode override = %q", report.Decisions[0].Mode)
 	}
-	if report.Decisions[0].AssuranceLevel != relayv1alpha1.EvidenceSelfReported {
+	if report.Decisions[0].AssuranceLevel != scrutineerv1alpha1.EvidenceSelfReported {
 		t.Fatalf("decision assurance = %q, want self-reported (client value must be overridden)", report.Decisions[0].AssuranceLevel)
 	}
 	if report.Violations[0].Time.IsZero() {
 		t.Fatal("violation time not filled")
 	}
-	if report.Violations[0].AssuranceLevel != relayv1alpha1.EvidenceSelfReported {
+	if report.Violations[0].AssuranceLevel != scrutineerv1alpha1.EvidenceSelfReported {
 		t.Fatalf("violation assurance = %q, want self-reported", report.Violations[0].AssuranceLevel)
 	}
 }
@@ -170,16 +170,16 @@ func TestValidateAndNormalizeReport_rejectsBadInput(t *testing.T) {
 		name string
 		req  ReportRequest
 	}{
-		{"missing session", ReportRequest{Backend: "b", Decisions: []relayv1alpha1.PolicyDecision{{Type: "network"}}}},
-		{"missing backend", ReportRequest{Session: SessionRef{Namespace: "n", Name: "s"}, Decisions: []relayv1alpha1.PolicyDecision{{Type: "network"}}}},
+		{"missing session", ReportRequest{Backend: "b", Decisions: []scrutineerv1alpha1.PolicyDecision{{Type: "network"}}}},
+		{"missing backend", ReportRequest{Session: SessionRef{Namespace: "n", Name: "s"}, Decisions: []scrutineerv1alpha1.PolicyDecision{{Type: "network"}}}},
 		{"empty report", ReportRequest{Session: SessionRef{Namespace: "n", Name: "s"}, Backend: "b"}},
 		{"event missing type", ReportRequest{
 			Session: SessionRef{Namespace: "n", Name: "s"}, Backend: "b",
-			Events: []relayv1alpha1.SessionEvent{{Message: "no type"}},
+			Events: []scrutineerv1alpha1.SessionEvent{{Message: "no type"}},
 		}},
 		{"too many events", ReportRequest{
 			Session: SessionRef{Namespace: "n", Name: "s"}, Backend: "b",
-			Events: make([]relayv1alpha1.SessionEvent, MaxEventsPerReport+1),
+			Events: make([]scrutineerv1alpha1.SessionEvent, MaxEventsPerReport+1),
 		}},
 	}
 	for _, tc := range cases {
@@ -198,7 +198,7 @@ func TestValidateAndNormalizeReport_acceptsUsageOnlyReport(t *testing.T) {
 	report, err := ValidateAndNormalizeReport(ReportRequest{
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "agent",
-		Usage:   &relayv1alpha1.SessionUsage{InputTokens: 10, OutputTokens: 5},
+		Usage:   &scrutineerv1alpha1.SessionUsage{InputTokens: 10, OutputTokens: 5},
 	}, now, "")
 	if err != nil {
 		t.Fatal(err)
@@ -215,8 +215,8 @@ func TestValidateAndNormalizeReport_pinsTimesToSecondPrecision(t *testing.T) {
 	report, err := ValidateAndNormalizeReport(ReportRequest{
 		Session:   SessionRef{Namespace: "ns", Name: "s"},
 		Backend:   "egress-proxy",
-		Decisions: []relayv1alpha1.PolicyDecision{{Type: "network", Action: relayv1alpha1.PolicyDecisionDeny, Reason: "x"}},
-		Events:    []relayv1alpha1.SessionEvent{{Type: relayv1alpha1.SessionEventTypeNetwork}},
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{Type: "network", Action: scrutineerv1alpha1.PolicyDecisionDeny, Reason: "x"}},
+		Events:    []scrutineerv1alpha1.SessionEvent{{Type: scrutineerv1alpha1.SessionEventTypeNetwork}},
 	}, received, "")
 	if err != nil {
 		t.Fatal(err)
@@ -232,8 +232,8 @@ func TestValidateAndNormalizeReport_pinsTimesToSecondPrecision(t *testing.T) {
 func TestKubeIdentityVerifier_Verify_happyPath(t *testing.T) {
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: relayjob.NamePrefix + "s", Namespace: "ns1",
-			Labels: map[string]string{relayjob.LabelSessionRef: "s"},
+			Name: scrutineerjob.NamePrefix + "s", Namespace: "ns1",
+			Labels: map[string]string{scrutineerjob.LabelSessionRef: "s"},
 		},
 	}
 	pod := &corev1.Pod{
@@ -281,7 +281,7 @@ func TestKubeIdentityVerifier_Verify_missingToken(t *testing.T) {
 }
 
 func TestServer_startAndShutdown(t *testing.T) {
-	cl := newFakeClient(&relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}})
+	cl := newFakeClient(&scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}})
 	run := NewRunnable(Options{
 		BindAddress: "127.0.0.1:18099",
 		Client:      cl,

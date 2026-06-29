@@ -1,8 +1,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: relay-controller-manager
-  namespace: relay-system
+  name: scrutineer-controller-manager
+  namespace: scrutineer-system
 spec:
   template:
     spec:

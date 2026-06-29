@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/audit"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/audit"
 )
 
 // reconcileRuntimeApprovals resolves the lifecycle of mid-execution, per-tool
@@ -37,12 +37,12 @@ import (
 // (status.policyDecisions, self-reported) is populated later by the tool-gateway
 // via the reporter, not here — the controller only records the authoritative
 // human decision into the audit sink and the ApprovalRequest status.
-func (r *AgentSessionReconciler) reconcileRuntimeApprovals(ctx context.Context, session *relayv1alpha1.AgentSession) error {
-	var list relayv1alpha1.ApprovalRequestList
+func (r *AgentSessionReconciler) reconcileRuntimeApprovals(ctx context.Context, session *scrutineerv1alpha1.AgentSession) error {
+	var list scrutineerv1alpha1.ApprovalRequestList
 	if err := r.List(ctx, &list, client.InNamespace(session.Namespace)); err != nil {
 		return fmt.Errorf("list ApprovalRequests: %w", err)
 	}
-	var pending []relayv1alpha1.RuntimeApprovalSummary
+	var pending []scrutineerv1alpha1.RuntimeApprovalSummary
 	for i := range list.Items {
 		req := &list.Items[i]
 		if req.Spec.SessionRef.Name != session.Name || !req.Spec.IsRuntime() {
@@ -72,12 +72,12 @@ const maxPendingApprovals = 64
 
 // runtimeApprovalSummary projects an ApprovalRequest into the redaction-safe
 // status view (argDigest only — never raw arguments).
-func runtimeApprovalSummary(req *relayv1alpha1.ApprovalRequest) relayv1alpha1.RuntimeApprovalSummary {
+func runtimeApprovalSummary(req *scrutineerv1alpha1.ApprovalRequest) scrutineerv1alpha1.RuntimeApprovalSummary {
 	state := req.Status.State
 	if state == "" {
-		state = relayv1alpha1.ApprovalStatePending
+		state = scrutineerv1alpha1.ApprovalStatePending
 	}
-	return relayv1alpha1.RuntimeApprovalSummary{
+	return scrutineerv1alpha1.RuntimeApprovalSummary{
 		Name:        req.Name,
 		RequestID:   req.Spec.RequestID,
 		Action:      req.Spec.Action,
@@ -92,7 +92,7 @@ func runtimeApprovalSummary(req *relayv1alpha1.ApprovalRequest) relayv1alpha1.Ru
 
 // setPendingApprovals sorts (for stable, idempotent status patches), caps, and
 // assigns the outstanding-hold summary. An empty list clears the field.
-func setPendingApprovals(session *relayv1alpha1.AgentSession, pending []relayv1alpha1.RuntimeApprovalSummary) {
+func setPendingApprovals(session *scrutineerv1alpha1.AgentSession, pending []scrutineerv1alpha1.RuntimeApprovalSummary) {
 	if len(pending) == 0 {
 		session.Status.PendingApprovals = nil
 		return
@@ -106,18 +106,18 @@ func setPendingApprovals(session *relayv1alpha1.AgentSession, pending []relayv1a
 
 // reconcileRuntimeApproval drives a single runtime ApprovalRequest from its
 // current human decision to a controller-observed state.
-func (r *AgentSessionReconciler) reconcileRuntimeApproval(ctx context.Context, session *relayv1alpha1.AgentSession, req *relayv1alpha1.ApprovalRequest) error {
+func (r *AgentSessionReconciler) reconcileRuntimeApproval(ctx context.Context, session *scrutineerv1alpha1.AgentSession, req *scrutineerv1alpha1.ApprovalRequest) error {
 	gatePolicy := r.lookupApprovalPolicy(ctx, session.Namespace, req.Spec.PolicyRef)
 	target := runtimeApprovalTarget(req)
 	firstObservation := req.Status.State == ""
 
 	switch req.Spec.Decision {
-	case relayv1alpha1.ApprovalDecisionGranted:
+	case scrutineerv1alpha1.ApprovalDecisionGranted:
 		// Honor a grant only from a listed approver. DecidedBy is authenticated
 		// when the identity webhook is enabled (--enable-webhooks); otherwise it
 		// is self-declared and the real boundary is RBAC on patching the request.
 		if gatePolicy != nil && !approverAllowed(gatePolicy, req.Spec.DecidedBy) {
-			_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStatePending, gatePolicy,
+			_ = r.setApprovalRequestState(ctx, req, scrutineerv1alpha1.ApprovalStatePending, gatePolicy,
 				"granted by an unlisted approver; awaiting an authorized decision")
 			r.recordWarning(session, EventReasonApprovalUnauthorized,
 				fmt.Sprintf("ApprovalRequest %q grant from %q is not a listed approver of policy %q; not honored",
@@ -131,7 +131,7 @@ func (r *AgentSessionReconciler) reconcileRuntimeApproval(ctx context.Context, s
 			}
 			if remaining := remainingApprovers(gatePolicy, req); len(remaining) > 0 {
 				all := approverNames(gatePolicy)
-				_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStatePending, gatePolicy,
+				_ = r.setApprovalRequestState(ctx, req, scrutineerv1alpha1.ApprovalStatePending, gatePolicy,
 					fmt.Sprintf("allOf: awaiting %d more approver(s): %s", len(remaining), strings.Join(remaining, ", ")))
 				r.recordNormal(session, EventReasonApprovalPartial,
 					fmt.Sprintf("Approval %d of %d for tool %q; awaiting %s",
@@ -139,7 +139,7 @@ func (r *AgentSessionReconciler) reconcileRuntimeApproval(ctx context.Context, s
 				return nil
 			}
 		}
-		if err := r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateGranted, gatePolicy, "decision granted"); err != nil {
+		if err := r.setApprovalRequestState(ctx, req, scrutineerv1alpha1.ApprovalStateGranted, gatePolicy, "decision granted"); err != nil {
 			return err
 		}
 		r.recordNormal(session, EventReasonApprovalGranted,
@@ -147,8 +147,8 @@ func (r *AgentSessionReconciler) reconcileRuntimeApproval(ctx context.Context, s
 		r.auditRuntimeApprovalDecision(ctx, session, req, target, true, "ApprovalGranted")
 		return nil
 
-	case relayv1alpha1.ApprovalDecisionDenied:
-		if err := r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateDenied, gatePolicy, "decision denied"); err != nil {
+	case scrutineerv1alpha1.ApprovalDecisionDenied:
+		if err := r.setApprovalRequestState(ctx, req, scrutineerv1alpha1.ApprovalStateDenied, gatePolicy, "decision denied"); err != nil {
 			return err
 		}
 		r.recordWarning(session, EventReasonApprovalDenied,
@@ -159,14 +159,14 @@ func (r *AgentSessionReconciler) reconcileRuntimeApproval(ctx context.Context, s
 	default: // pending
 		if gatePolicy != nil {
 			if expired, onTimeout := approvalTimedOut(req, gatePolicy); expired {
-				if onTimeout == relayv1alpha1.ApprovalTimeoutAllow {
-					if err := r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateGranted, gatePolicy, "timed out; onTimeout=allow"); err != nil {
+				if onTimeout == scrutineerv1alpha1.ApprovalTimeoutAllow {
+					if err := r.setApprovalRequestState(ctx, req, scrutineerv1alpha1.ApprovalStateGranted, gatePolicy, "timed out; onTimeout=allow"); err != nil {
 						return err
 					}
 					r.auditRuntimeApprovalDecision(ctx, session, req, target, true, "ApprovalTimeoutAllow")
 					return nil
 				}
-				if err := r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStateExpired, gatePolicy, "timed out; onTimeout=deny"); err != nil {
+				if err := r.setApprovalRequestState(ctx, req, scrutineerv1alpha1.ApprovalStateExpired, gatePolicy, "timed out; onTimeout=deny"); err != nil {
 					return err
 				}
 				r.recordWarning(session, EventReasonApprovalDenied,
@@ -175,7 +175,7 @@ func (r *AgentSessionReconciler) reconcileRuntimeApproval(ctx context.Context, s
 				return nil
 			}
 		}
-		_ = r.setApprovalRequestState(ctx, req, relayv1alpha1.ApprovalStatePending, gatePolicy, "awaiting decision")
+		_ = r.setApprovalRequestState(ctx, req, scrutineerv1alpha1.ApprovalStatePending, gatePolicy, "awaiting decision")
 		if firstObservation {
 			r.recordNormal(session, EventReasonApprovalRequested,
 				fmt.Sprintf("Awaiting runtime approval for tool %q (ApprovalRequest %q)", target, req.Name))
@@ -189,13 +189,13 @@ func (r *AgentSessionReconciler) reconcileRuntimeApproval(ctx context.Context, s
 // runtime hold to the audit sink. It is called once per request because decided
 // requests are skipped on subsequent reconciles. The actor is the deciding
 // approver(s); session-level (self-reported) evidence is the gateway's job.
-func (r *AgentSessionReconciler) auditRuntimeApprovalDecision(ctx context.Context, session *relayv1alpha1.AgentSession, req *relayv1alpha1.ApprovalRequest, target string, granted bool, reason string) {
+func (r *AgentSessionReconciler) auditRuntimeApprovalDecision(ctx context.Context, session *scrutineerv1alpha1.AgentSession, req *scrutineerv1alpha1.ApprovalRequest, target string, granted bool, reason string) {
 	audit.Emit(ctx, audit.ApprovalDecision(session.Namespace, session.Name, target,
 		runtimeApprovalActor(req), reason, granted, time.Now()))
 }
 
 // runtimeApprovalActor is the best-effort approver identity for a runtime decision.
-func runtimeApprovalActor(req *relayv1alpha1.ApprovalRequest) string {
+func runtimeApprovalActor(req *scrutineerv1alpha1.ApprovalRequest) string {
 	if len(req.Status.ApprovedBy) > 0 {
 		return strings.Join(req.Status.ApprovedBy, ",")
 	}
@@ -205,12 +205,12 @@ func runtimeApprovalActor(req *relayv1alpha1.ApprovalRequest) string {
 	if by := strings.TrimSpace(req.Spec.DecidedBy); by != "" {
 		return by
 	}
-	return "relay-controller"
+	return "scrutineer-controller"
 }
 
 // runtimeApprovalTarget is the human-readable subject of a runtime hold: the
 // scoped tool target if set, else the action.
-func runtimeApprovalTarget(req *relayv1alpha1.ApprovalRequest) string {
+func runtimeApprovalTarget(req *scrutineerv1alpha1.ApprovalRequest) string {
 	if t := strings.TrimSpace(req.Spec.Scope.Target); t != "" {
 		return t
 	}
@@ -220,11 +220,11 @@ func runtimeApprovalTarget(req *relayv1alpha1.ApprovalRequest) string {
 // lookupApprovalPolicy fetches the named ApprovalPolicy, returning nil when the
 // name is empty or the policy is absent (runtime holds may be policy-less, in
 // which case RBAC is the only approver gate and there is no decision deadline).
-func (r *AgentSessionReconciler) lookupApprovalPolicy(ctx context.Context, namespace, name string) *relayv1alpha1.ApprovalPolicy {
+func (r *AgentSessionReconciler) lookupApprovalPolicy(ctx context.Context, namespace, name string) *scrutineerv1alpha1.ApprovalPolicy {
 	if name == "" {
 		return nil
 	}
-	var p relayv1alpha1.ApprovalPolicy
+	var p scrutineerv1alpha1.ApprovalPolicy
 	if err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &p); err != nil {
 		if !apierrors.IsNotFound(err) {
 			// Treat transient errors as "no policy" for this pass; the request stays
@@ -237,11 +237,11 @@ func (r *AgentSessionReconciler) lookupApprovalPolicy(ctx context.Context, names
 }
 
 // approvalStateDecided reports whether a request has reached a final state.
-func approvalStateDecided(s relayv1alpha1.ApprovalState) bool {
+func approvalStateDecided(s scrutineerv1alpha1.ApprovalState) bool {
 	switch s {
-	case relayv1alpha1.ApprovalStateGranted,
-		relayv1alpha1.ApprovalStateDenied,
-		relayv1alpha1.ApprovalStateExpired:
+	case scrutineerv1alpha1.ApprovalStateGranted,
+		scrutineerv1alpha1.ApprovalStateDenied,
+		scrutineerv1alpha1.ApprovalStateExpired:
 		return true
 	}
 	return false

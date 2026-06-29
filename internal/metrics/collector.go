@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // collectTimeout bounds the cache reads done on each Prometheus scrape so a
@@ -52,7 +52,7 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 
 	// Refresh each gauge family only when its List succeeds; on a transient error
 	// keep the previous values rather than zeroing the gauges for that scrape.
-	var list relayv1alpha1.AgentSessionList
+	var list scrutineerv1alpha1.AgentSessionList
 	if err := c.Client.List(ctx, &list); err == nil {
 		phaseCounts := make(map[string]map[string]int)
 		violationTotals := make(map[string]int)
@@ -84,7 +84,7 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 
 	// Approval queue depth is the count of ApprovalRequests still awaiting a human
 	// decision — the true Phase 5 gate, not the prior runtime ApprovalRequired proxy.
-	var reqs relayv1alpha1.ApprovalRequestList
+	var reqs scrutineerv1alpha1.ApprovalRequestList
 	if err := c.Client.List(ctx, &reqs); err == nil {
 		approvalQueue := 0
 		for i := range reqs.Items {
@@ -103,6 +103,6 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 // isPendingApproval reports whether an ApprovalRequest is still awaiting a human
 // decision. An empty state is the transient window between the controller
 // creating the request and stamping it Pending, and still represents an open gate.
-func isPendingApproval(state relayv1alpha1.ApprovalState) bool {
-	return state == relayv1alpha1.ApprovalStatePending || state == ""
+func isPendingApproval(state scrutineerv1alpha1.ApprovalState) bool {
+	return state == scrutineerv1alpha1.ApprovalStatePending || state == ""
 }

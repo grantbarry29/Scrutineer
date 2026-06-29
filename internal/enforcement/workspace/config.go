@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 // Env keys for fs-gateway sidecars (mirrors job builder AGENT_POLICY_* names).
 const (
-	EnvListenAddr              = "RELAY_FS_GATEWAY_LISTEN"
+	EnvListenAddr              = "SCRUTINEER_FS_GATEWAY_LISTEN"
 	EnvPolicyAllowedPaths      = "AGENT_POLICY_ALLOWED_PATHS"
 	EnvPolicyDeniedPaths       = "AGENT_POLICY_DENIED_PATHS"
 	EnvPolicyMaxWorkspaceBytes = "AGENT_POLICY_MAX_WORKSPACE_BYTES"
@@ -33,7 +33,7 @@ const (
 type GatewayConfig struct {
 	SessionNamespace  string
 	SessionName       string
-	Mode              relayv1alpha1.PolicyMode
+	Mode              scrutineerv1alpha1.PolicyMode
 	AllowedPaths      []string
 	DeniedPaths       []string
 	MaxWorkspaceBytes *int64

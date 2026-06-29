@@ -4,17 +4,17 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
-  name: agentpolicies.relay.secureai.dev
+  name: toolpolicies.scrutineer.sh
 spec:
-  group: relay.secureai.dev
+  group: scrutineer.sh
   names:
-    kind: AgentPolicy
-    listKind: AgentPolicyList
-    plural: agentpolicies
+    kind: ToolPolicy
+    listKind: ToolPolicyList
+    plural: toolpolicies
     shortNames:
-    - ap
-    - agentpol
-    singular: agentpolicy
+    - tp
+    - toolpol
+    singular: toolpolicy
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -27,8 +27,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AgentPolicy is a reusable governance policy that AgentSessions
-          can reference.
+        description: ToolPolicy is a reusable tool/MCP policy that AgentSessions can
+          reference.
         properties:
           apiVersion:
             description: |-
@@ -48,37 +48,20 @@ spec:
           metadata:
             type: object
           spec:
-            description: AgentPolicySpec defines reusable governance rules for AgentSessions.
+            description: ToolPolicySpec defines reusable tool/MCP governance rules
+              for AgentSessions.
             properties:
-              allowedCIDRs:
-                description: AllowedCIDRs is an IP/CIDR allowlist for outbound network
-                  access.
-                items:
-                  type: string
-                type: array
-              allowedDomains:
-                description: AllowedDomains is an FQDN allowlist for outbound network
-                  access.
-                items:
-                  type: string
-                type: array
-              allowedPaths:
-                description: AllowedPaths is a path/glob allowlist for file and workspace
-                  access (e.g. /workspace/**).
-                items:
-                  type: string
-                type: array
               allowedTools:
-                description: AllowedTools lists tool identifiers the agent is permitted
-                  to invoke.
+                description: AllowedTools lists tool/MCP identifiers the agent may
+                  invoke.
                 items:
                   type: string
                 type: array
               argumentRules:
                 description: |-
-                  ArgumentRules constrain tool calls by their arguments, applied after name-level tool
-                  allow/deny. Merged by concatenation across layers (constraints only tighten).
-                  Enforcement is Phase 3 (tool gateway). See
+                  ArgumentRules constrain tool calls by their arguments (e.g. restrict read_file to
+                  /workspace), applied only after name-level allow/deny. Declared and propagated
+                  policy; enforcement is Phase 3 (tool gateway). See
                   docs/design/phase-3-tool-argument-constraints.md.
                 items:
                   description: |-
@@ -154,52 +137,21 @@ spec:
                   - tools
                   type: object
                 type: array
-              deniedCIDRs:
-                description: DeniedCIDRs is an IP/CIDR denylist for outbound network
-                  access.
-                items:
-                  type: string
-                type: array
-              deniedDomains:
-                description: DeniedDomains is an FQDN denylist for outbound network
-                  access.
-                items:
-                  type: string
-                type: array
-              deniedPaths:
-                description: DeniedPaths is a path/glob denylist for file and workspace
-                  access (e.g. /etc/**).
-                items:
-                  type: string
-                type: array
               deniedTools:
-                description: DeniedTools lists tool identifiers the agent must not
-                  invoke.
+                description: DeniedTools lists tool/MCP identifiers the agent must
+                  not invoke.
                 items:
                   type: string
                 type: array
               maxCallsPerMinute:
-                description: MaxCallsPerMinute caps tool invocations per minute (declared
-                  and propagated; enforcement is Phase 3).
-                format: int32
-                minimum: 0
-                type: integer
-              maxNetworkRequests:
-                description: MaxNetworkRequests caps the total number of network requests
-                  the agent may issue.
+                description: MaxCallsPerMinute caps tool invocations per minute (propagated
+                  to effective policy and env; enforcement is Phase 3).
                 format: int32
                 minimum: 0
                 type: integer
               maxToolCalls:
-                description: MaxToolCalls caps the total number of tool calls the
-                  agent may issue.
+                description: MaxToolCalls caps total tool invocations for the session.
                 format: int32
-                minimum: 0
-                type: integer
-              maxWorkspaceBytes:
-                description: MaxWorkspaceBytes caps total workspace storage when enforced
-                  by a future FS gateway.
-                format: int64
                 minimum: 0
                 type: integer
               mode:
@@ -214,23 +166,16 @@ spec:
                   - enforced
                 default: audit-only
                 description: |-
-                  Mode controls how rules are interpreted once enforcement exists.
+                  Mode controls how tool rules are interpreted once enforcement exists.
                   Defaults to audit-only when unset.
                 type: string
-              requireHumanApproval:
-                description: RequireHumanApproval lists action types that require
-                  human approval before execution.
-                items:
-                  type: string
-                type: array
             type: object
           status:
-            description: AgentPolicyStatus defines the observed state of an AgentPolicy.
+            description: ToolPolicyStatus defines the observed state of a ToolPolicy.
             properties:
               observedGeneration:
-                description: |-
-                  ObservedGeneration is the last spec generation observed by a controller.
-                  Reserved for a future AgentPolicy controller; unused in Phase 2 slice.
+                description: ObservedGeneration is reserved for a future ToolPolicy
+                  controller.
                 format: int64
                 type: integer
             type: object

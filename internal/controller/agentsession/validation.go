@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -25,7 +25,7 @@ import (
 // CRD-level validation (enum, min/max, required fields) is also expressed via Kubebuilder
 // markers on the API types; this function exists so the controller can reject malformed
 // objects cleanly even when the CRD schema is lax (e.g. older clusters, hot-loaded CRDs).
-func validateSpec(session *relayv1alpha1.AgentSession) error {
+func validateSpec(session *scrutineerv1alpha1.AgentSession) error {
 	spec := session.Spec
 
 	if strings.TrimSpace(spec.Task.Description) == "" &&
@@ -113,7 +113,7 @@ func validateSpec(session *relayv1alpha1.AgentSession) error {
 	return nil
 }
 
-func validateRuntimeProfileRef(ref *relayv1alpha1.RuntimeProfileRef) error {
+func validateRuntimeProfileRef(ref *scrutineerv1alpha1.RuntimeProfileRef) error {
 	if ref == nil {
 		return nil
 	}
@@ -131,6 +131,6 @@ func validateRuntimeProfileRef(ref *relayv1alpha1.RuntimeProfileRef) error {
 // equalStatus compares two AgentSessionStatus values, treating nil and empty slices as equal
 // where possible. It is intentionally conservative; when in doubt it returns false so that
 // the status is re-patched. This is safe because controller-runtime de-duplicates work.
-func equalStatus(a, b *relayv1alpha1.AgentSessionStatus) bool {
+func equalStatus(a, b *scrutineerv1alpha1.AgentSessionStatus) bool {
 	return reflect.DeepEqual(a, b)
 }

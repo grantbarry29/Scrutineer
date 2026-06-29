@@ -1,7 +1,7 @@
 
 # Component Documentation
 
-Every **independently built, deployed, or operated** Relay component keeps a
+Every **independently built, deployed, or operated** Scrutineer component keeps a
 **concise local `README.md`** next to its code. This includes binaries, controllers,
 services, sidecars/daemons, workers, and CLIs — not libraries, generated code,
 vendored deps, fixtures, or build output.

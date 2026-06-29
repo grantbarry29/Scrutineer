@@ -23,13 +23,13 @@ rules:
   verbs:
   - get
 - apiGroups:
-  - relay.secureai.dev
+  - scrutineer.sh
   resources:
   - agentsessions
   verbs:
   - get
 - apiGroups:
-  - relay.secureai.dev
+  - scrutineer.sh
   resources:
   - agentsessions/status
   verbs:
@@ -37,7 +37,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - relay.secureai.dev
+  - scrutineer.sh
   resources:
   - approvalrequests
   verbs:

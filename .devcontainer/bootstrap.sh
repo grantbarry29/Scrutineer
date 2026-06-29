@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Relay devcontainer bootstrap.
+# Scrutineer devcontainer bootstrap.
 #
 # Runs once on container create (postCreateCommand) and is safe to re-run.
 #
@@ -10,7 +10,7 @@
 #   3. Create a local kind cluster named $KIND_CLUSTER_NAME if missing.
 #   4. Attach the dev container to kind's docker network and rewrite kubeconfig
 #      so the API server is reachable from inside this container.
-#   5. Install the Relay CRD into that cluster.
+#   5. Install the Scrutineer CRD into that cluster.
 #   6. Print next steps.
 #
 # It does NOT build the controller image or run the controller; that flow lives
@@ -18,13 +18,13 @@
 #
 set -euo pipefail
 
-WORKSPACE="${WORKSPACE:-/workspaces/Relay}"
-KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-relay-dev}"
+WORKSPACE="${WORKSPACE:-/workspaces/Scrutineer}"
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-scrutineer-dev}"
 KIND_CONFIG="${WORKSPACE}/.devcontainer/kind-config.yaml"
 KIND_UP="${WORKSPACE}/.devcontainer/kind-up.sh"
 
-log()  { printf '\033[1;34m[relay-bootstrap]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[relay-bootstrap]\033[0m %s\n' "$*" >&2; }
+log()  { printf '\033[1;34m[scrutineer-bootstrap]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[scrutineer-bootstrap]\033[0m %s\n' "$*" >&2; }
 
 cd_workspace() {
   if [[ -d "${WORKSPACE}" ]]; then
@@ -67,19 +67,19 @@ ensure_kind_cluster() {
 }
 
 install_crd() {
-  log "installing Relay CRD..."
-  kubectl apply -f config/crd/bases/relay.secureai.dev_agentsessions.yaml
+  log "installing Scrutineer CRD..."
+  kubectl apply -f config/crd/bases/scrutineer.sh_agentsessions.yaml
   kubectl wait --for=condition=Established \
-    crd/agentsessions.relay.secureai.dev --timeout=60s
+    crd/agentsessions.scrutineer.sh --timeout=60s
 }
 
 print_next_steps() {
   cat <<EOF
 
-\033[1;32m[relay-bootstrap]\033[0m Relay dev environment is ready.
+\033[1;32m[scrutineer-bootstrap]\033[0m Scrutineer dev environment is ready.
 
   Cluster:     kind-${KIND_CLUSTER_NAME}
-  CRD:         agentsessions.relay.secureai.dev (installed)
+  CRD:         agentsessions.scrutineer.sh (installed)
   Context:     $(kubectl config current-context)
 
 Next steps:
@@ -88,7 +88,7 @@ Next steps:
   make run
 
   # In a second terminal, apply a sample AgentSession:
-  kubectl apply -f config/samples/relay_v1alpha1_agentsession.yaml
+  kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession.yaml
   kubectl get agentsessions -w
 
   # Or build + load + deploy the controller as a Pod in-cluster:

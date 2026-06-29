@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
-const runtimeActor = "relay-dns-proxy"
+const runtimeActor = "scrutineer-dns-proxy"
 
 // RuntimeReportForEgress evaluates an egress request and builds status evidence.
 func RuntimeReportForEgress(ctx enforcement.SessionContext, req EgressRequest, now time.Time) enforcement.RuntimeReport {
@@ -40,9 +40,9 @@ func runtimeReport(ctx enforcement.SessionContext, req EgressRequest, auth Egres
 		target = "unknown"
 	}
 
-	decision := relayv1alpha1.PolicyDecision{
+	decision := scrutineerv1alpha1.PolicyDecision{
 		Time:    ts,
-		Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+		Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 		Type:    "network",
 		Action:  auth.Action,
 		Actor:   runtimeActor,
@@ -54,10 +54,10 @@ func runtimeReport(ctx enforcement.SessionContext, req EgressRequest, auth Egres
 	}
 
 	report := enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{decision},
+		Decisions: []scrutineerv1alpha1.PolicyDecision{decision},
 	}
 	if v, ok := enforcement.ViolationFromDecision(decision); ok {
-		report.Violations = []relayv1alpha1.PolicyViolation{v}
+		report.Violations = []scrutineerv1alpha1.PolicyViolation{v}
 	}
 	return report
 }

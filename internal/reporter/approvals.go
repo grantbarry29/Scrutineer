@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 const (
@@ -112,7 +112,7 @@ func (h *ApprovalHandler) register(w http.ResponseWriter, r *http.Request) {
 
 	sessionKey := types.NamespacedName{Namespace: req.Session.Namespace, Name: req.Session.Name}
 	// The session must exist before we hold a tool call for it.
-	var session relayv1alpha1.AgentSession
+	var session scrutineerv1alpha1.AgentSession
 	if err := h.Reader.Get(r.Context(), sessionKey, &session); err != nil {
 		if apierrors.IsNotFound(err) {
 			writeError(w, ErrNotFound, http.StatusNotFound, "AgentSession not found")
@@ -165,7 +165,7 @@ func (h *ApprovalHandler) register(w http.ResponseWriter, r *http.Request) {
 // countOutstandingHolds returns the number of undecided runtime ApprovalRequests
 // gating the given session (the cap denominator).
 func (h *ApprovalHandler) countOutstandingHolds(ctx context.Context, namespace, sessionName string) (int, error) {
-	var list relayv1alpha1.ApprovalRequestList
+	var list scrutineerv1alpha1.ApprovalRequestList
 	if err := h.Reader.List(ctx, &list, client.InNamespace(namespace)); err != nil {
 		return 0, err
 	}
@@ -184,11 +184,11 @@ func (h *ApprovalHandler) countOutstandingHolds(ctx context.Context, namespace, 
 
 // approvalStateFinal reports whether a hold has reached a terminal state and no
 // longer counts toward the outstanding cap.
-func approvalStateFinal(s relayv1alpha1.ApprovalState) bool {
+func approvalStateFinal(s scrutineerv1alpha1.ApprovalState) bool {
 	switch s {
-	case relayv1alpha1.ApprovalStateGranted,
-		relayv1alpha1.ApprovalStateDenied,
-		relayv1alpha1.ApprovalStateExpired:
+	case scrutineerv1alpha1.ApprovalStateGranted,
+		scrutineerv1alpha1.ApprovalStateDenied,
+		scrutineerv1alpha1.ApprovalStateExpired:
 		return true
 	}
 	return false
@@ -225,8 +225,8 @@ func (h *ApprovalHandler) lookup(w http.ResponseWriter, r *http.Request) {
 }
 
 // getApproval fetches a runtime ApprovalRequest, returning (nil, nil) when absent.
-func (h *ApprovalHandler) getApproval(ctx context.Context, key types.NamespacedName) (*relayv1alpha1.ApprovalRequest, error) {
-	var req relayv1alpha1.ApprovalRequest
+func (h *ApprovalHandler) getApproval(ctx context.Context, key types.NamespacedName) (*scrutineerv1alpha1.ApprovalRequest, error) {
+	var req scrutineerv1alpha1.ApprovalRequest
 	if err := h.Reader.Get(ctx, key, &req); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, nil
@@ -238,21 +238,21 @@ func (h *ApprovalHandler) getApproval(ctx context.Context, key types.NamespacedN
 
 // createApproval builds and creates the runtime ApprovalRequest owned by the
 // session. On an AlreadyExists race it re-reads and returns the winner.
-func (h *ApprovalHandler) createApproval(ctx context.Context, session *relayv1alpha1.AgentSession, req *ApprovalRegisterRequest, name string) (*relayv1alpha1.ApprovalRequest, error) {
-	ar := &relayv1alpha1.ApprovalRequest{
+func (h *ApprovalHandler) createApproval(ctx context.Context, session *scrutineerv1alpha1.AgentSession, req *ApprovalRegisterRequest, name string) (*scrutineerv1alpha1.ApprovalRequest, error) {
+	ar := &scrutineerv1alpha1.ApprovalRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: req.Session.Namespace},
-		Spec: relayv1alpha1.ApprovalRequestSpec{
-			SessionRef: relayv1alpha1.ApprovalSessionRef{Name: req.Session.Name},
-			Trigger:    relayv1alpha1.ApprovalTriggerRuntime,
+		Spec: scrutineerv1alpha1.ApprovalRequestSpec{
+			SessionRef: scrutineerv1alpha1.ApprovalSessionRef{Name: req.Session.Name},
+			Trigger:    scrutineerv1alpha1.ApprovalTriggerRuntime,
 			RequestID:  req.RequestID,
 			PolicyRef:  req.PolicyRef,
 			Action:     req.Action,
-			Scope: relayv1alpha1.ApprovalScope{
+			Scope: scrutineerv1alpha1.ApprovalScope{
 				Target:    req.Target,
 				ArgDigest: req.ArgDigest,
 				Window:    approvalWindowFromString(req.Window),
 			},
-			Decision: relayv1alpha1.ApprovalDecisionPending,
+			Decision: scrutineerv1alpha1.ApprovalDecisionPending,
 		},
 	}
 	// Owner ref (non-controller) so the hold is GC'd with its session, mirroring
@@ -321,10 +321,10 @@ func setApprovalBlockOwnerDeletion(obj metav1.Object, block bool) {
 	obj.SetOwnerReferences(refs)
 }
 
-func writeApprovalResponse(w http.ResponseWriter, ar *relayv1alpha1.ApprovalRequest) {
+func writeApprovalResponse(w http.ResponseWriter, ar *scrutineerv1alpha1.ApprovalRequest) {
 	state := string(ar.Status.State)
 	if state == "" {
-		state = string(relayv1alpha1.ApprovalStatePending)
+		state = string(scrutineerv1alpha1.ApprovalStatePending)
 	}
 	resp := ApprovalResponse{
 		ApprovalID: ar.Name,

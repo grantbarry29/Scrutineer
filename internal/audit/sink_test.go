@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -75,7 +75,7 @@ func TestRecordBuilders(t *testing.T) {
 		t.Fatalf("granted record = %+v", granted)
 	}
 	denied := ApprovalDecision("ns", "s", "deploy", "", "human approval was denied", false, time.Time{})
-	if denied.EventType != EventApprovalDenied || denied.Action != "denied" || denied.Actor != "relay-controller" {
+	if denied.EventType != EventApprovalDenied || denied.Action != "denied" || denied.Actor != "scrutineer-controller" {
 		t.Fatalf("denied record = %+v", denied)
 	}
 }

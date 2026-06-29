@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,23 +14,23 @@ import (
 	"testing"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestBuildMergeDecisions_matchedPolicyAndDenyTools(t *testing.T) {
 	resolved := Resolved{
-		Mode: relayv1alpha1.PolicyModeDryRun,
-		Rules: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeDryRun,
+		Rules: scrutineerv1alpha1.PolicyRules{
 			DeniedTools: []string{"kubectl-prod"},
 		},
-		Matched: []relayv1alpha1.MatchedPolicyRef{{
+		Matched: []scrutineerv1alpha1.MatchedPolicyRef{{
 			Kind: "AgentPolicy",
 			Name: "baseline",
 		}},
 	}
 	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
 
-	var mode, matched, denied *relayv1alpha1.PolicyDecision
+	var mode, matched, denied *scrutineerv1alpha1.PolicyDecision
 	for i := range decisions {
 		d := &decisions[i]
 		switch {
@@ -42,13 +42,13 @@ func TestBuildMergeDecisions_matchedPolicyAndDenyTools(t *testing.T) {
 			denied = d
 		}
 	}
-	if mode == nil || mode.Action != relayv1alpha1.PolicyDecisionDryRun {
+	if mode == nil || mode.Action != scrutineerv1alpha1.PolicyDecisionDryRun {
 		t.Fatalf("mode decision = %v", mode)
 	}
 	if matched == nil || matched.PolicyRef == nil || matched.PolicyRef.Name != "baseline" {
 		t.Fatalf("matched decision = %v", matched)
 	}
-	if denied == nil || denied.Action != relayv1alpha1.PolicyDecisionDryRun || denied.Rule != "deniedTools" {
+	if denied == nil || denied.Action != scrutineerv1alpha1.PolicyDecisionDryRun || denied.Rule != "deniedTools" {
 		t.Fatalf("denied tool decision = %v", denied)
 	}
 }
@@ -59,8 +59,8 @@ func TestBuildMergeDecisions_truncates(t *testing.T) {
 		targets = append(targets, "tool-"+string(rune('a'+i%26)))
 	}
 	resolved := Resolved{
-		Mode:  relayv1alpha1.PolicyModeAuditOnly,
-		Rules: relayv1alpha1.PolicyRules{DeniedTools: targets},
+		Mode:  scrutineerv1alpha1.PolicyModeAuditOnly,
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedTools: targets},
 	}
 	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
 	if len(decisions) != MaxMergePolicyDecisions {
@@ -77,8 +77,8 @@ func TestBuildMergeDecisions_capsAndNetworkLists(t *testing.T) {
 	maxTool := int32(50)
 	maxPerMin := int32(10)
 	resolved := Resolved{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{
 			AllowedDomains:       []string{"github.com"},
 			DeniedCIDRs:          []string{"10.0.0.0/8"},
 			RequireHumanApproval: []string{"deploy"},
@@ -94,10 +94,10 @@ func TestBuildMergeDecisions_capsAndNetworkLists(t *testing.T) {
 		if d.Type == "cap" {
 			capCount++
 		}
-		if d.Target == "github.com" && d.Action != relayv1alpha1.PolicyDecisionAllow {
+		if d.Target == "github.com" && d.Action != scrutineerv1alpha1.PolicyDecisionAllow {
 			t.Fatalf("allowed domain decision = %+v", d)
 		}
-		if d.Target == "10.0.0.0/8" && d.Action != relayv1alpha1.PolicyDecisionDeny {
+		if d.Target == "10.0.0.0/8" && d.Action != scrutineerv1alpha1.PolicyDecisionDeny {
 			t.Fatalf("denied cidr decision = %+v", d)
 		}
 	}
@@ -108,17 +108,17 @@ func TestBuildMergeDecisions_capsAndNetworkLists(t *testing.T) {
 
 func TestBuildMergeDecisions_argumentRulesSummary(t *testing.T) {
 	resolved := Resolved{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{
-			ArgumentRules: []relayv1alpha1.ToolArgumentRule{
-				{Tools: []string{"read_file"}, Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: relayv1alpha1.ConstraintEffectAllow}}},
-				{Tools: []string{"kubectl"}, Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "args[0]", Op: relayv1alpha1.ArgOpIn, Values: []string{"delete"}}}},
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{
+			ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{
+				{Tools: []string{"read_file"}, Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: scrutineerv1alpha1.ConstraintEffectAllow}}},
+				{Tools: []string{"kubectl"}, Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "args[0]", Op: scrutineerv1alpha1.ArgOpIn, Values: []string{"delete"}}}},
 			},
 		},
 	}
 	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
 
-	var summary *relayv1alpha1.PolicyDecision
+	var summary *scrutineerv1alpha1.PolicyDecision
 	for i := range decisions {
 		if decisions[i].Reason == "ArgumentRulesDeclared" {
 			summary = &decisions[i]
@@ -130,13 +130,13 @@ func TestBuildMergeDecisions_argumentRulesSummary(t *testing.T) {
 	if summary.Rule != "argumentRules" || summary.Target != "2" || summary.Type != "tool" {
 		t.Fatalf("argument-rules decision = %+v", summary)
 	}
-	if summary.AssuranceLevel != relayv1alpha1.EvidenceControllerComputed {
+	if summary.AssuranceLevel != scrutineerv1alpha1.EvidenceControllerComputed {
 		t.Fatalf("assurance = %q, want controller", summary.AssuranceLevel)
 	}
 }
 
 func TestNormalizeMode_emptyDefaultsAuditOnly(t *testing.T) {
-	if NormalizeMode("") != relayv1alpha1.PolicyModeAuditOnly {
+	if NormalizeMode("") != scrutineerv1alpha1.PolicyModeAuditOnly {
 		t.Fatalf("mode = %q", NormalizeMode(""))
 	}
 }
@@ -144,19 +144,19 @@ func TestNormalizeMode_emptyDefaultsAuditOnly(t *testing.T) {
 func TestBuildMergeDecisions_stampsControllerAssurance(t *testing.T) {
 	maxTool := int32(5)
 	resolved := Resolved{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{
 			DeniedTools:  []string{"kubectl-prod"},
 			MaxToolCalls: &maxTool,
 		},
-		Matched: []relayv1alpha1.MatchedPolicyRef{{Kind: "AgentPolicy", Name: "baseline"}},
+		Matched: []scrutineerv1alpha1.MatchedPolicyRef{{Kind: "AgentPolicy", Name: "baseline"}},
 	}
 	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
 	if len(decisions) == 0 {
 		t.Fatal("expected merge decisions")
 	}
 	for i, d := range decisions {
-		if d.AssuranceLevel != relayv1alpha1.EvidenceControllerComputed {
+		if d.AssuranceLevel != scrutineerv1alpha1.EvidenceControllerComputed {
 			t.Fatalf("decisions[%d] assurance = %q, want controller", i, d.AssuranceLevel)
 		}
 	}

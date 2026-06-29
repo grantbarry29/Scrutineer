@@ -1,8 +1,8 @@
 # RuntimeProfile with enforcement sidecars and runtime reporter wiring.
 # When enabled sidecars (dns-proxy, tool-gateway, envoy) are present, the
-# controller injects RELAY_REPORTER_URL, a projected SA token (audience:
-# relay-reporter), and mounts the token into sidecar containers only.
-apiVersion: relay.secureai.dev/v1alpha1
+# controller injects SCRUTINEER_REPORTER_URL, a projected SA token (audience:
+# scrutineer-reporter), and mounts the token into sidecar containers only.
+apiVersion: scrutineer.sh/v1alpha1
 kind: RuntimeProfile
 metadata:
   name: enforced-sidecars

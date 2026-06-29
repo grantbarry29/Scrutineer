@@ -1,7 +1,7 @@
 //go:build e2e
 
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -10,7 +10,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package e2e runs the Relay controller against a real kind cluster (whatever
+// Package e2e runs the Scrutineer controller against a real kind cluster (whatever
 // ~/.kube/config currently points at) and exercises end-to-end behavior of the
 // AgentSession CRD, its admission validation, and the controller's reconciliation.
 //
@@ -28,7 +28,7 @@ You may obtain a copy of the License at
 // Preconditions enforced by the suite:
 //   - A reachable Kubernetes cluster (via current kubeconfig).
 //   - The AgentSession CRD installed (run `make install` or `make dev-up` first).
-//   - No other relay-controller-manager running against the same cluster
+//   - No other scrutineer-controller-manager running against the same cluster
 //     (the suite starts its own in-process manager).
 package e2e
 
@@ -55,8 +55,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller/agentsession"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
 )
 
 // Suite-wide handles set up in BeforeSuite and used by every It block.
@@ -81,17 +81,17 @@ const (
 
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Relay e2e Suite")
+	RunSpecs(t, "Scrutineer e2e Suite")
 }
 
 var _ = BeforeSuite(func() {
 	ctrl.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	By("registering core + relay types on the scheme")
+	By("registering core + scrutineer types on the scheme")
 	Expect(clientgoscheme.AddToScheme(scheme)).To(Succeed())
 	Expect(appsv1.AddToScheme(scheme)).To(Succeed())
 	Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
-	Expect(relayv1alpha1.AddToScheme(scheme)).To(Succeed())
+	Expect(scrutineerv1alpha1.AddToScheme(scheme)).To(Succeed())
 
 	By("loading kubeconfig from the current environment")
 	var err error
@@ -134,7 +134,7 @@ func verifyAgentSessionCRDInstalled() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var list relayv1alpha1.AgentSessionList
+	var list scrutineerv1alpha1.AgentSessionList
 	err := k8sClient.List(ctx, &list, client.InNamespace("default"), client.Limit(1))
 	if err == nil {
 		return
@@ -163,7 +163,7 @@ func startControllerManager() {
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor("relay-e2e"),
+		Recorder:  mgr.GetEventRecorderFor("scrutineer-e2e"),
 	}).SetupWithManager(mgr)).To(Succeed())
 
 	ctx, cancel := context.WithCancel(context.Background())

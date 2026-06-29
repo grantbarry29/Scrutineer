@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@ import (
 	"net"
 	"strings"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const (
@@ -28,7 +28,7 @@ const (
 )
 
 // HasEgressPolicy reports whether policy contains domain or CIDR hints this backend can enforce.
-func HasEgressPolicy(rules relayv1alpha1.PolicyRules) bool {
+func HasEgressPolicy(rules scrutineerv1alpha1.PolicyRules) bool {
 	return len(rules.AllowedDomains) > 0 ||
 		len(rules.DeniedDomains) > 0 ||
 		len(rules.AllowedCIDRs) > 0 ||
@@ -60,8 +60,8 @@ func EvaluateEgress(ctx enforcement.SessionContext, req EgressRequest) EgressAut
 		return EgressAuthorization{
 			Evaluation: enforcement.Evaluation{
 				Allowed: false,
-				Action:  relayv1alpha1.PolicyDecisionDeny,
-				Blocked: ctx.Mode == relayv1alpha1.PolicyModeEnforced,
+				Action:  scrutineerv1alpha1.PolicyDecisionDeny,
+				Blocked: ctx.Mode == scrutineerv1alpha1.PolicyModeEnforced,
 			},
 			Reason: ReasonEmptyHost,
 		}
@@ -95,7 +95,7 @@ func evaluateIP(ctx enforcement.SessionContext, ip net.IP) EgressAuthorization {
 	return allowed()
 }
 
-func authorize(mode relayv1alpha1.PolicyMode, ruleWouldDeny bool, reason string) EgressAuthorization {
+func authorize(mode scrutineerv1alpha1.PolicyMode, ruleWouldDeny bool, reason string) EgressAuthorization {
 	return EgressAuthorization{
 		Evaluation: enforcement.EvaluateRestrictive(mode, ruleWouldDeny),
 		Reason:     reason,
@@ -106,7 +106,7 @@ func allowed() EgressAuthorization {
 	return EgressAuthorization{
 		Evaluation: enforcement.Evaluation{
 			Allowed: true,
-			Action:  relayv1alpha1.PolicyDecisionAllow,
+			Action:  scrutineerv1alpha1.PolicyDecisionAllow,
 		},
 		Reason: ReasonAllowed,
 	}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Bring up a kind cluster for Relay, working around two known issues with the
+# Bring up a kind cluster for Scrutineer, working around two known issues with the
 # combination of kind v0.31.0 + Docker Desktop linuxkit on arm64:
 #
 #   1. `kind create cluster` aborts at the "remove control-plane taint" step
@@ -25,7 +25,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 WORKSPACE="${WORKSPACE:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
-KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-relay-dev}"
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-scrutineer-dev}"
 KIND_CONFIG="${KIND_CONFIG:-${WORKSPACE}/.devcontainer/kind-config.yaml}"
 KIND_ATTACH="${SCRIPT_DIR}/kind-attach.sh"
 KINDNET_MANIFEST="${KINDNET_MANIFEST:-https://raw.githubusercontent.com/aojea/kindnet/v1.7.0/install-kindnet.yaml}"

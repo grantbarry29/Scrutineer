@@ -1,10 +1,10 @@
 # GitHub Project board — setup
 
-Task **state** for Relay lives in GitHub Issues (see
+Task **state** for Scrutineer lives in GitHub Issues (see
 [`.cursor/rules/task-management.mdc`](../.cursor/rules/task-management.mdc)). A GitHub
 **Project (v2)** board gives a kanban view over those issues.
 
-**Current state:** the user-owned project **[Relay](https://github.com/users/grantbarry29/projects/1)**
+**Current state:** the user-owned project **[Scrutineer](https://github.com/users/grantbarry29/projects/1)**
 (project #1) exists and **all 13 migrated issues have been added to it** (via a classic
 PAT with `project` scope — fine-grained PATs cannot access user-owned Projects v2). The
 only remaining step is configuring how the board displays state (one-time, UI-only),

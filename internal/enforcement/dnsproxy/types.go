@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@ You may obtain a copy of the License at
 package dnsproxy
 
 import (
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 // SidecarType is the RuntimeProfile sidecar type for DNS/egress proxies.
@@ -30,8 +30,8 @@ const DefaultHTTPProxyURL = "http://127.0.0.1:15053"
 
 // Env keys propagated to dns-proxy sidecars (AGENT_POLICY_* reuse job builder names).
 const (
-	EnvListenAddr           = "RELAY_EGRESS_PROXY_LISTEN"
-	EnvHTTPProxyURL         = "RELAY_EGRESS_PROXY_HTTP"
+	EnvListenAddr           = "SCRUTINEER_EGRESS_PROXY_LISTEN"
+	EnvHTTPProxyURL         = "SCRUTINEER_EGRESS_PROXY_HTTP"
 	EnvPolicyAllowedDomains = "AGENT_POLICY_ALLOWED_DOMAINS"
 	EnvPolicyDeniedDomains  = "AGENT_POLICY_DENIED_DOMAINS"
 	EnvPolicyAllowedCIDRs   = "AGENT_POLICY_ALLOWED_CIDRS"
@@ -57,15 +57,15 @@ type EgressAuthorization struct {
 
 // ProxyConfig is desired egress-proxy configuration derived from session policy.
 type ProxyConfig struct {
-	SessionNamespace string                   `json:"sessionNamespace"`
-	SessionName      string                   `json:"sessionName"`
-	Mode             relayv1alpha1.PolicyMode `json:"mode"`
-	AllowedDomains   []string                 `json:"allowedDomains,omitempty"`
-	DeniedDomains    []string                 `json:"deniedDomains,omitempty"`
-	AllowedCIDRs     []string                 `json:"allowedCIDRs,omitempty"`
-	DeniedCIDRs      []string                 `json:"deniedCIDRs,omitempty"`
-	ListenAddr       string                   `json:"listenAddr"`
-	HTTPProxyURL     string                   `json:"httpProxyURL"`
+	SessionNamespace string                        `json:"sessionNamespace"`
+	SessionName      string                        `json:"sessionName"`
+	Mode             scrutineerv1alpha1.PolicyMode `json:"mode"`
+	AllowedDomains   []string                      `json:"allowedDomains,omitempty"`
+	DeniedDomains    []string                      `json:"deniedDomains,omitempty"`
+	AllowedCIDRs     []string                      `json:"allowedCIDRs,omitempty"`
+	DeniedCIDRs      []string                      `json:"deniedCIDRs,omitempty"`
+	ListenAddr       string                        `json:"listenAddr"`
+	HTTPProxyURL     string                        `json:"httpProxyURL"`
 }
 
 // RuntimeEvent is the sidecar → control-plane report payload (JSON-serializable).

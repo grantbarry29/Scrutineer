@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // TimelineSeverity is a normalized importance level for timeline rendering.
@@ -38,7 +38,7 @@ type TimelineEntry struct {
 	Time metav1.Time `json:"time"`
 
 	// Category mirrors SessionEvent.Type for filtering.
-	Category relayv1alpha1.SessionEventType `json:"category"`
+	Category scrutineerv1alpha1.SessionEventType `json:"category"`
 
 	Severity TimelineSeverity `json:"severity"`
 
@@ -56,7 +56,7 @@ type TimelineEntry struct {
 
 // ProjectTimeline maps status.events into a chronologically sorted timeline.
 // Events without a type are skipped. Order is ascending by time; ties break on ID.
-func ProjectTimeline(events []relayv1alpha1.SessionEvent) []TimelineEntry {
+func ProjectTimeline(events []scrutineerv1alpha1.SessionEvent) []TimelineEntry {
 	if len(events) == 0 {
 		return nil
 	}
@@ -86,7 +86,7 @@ func ProjectTimeline(events []relayv1alpha1.SessionEvent) []TimelineEntry {
 
 // FilterTimeline returns entries matching optional category and/or severity filters.
 // Nil or empty filter slices mean no restriction on that dimension.
-func FilterTimeline(entries []TimelineEntry, categories []relayv1alpha1.SessionEventType, severities []TimelineSeverity) []TimelineEntry {
+func FilterTimeline(entries []TimelineEntry, categories []scrutineerv1alpha1.SessionEventType, severities []TimelineSeverity) []TimelineEntry {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -120,18 +120,18 @@ func FilterTimeline(entries []TimelineEntry, categories []relayv1alpha1.SessionE
 }
 
 // GroupByCategory buckets timeline entries by category while preserving entry order within each bucket.
-func GroupByCategory(entries []TimelineEntry) map[relayv1alpha1.SessionEventType][]TimelineEntry {
+func GroupByCategory(entries []TimelineEntry) map[scrutineerv1alpha1.SessionEventType][]TimelineEntry {
 	if len(entries) == 0 {
 		return nil
 	}
-	out := make(map[relayv1alpha1.SessionEventType][]TimelineEntry)
+	out := make(map[scrutineerv1alpha1.SessionEventType][]TimelineEntry)
 	for _, e := range entries {
 		out[e.Category] = append(out[e.Category], e)
 	}
 	return out
 }
 
-func projectEvent(e relayv1alpha1.SessionEvent) TimelineEntry {
+func projectEvent(e scrutineerv1alpha1.SessionEvent) TimelineEntry {
 	action := strings.ToLower(strings.TrimSpace(e.Action))
 	return TimelineEntry{
 		ID:       timelineEntryID(e),
@@ -147,7 +147,7 @@ func projectEvent(e relayv1alpha1.SessionEvent) TimelineEntry {
 	}
 }
 
-func severityForEvent(typ relayv1alpha1.SessionEventType, action string) TimelineSeverity {
+func severityForEvent(typ scrutineerv1alpha1.SessionEventType, action string) TimelineSeverity {
 	switch action {
 	case "deny", "block", "blocked":
 		return TimelineSeverityCritical
@@ -156,39 +156,39 @@ func severityForEvent(typ relayv1alpha1.SessionEventType, action string) Timelin
 	case "truncate":
 		return TimelineSeverityWarning
 	}
-	if typ == relayv1alpha1.SessionEventTypeSystem {
+	if typ == scrutineerv1alpha1.SessionEventTypeSystem {
 		return TimelineSeverityWarning
 	}
 	return TimelineSeverityInfo
 }
 
-func titleForEvent(e relayv1alpha1.SessionEvent) string {
+func titleForEvent(e scrutineerv1alpha1.SessionEvent) string {
 	action := strings.ToLower(strings.TrimSpace(e.Action))
 	target := strings.TrimSpace(e.Target)
 	source := strings.TrimSpace(e.Source)
 
 	switch e.Type {
-	case relayv1alpha1.SessionEventTypeNetwork:
+	case scrutineerv1alpha1.SessionEventTypeNetwork:
 		if target != "" {
 			return fmt.Sprintf("Network %s: %s", actionLabel(action), target)
 		}
 		return "Network " + actionLabel(action)
-	case relayv1alpha1.SessionEventTypeTool:
+	case scrutineerv1alpha1.SessionEventTypeTool:
 		if target != "" {
 			return fmt.Sprintf("Tool %s: %s", actionLabel(action), target)
 		}
 		return "Tool " + actionLabel(action)
-	case relayv1alpha1.SessionEventTypePolicy:
+	case scrutineerv1alpha1.SessionEventTypePolicy:
 		if target != "" {
 			return fmt.Sprintf("Policy %s: %s", actionLabel(action), target)
 		}
 		return "Policy " + actionLabel(action)
-	case relayv1alpha1.SessionEventTypeLifecycle:
+	case scrutineerv1alpha1.SessionEventTypeLifecycle:
 		if action != "" {
 			return "Lifecycle: " + actionLabel(action)
 		}
 		return "Lifecycle event"
-	case relayv1alpha1.SessionEventTypeSystem:
+	case scrutineerv1alpha1.SessionEventTypeSystem:
 		if action == "truncate" {
 			return "Event history truncated"
 		}
@@ -204,7 +204,7 @@ func titleForEvent(e relayv1alpha1.SessionEvent) string {
 	}
 }
 
-func detailForEvent(e relayv1alpha1.SessionEvent) string {
+func detailForEvent(e scrutineerv1alpha1.SessionEvent) string {
 	if msg := strings.TrimSpace(e.Message); msg != "" {
 		return msg
 	}
@@ -230,7 +230,7 @@ func actionLabel(action string) string {
 	return action
 }
 
-func timelineEntryID(e relayv1alpha1.SessionEvent) string {
+func timelineEntryID(e scrutineerv1alpha1.SessionEvent) string {
 	if id := strings.TrimSpace(e.EventID); id != "" {
 		return id
 	}

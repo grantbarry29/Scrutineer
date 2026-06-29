@@ -1,8 +1,8 @@
-# Relay Design Docs
+# Scrutineer Design Docs
 
-Canonical design documentation for Relay. These docs describe **architecture and intent** — they are the reference an implementer (human or AI agent) should read before non-trivial work. They are **not** loaded into agent context automatically; consult the relevant doc during planning (see `.cursor/rules/relay-design-docs.mdc`).
+Canonical design documentation for Scrutineer. These docs describe **architecture and intent** — they are the reference an implementer (human or AI agent) should read before non-trivial work. They are **not** loaded into agent context automatically; consult the relevant doc during planning (see `.cursor/rules/scrutineer-design-docs.mdc`).
 
-For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://github.com/grantbarry29/Relay/issues). For *how to implement tasks*, see [`.cursor/relay-cursor-workflow.md`](../../.cursor/relay-cursor-workflow.md). For *product direction*, see [`.cursor/rules/relay-product-vision.mdc`](../../.cursor/rules/relay-product-vision.mdc).
+For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://github.com/grantbarry29/scrutineer/issues). For *how to implement tasks*, see [`.cursor/scrutineer-cursor-workflow.md`](../../.cursor/scrutineer-cursor-workflow.md). For *product direction*, see [`.cursor/rules/scrutineer-product-vision.mdc`](../../.cursor/rules/scrutineer-product-vision.mdc).
 
 ## Index
 

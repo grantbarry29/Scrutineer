@@ -14,14 +14,14 @@
 # Idempotent: safe to run repeatedly. No-op when not in a devcontainer.
 set -euo pipefail
 
-KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-relay-dev}"
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-scrutineer-dev}"
 KIND_NETWORK="${KIND_NETWORK:-kind}"
 
 log()  { printf '\033[1;34m[kind-attach]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[kind-attach]\033[0m %s\n' "$*" >&2; }
 
-if [[ "${RELAY_DEVCONTAINER:-0}" != "1" ]]; then
-  log "not running inside the Relay dev container (RELAY_DEVCONTAINER!=1); skipping."
+if [[ "${SCRUTINEER_DEVCONTAINER:-0}" != "1" ]]; then
+  log "not running inside the Scrutineer dev container (SCRUTINEER_DEVCONTAINER!=1); skipping."
   exit 0
 fi
 

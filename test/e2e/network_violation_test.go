@@ -1,7 +1,7 @@
 //go:build e2e
 
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 var _ = Describe("Live network violation population", func() {
@@ -33,7 +33,7 @@ var _ = Describe("Live network violation population", func() {
 
 	It("populates status.violations when dns-proxy denies enforced egress in a running pod", func(ctx SpecContext) {
 		const deniedDomain = "evil.example"
-		ns := newTestNamespace("relay-e2e-net-violation")
+		ns := newTestNamespace("scrutineer-e2e-net-violation")
 		const profileName = "dns-proxy-enforced"
 		createRuntimeProfileWithDNSProxy(ctx, ns, profileName)
 		createEnforcedDeniedDomainPolicy(ctx, ns, "deny-evil", deniedDomain)
@@ -46,11 +46,11 @@ var _ = Describe("Live network violation population", func() {
 		key := createAgentSession(ctx, session)
 
 		expectJobForSession(ctx, ns, session)
-		waitForPhase(ctx, key, []relayv1alpha1.AgentSessionPhase{relayv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
+		waitForPhase(ctx, key, []scrutineerv1alpha1.AgentSessionPhase{scrutineerv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
 
 		Eventually(func(g Gomega) {
 			got := getSession(ctx, key)
-			var runtimeViolations []relayv1alpha1.PolicyViolation
+			var runtimeViolations []scrutineerv1alpha1.PolicyViolation
 			for _, v := range got.Status.Violations {
 				if v.Target == deniedDomain || strings.Contains(v.Message, deniedDomain) {
 					runtimeViolations = append(runtimeViolations, v)
@@ -58,14 +58,14 @@ var _ = Describe("Live network violation population", func() {
 			}
 			g.Expect(runtimeViolations).NotTo(BeEmpty(), "expected violation for denied domain %q; violations=%+v", deniedDomain, got.Status.Violations)
 
-			var runtimeDecisions []relayv1alpha1.PolicyDecision
+			var runtimeDecisions []scrutineerv1alpha1.PolicyDecision
 			for _, d := range got.Status.PolicyDecisions {
-				if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == deniedDomain {
+				if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == deniedDomain {
 					runtimeDecisions = append(runtimeDecisions, d)
 				}
 			}
 			g.Expect(runtimeDecisions).NotTo(BeEmpty())
-			g.Expect(runtimeDecisions[0].Action).To(Equal(relayv1alpha1.PolicyDecisionDeny))
+			g.Expect(runtimeDecisions[0].Action).To(Equal(scrutineerv1alpha1.PolicyDecisionDeny))
 			g.Expect(runtimeDecisions[0].Type).To(Equal("network"))
 
 			g.Expect(got.Status.Usage).NotTo(BeNil(), "expected status.usage after runtime network decision")
@@ -82,7 +82,7 @@ var _ = Describe("Live network violation population", func() {
 		Expect(names).To(ContainElements("agent", "egress"))
 
 		requestCancellation(ctx, key)
-		waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+		waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 	})
 })
 

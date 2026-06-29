@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,16 +16,16 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestProjectTimeline_sortsAndProjects(t *testing.T) {
 	t1 := metav1.NewTime(time.Unix(10, 0))
 	t2 := metav1.NewTime(time.Unix(20, 0))
-	entries := ProjectTimeline([]relayv1alpha1.SessionEvent{
+	entries := ProjectTimeline([]scrutineerv1alpha1.SessionEvent{
 		{
 			Time:    t2,
-			Type:    relayv1alpha1.SessionEventTypeTool,
+			Type:    scrutineerv1alpha1.SessionEventTypeTool,
 			Source:  "tool-gateway",
 			Action:  "deny",
 			Target:  "kubectl",
@@ -34,7 +34,7 @@ func TestProjectTimeline_sortsAndProjects(t *testing.T) {
 		},
 		{
 			Time:    t1,
-			Type:    relayv1alpha1.SessionEventTypeNetwork,
+			Type:    scrutineerv1alpha1.SessionEventTypeNetwork,
 			Source:  "egress-proxy",
 			Action:  "deny",
 			Target:  "evil.example.com",
@@ -63,9 +63,9 @@ func TestProjectTimeline_sortsAndProjects(t *testing.T) {
 
 func TestProjectTimeline_zeroTimeSortedLast(t *testing.T) {
 	withTime := metav1.NewTime(time.Unix(5, 0))
-	entries := ProjectTimeline([]relayv1alpha1.SessionEvent{
-		{Type: relayv1alpha1.SessionEventTypeSystem, Action: "truncate", EventID: "z"},
-		{Time: withTime, Type: relayv1alpha1.SessionEventTypeLifecycle, Action: "start", EventID: "a"},
+	entries := ProjectTimeline([]scrutineerv1alpha1.SessionEvent{
+		{Type: scrutineerv1alpha1.SessionEventTypeSystem, Action: "truncate", EventID: "z"},
+		{Time: withTime, Type: scrutineerv1alpha1.SessionEventTypeLifecycle, Action: "start", EventID: "a"},
 	})
 	if len(entries) != 2 || entries[0].EventID != "a" {
 		t.Fatalf("entries = %+v", entries)
@@ -73,10 +73,10 @@ func TestProjectTimeline_zeroTimeSortedLast(t *testing.T) {
 }
 
 func TestProjectTimeline_systemTruncate(t *testing.T) {
-	entries := ProjectTimeline([]relayv1alpha1.SessionEvent{{
+	entries := ProjectTimeline([]scrutineerv1alpha1.SessionEvent{{
 		Time:    metav1.NewTime(time.Unix(1, 0)),
-		Type:    relayv1alpha1.SessionEventTypeSystem,
-		Source:  "relay-controller",
+		Type:    scrutineerv1alpha1.SessionEventTypeSystem,
+		Source:  "scrutineer-controller",
 		Action:  "truncate",
 		Message: "events truncated: omitted 10 entries (max 256)",
 		EventID: "trunc-1",
@@ -91,13 +91,13 @@ func TestProjectTimeline_systemTruncate(t *testing.T) {
 }
 
 func TestFilterTimeline_byCategoryAndSeverity(t *testing.T) {
-	all := ProjectTimeline([]relayv1alpha1.SessionEvent{
-		{Time: metav1.NewTime(time.Unix(1, 0)), Type: relayv1alpha1.SessionEventTypeNetwork, Action: "deny", Target: "a", EventID: "1"},
-		{Time: metav1.NewTime(time.Unix(2, 0)), Type: relayv1alpha1.SessionEventTypeTool, Action: "allow", Target: "shell", EventID: "2"},
-		{Time: metav1.NewTime(time.Unix(3, 0)), Type: relayv1alpha1.SessionEventTypeSystem, Action: "truncate", EventID: "3"},
+	all := ProjectTimeline([]scrutineerv1alpha1.SessionEvent{
+		{Time: metav1.NewTime(time.Unix(1, 0)), Type: scrutineerv1alpha1.SessionEventTypeNetwork, Action: "deny", Target: "a", EventID: "1"},
+		{Time: metav1.NewTime(time.Unix(2, 0)), Type: scrutineerv1alpha1.SessionEventTypeTool, Action: "allow", Target: "shell", EventID: "2"},
+		{Time: metav1.NewTime(time.Unix(3, 0)), Type: scrutineerv1alpha1.SessionEventTypeSystem, Action: "truncate", EventID: "3"},
 	})
 
-	networkOnly := FilterTimeline(all, []relayv1alpha1.SessionEventType{relayv1alpha1.SessionEventTypeNetwork}, nil)
+	networkOnly := FilterTimeline(all, []scrutineerv1alpha1.SessionEventType{scrutineerv1alpha1.SessionEventTypeNetwork}, nil)
 	if len(networkOnly) != 1 || networkOnly[0].EventID != "1" {
 		t.Fatalf("network = %+v", networkOnly)
 	}
@@ -113,26 +113,26 @@ func TestFilterTimeline_byCategoryAndSeverity(t *testing.T) {
 }
 
 func TestGroupByCategory(t *testing.T) {
-	entries := ProjectTimeline([]relayv1alpha1.SessionEvent{
-		{Time: metav1.NewTime(time.Unix(1, 0)), Type: relayv1alpha1.SessionEventTypeNetwork, EventID: "n1"},
-		{Time: metav1.NewTime(time.Unix(2, 0)), Type: relayv1alpha1.SessionEventTypeTool, EventID: "t1"},
-		{Time: metav1.NewTime(time.Unix(3, 0)), Type: relayv1alpha1.SessionEventTypeNetwork, EventID: "n2"},
+	entries := ProjectTimeline([]scrutineerv1alpha1.SessionEvent{
+		{Time: metav1.NewTime(time.Unix(1, 0)), Type: scrutineerv1alpha1.SessionEventTypeNetwork, EventID: "n1"},
+		{Time: metav1.NewTime(time.Unix(2, 0)), Type: scrutineerv1alpha1.SessionEventTypeTool, EventID: "t1"},
+		{Time: metav1.NewTime(time.Unix(3, 0)), Type: scrutineerv1alpha1.SessionEventTypeNetwork, EventID: "n2"},
 	})
 	groups := GroupByCategory(entries)
-	if len(groups[relayv1alpha1.SessionEventTypeNetwork]) != 2 {
-		t.Fatalf("network group = %d", len(groups[relayv1alpha1.SessionEventTypeNetwork]))
+	if len(groups[scrutineerv1alpha1.SessionEventTypeNetwork]) != 2 {
+		t.Fatalf("network group = %d", len(groups[scrutineerv1alpha1.SessionEventTypeNetwork]))
 	}
-	if len(groups[relayv1alpha1.SessionEventTypeTool]) != 1 {
-		t.Fatalf("tool group = %d", len(groups[relayv1alpha1.SessionEventTypeTool]))
+	if len(groups[scrutineerv1alpha1.SessionEventTypeTool]) != 1 {
+		t.Fatalf("tool group = %d", len(groups[scrutineerv1alpha1.SessionEventTypeTool]))
 	}
 }
 
 func TestTimelineEntryID_withoutEventID(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(99, 0))
-	id := timelineEntryID(relayv1alpha1.SessionEvent{
+	id := timelineEntryID(scrutineerv1alpha1.SessionEvent{
 		Time:   ts,
-		Type:   relayv1alpha1.SessionEventTypePolicy,
-		Source: "relay-controller",
+		Type:   scrutineerv1alpha1.SessionEventTypePolicy,
+		Source: "scrutineer-controller",
 		Action: "audit",
 		Target: "deploy",
 	})

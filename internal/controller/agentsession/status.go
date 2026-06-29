@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,7 +35,7 @@ import (
 //  2. Re-read the live object and union its conditions again so concurrent writes
 //     and cache lag cannot erase condition types.
 //  3. Status().Update the live object (optimistic concurrency via resourceVersion).
-func (r *AgentSessionReconciler) patchStatus(ctx context.Context, original, updated *relayv1alpha1.AgentSession) error {
+func (r *AgentSessionReconciler) patchStatus(ctx context.Context, original, updated *scrutineerv1alpha1.AgentSession) error {
 	desired := updated.Status.DeepCopy()
 	mergeStatusConditionsInPlace(&desired.Conditions, original.Status.Conditions)
 	mergeRuntimePolicyDecisionsInPlace(&desired.PolicyDecisions, original.Status.PolicyDecisions)
@@ -44,7 +44,7 @@ func (r *AgentSessionReconciler) patchStatus(ctx context.Context, original, upda
 	mergeUsageInPlace(&desired.Usage, original.Status.Usage)
 	mergeArtifactsInPlace(&desired.Artifacts, original.Status.Artifacts)
 
-	var live relayv1alpha1.AgentSession
+	var live scrutineerv1alpha1.AgentSession
 	key := client.ObjectKeyFromObject(updated)
 	if err := r.Get(ctx, key, &live); err != nil {
 		return fmt.Errorf("get AgentSession before status update: %w", err)

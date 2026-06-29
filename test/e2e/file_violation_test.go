@@ -1,7 +1,7 @@
 //go:build e2e
 
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 var _ = Describe("Live file violation population", func() {
@@ -34,7 +34,7 @@ var _ = Describe("Live file violation population", func() {
 	It("populates status.violations when fs-gateway denies enforced path access in a running pod", func(ctx SpecContext) {
 		const deniedPath = "/etc/passwd"
 		const deniedGlob = "/etc/**"
-		ns := newTestNamespace("relay-e2e-file-violation")
+		ns := newTestNamespace("scrutineer-e2e-file-violation")
 		const profileName = "fs-gateway-enforced"
 		createRuntimeProfileWithFSGateway(ctx, ns, profileName)
 		createEnforcedDeniedPathPolicy(ctx, ns, "deny-etc", deniedGlob)
@@ -47,11 +47,11 @@ var _ = Describe("Live file violation population", func() {
 		key := createAgentSession(ctx, session)
 
 		expectJobForSession(ctx, ns, session)
-		waitForPhase(ctx, key, []relayv1alpha1.AgentSessionPhase{relayv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
+		waitForPhase(ctx, key, []scrutineerv1alpha1.AgentSessionPhase{scrutineerv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
 
 		Eventually(func(g Gomega) {
 			got := getSession(ctx, key)
-			var runtimeViolations []relayv1alpha1.PolicyViolation
+			var runtimeViolations []scrutineerv1alpha1.PolicyViolation
 			for _, v := range got.Status.Violations {
 				if v.Target == deniedPath || strings.Contains(v.Message, deniedPath) {
 					runtimeViolations = append(runtimeViolations, v)
@@ -59,14 +59,14 @@ var _ = Describe("Live file violation population", func() {
 			}
 			g.Expect(runtimeViolations).NotTo(BeEmpty(), "expected violation for denied path %q; violations=%+v", deniedPath, got.Status.Violations)
 
-			var runtimeDecisions []relayv1alpha1.PolicyDecision
+			var runtimeDecisions []scrutineerv1alpha1.PolicyDecision
 			for _, d := range got.Status.PolicyDecisions {
-				if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == deniedPath {
+				if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == deniedPath {
 					runtimeDecisions = append(runtimeDecisions, d)
 				}
 			}
 			g.Expect(runtimeDecisions).NotTo(BeEmpty())
-			g.Expect(runtimeDecisions[0].Action).To(Equal(relayv1alpha1.PolicyDecisionDeny))
+			g.Expect(runtimeDecisions[0].Action).To(Equal(scrutineerv1alpha1.PolicyDecisionDeny))
 			g.Expect(runtimeDecisions[0].Type).To(Equal("file"))
 
 			g.Expect(got.Status.Usage).NotTo(BeNil(), "expected status.usage after runtime file decision")
@@ -83,6 +83,6 @@ var _ = Describe("Live file violation population", func() {
 		Expect(names).To(ContainElements("agent", "files"))
 
 		requestCancellation(ctx, key)
-		waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+		waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 	})
 })

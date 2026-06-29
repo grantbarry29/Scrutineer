@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,19 +16,19 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 func TestApplyRuntimePolicyReport_incrementsNetworkUsageFromNovelDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(1_700_000_000, 0))
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	report := enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "network",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Target: "evil.example",
 		}},
 	}
@@ -46,13 +46,13 @@ func TestApplyRuntimePolicyReport_incrementsNetworkUsageFromNovelDecision(t *tes
 
 func TestApplyRuntimePolicyReport_incrementsToolUsageFromNovelDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(1_700_000_001, 0))
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "tool",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Target: "kubectl",
 		}},
 	})
@@ -62,9 +62,9 @@ func TestApplyRuntimePolicyReport_incrementsToolUsageFromNovelDecision(t *testin
 }
 
 func TestApplyRuntimePolicyReport_appliesExplicitTokenUsageDelta(t *testing.T) {
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Usage: &relayv1alpha1.SessionUsage{
+		Usage: &scrutineerv1alpha1.SessionUsage{
 			InputTokens:  100,
 			OutputTokens: 40,
 		},
@@ -79,16 +79,16 @@ func TestApplyRuntimePolicyReport_appliesExplicitTokenUsageDelta(t *testing.T) {
 
 func TestApplyRuntimePolicyReport_skipsUsageDeltaWhenDecisionsAreDuplicates(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(1_700_000_002, 0))
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	report := enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "network",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Target: "evil.example",
 		}},
-		Usage: &relayv1alpha1.SessionUsage{InputTokens: 50},
+		Usage: &scrutineerv1alpha1.SessionUsage{InputTokens: 50},
 	}
 	ApplyRuntimePolicyReport(session, report)
 	if session.Status.Usage.InputTokens != 50 {
@@ -106,13 +106,13 @@ func TestApplyRuntimePolicyReport_skipsUsageDeltaWhenDecisionsAreDuplicates(t *t
 
 func TestApplyRuntimePolicyReport_incrementsFileUsageFromNovelDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(1_700_000_003, 0))
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "file",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Target: "/etc/passwd",
 		}},
 	})
@@ -121,11 +121,11 @@ func TestApplyRuntimePolicyReport_incrementsFileUsageFromNovelDecision(t *testin
 	}
 
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "file",
-			Action: relayv1alpha1.PolicyDecisionDeny,
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Target: "/etc/passwd",
 		}},
 	})
@@ -135,8 +135,8 @@ func TestApplyRuntimePolicyReport_incrementsFileUsageFromNovelDecision(t *testin
 }
 
 func TestMergeUsageInPlace_monotonic(t *testing.T) {
-	dst := &relayv1alpha1.SessionUsage{ToolCalls: 3}
-	preserve := &relayv1alpha1.SessionUsage{ToolCalls: 5, NetworkRequests: 2, FileOperations: 4}
+	dst := &scrutineerv1alpha1.SessionUsage{ToolCalls: 3}
+	preserve := &scrutineerv1alpha1.SessionUsage{ToolCalls: 5, NetworkRequests: 2, FileOperations: 4}
 	mergeUsageInPlace(&dst, preserve)
 	if dst.ToolCalls != 5 || dst.NetworkRequests != 2 || dst.FileOperations != 4 {
 		t.Fatalf("merged = %+v", dst)

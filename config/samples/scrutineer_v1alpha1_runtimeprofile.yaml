@@ -1,4 +1,4 @@
-apiVersion: relay.secureai.dev/v1alpha1
+apiVersion: scrutineer.sh/v1alpha1
 kind: RuntimeProfile
 metadata:
   name: hardened-agent

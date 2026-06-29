@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,11 +15,11 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
-func sessionWithCondition(condType, reason, msg string, status metav1.ConditionStatus) *relayv1alpha1.AgentSession {
-	s := &relayv1alpha1.AgentSession{}
+func sessionWithCondition(condType, reason, msg string, status metav1.ConditionStatus) *scrutineerv1alpha1.AgentSession {
+	s := &scrutineerv1alpha1.AgentSession{}
 	if condType != "" {
 		setCondition(s, condType, status, reason, msg)
 	}
@@ -31,7 +31,7 @@ func TestConditionChanged(t *testing.T) {
 
 	cases := []struct {
 		name           string
-		snapshot, curr *relayv1alpha1.AgentSession
+		snapshot, curr *scrutineerv1alpha1.AgentSession
 		want           bool
 	}{
 		{

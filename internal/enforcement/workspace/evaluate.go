@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@ import (
 	"path"
 	"strings"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 )
 
 // HasFilePolicy reports whether effective policy contains file/path governance hints.
-func HasFilePolicy(rules relayv1alpha1.PolicyRules) bool {
+func HasFilePolicy(rules scrutineerv1alpha1.PolicyRules) bool {
 	return len(rules.AllowedPaths) > 0 ||
 		len(rules.DeniedPaths) > 0 ||
 		rules.MaxWorkspaceBytes != nil
@@ -57,8 +57,8 @@ func EvaluateFile(ctx enforcement.SessionContext, req FileRequest) FileAuthoriza
 		return FileAuthorization{
 			Evaluation: enforcement.Evaluation{
 				Allowed: false,
-				Action:  relayv1alpha1.PolicyDecisionDeny,
-				Blocked: ctx.Mode == relayv1alpha1.PolicyModeEnforced,
+				Action:  scrutineerv1alpha1.PolicyDecisionDeny,
+				Blocked: ctx.Mode == scrutineerv1alpha1.PolicyModeEnforced,
 			},
 			Reason: ReasonEmptyPath,
 		}
@@ -74,13 +74,13 @@ func EvaluateFile(ctx enforcement.SessionContext, req FileRequest) FileAuthoriza
 	return FileAuthorization{
 		Evaluation: enforcement.Evaluation{
 			Allowed: true,
-			Action:  relayv1alpha1.PolicyDecisionAllow,
+			Action:  scrutineerv1alpha1.PolicyDecisionAllow,
 		},
 		Reason: ReasonAllowed,
 	}
 }
 
-func authorize(mode relayv1alpha1.PolicyMode, ruleWouldDeny bool, reason string) FileAuthorization {
+func authorize(mode scrutineerv1alpha1.PolicyMode, ruleWouldDeny bool, reason string) FileAuthorization {
 	return FileAuthorization{
 		Evaluation: enforcement.EvaluateRestrictive(mode, ruleWouldDeny),
 		Reason:     reason,

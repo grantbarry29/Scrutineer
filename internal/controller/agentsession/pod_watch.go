@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/secureai/relay/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/controller/job"
 )
 
 // mapPodToSessions enqueues the AgentSession referenced by a Job-owned Pod label.

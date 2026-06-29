@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,14 +13,14 @@ package policy
 import (
 	"fmt"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // MergeRules combines base and overlay policy rules. List fields are unioned in order;
 // numeric caps take the minimum non-nil value (strictest wins). Argument rules are
 // concatenated (constraints only tighten; see docs/design/phase-3-tool-argument-constraints.md).
-func MergeRules(base, overlay relayv1alpha1.PolicyRules) relayv1alpha1.PolicyRules {
-	return relayv1alpha1.PolicyRules{
+func MergeRules(base, overlay scrutineerv1alpha1.PolicyRules) scrutineerv1alpha1.PolicyRules {
+	return scrutineerv1alpha1.PolicyRules{
 		AllowedDomains:       unionStrings(base.AllowedDomains, overlay.AllowedDomains),
 		DeniedDomains:        unionStrings(base.DeniedDomains, overlay.DeniedDomains),
 		AllowedCIDRs:         unionStrings(base.AllowedCIDRs, overlay.AllowedCIDRs),
@@ -42,13 +42,13 @@ func MergeRules(base, overlay relayv1alpha1.PolicyRules) relayv1alpha1.PolicyRul
 // identical duplicates so the same rule referenced by multiple layers appears once.
 // Order is preserved (base first); argument rules can only tighten, so concatenation is
 // always safe.
-func concatArgumentRules(base, overlay []relayv1alpha1.ToolArgumentRule) []relayv1alpha1.ToolArgumentRule {
+func concatArgumentRules(base, overlay []scrutineerv1alpha1.ToolArgumentRule) []scrutineerv1alpha1.ToolArgumentRule {
 	if len(base) == 0 && len(overlay) == 0 {
 		return nil
 	}
-	out := make([]relayv1alpha1.ToolArgumentRule, 0, len(base)+len(overlay))
+	out := make([]scrutineerv1alpha1.ToolArgumentRule, 0, len(base)+len(overlay))
 	seen := make(map[string]struct{}, len(base)+len(overlay))
-	for _, rule := range append(append([]relayv1alpha1.ToolArgumentRule(nil), base...), overlay...) {
+	for _, rule := range append(append([]scrutineerv1alpha1.ToolArgumentRule(nil), base...), overlay...) {
 		key := argumentRuleKey(rule)
 		if _, ok := seen[key]; ok {
 			continue
@@ -61,7 +61,7 @@ func concatArgumentRules(base, overlay []relayv1alpha1.ToolArgumentRule) []relay
 
 // argumentRuleKey is a stable structural key for dedupe. Order within a rule is
 // significant (constraints are evaluated in order), so it is preserved in the key.
-func argumentRuleKey(rule relayv1alpha1.ToolArgumentRule) string {
+func argumentRuleKey(rule scrutineerv1alpha1.ToolArgumentRule) string {
 	key := "s=" + rule.Server + ";t=" + fmt.Sprintf("%q", rule.Tools)
 	for _, c := range rule.Constraints {
 		key += fmt.Sprintf(";c=%s|%s|%q|%s", c.Arg, c.Op, c.Values, c.Effect)
@@ -70,8 +70,8 @@ func argumentRuleKey(rule relayv1alpha1.ToolArgumentRule) string {
 }
 
 // StrictestMode returns the most restrictive mode across inputs (enforced > dry-run > audit-only).
-func StrictestMode(modes ...relayv1alpha1.PolicyMode) relayv1alpha1.PolicyMode {
-	best := relayv1alpha1.PolicyModeAuditOnly
+func StrictestMode(modes ...scrutineerv1alpha1.PolicyMode) scrutineerv1alpha1.PolicyMode {
+	best := scrutineerv1alpha1.PolicyModeAuditOnly
 	for _, m := range modes {
 		if modeRank(m) > modeRank(best) {
 			best = m
@@ -81,18 +81,18 @@ func StrictestMode(modes ...relayv1alpha1.PolicyMode) relayv1alpha1.PolicyMode {
 }
 
 // NormalizeMode returns audit-only when mode is empty.
-func NormalizeMode(m relayv1alpha1.PolicyMode) relayv1alpha1.PolicyMode {
+func NormalizeMode(m scrutineerv1alpha1.PolicyMode) scrutineerv1alpha1.PolicyMode {
 	if m == "" {
-		return relayv1alpha1.PolicyModeAuditOnly
+		return scrutineerv1alpha1.PolicyModeAuditOnly
 	}
 	return m
 }
 
-func modeRank(m relayv1alpha1.PolicyMode) int {
+func modeRank(m scrutineerv1alpha1.PolicyMode) int {
 	switch m {
-	case relayv1alpha1.PolicyModeEnforced:
+	case scrutineerv1alpha1.PolicyModeEnforced:
 		return 3
-	case relayv1alpha1.PolicyModeDryRun:
+	case scrutineerv1alpha1.PolicyModeDryRun:
 		return 2
 	default:
 		return 1

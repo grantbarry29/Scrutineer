@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,20 +16,20 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
-	"github.com/secureai/relay/internal/enforcement/toolgateway"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
 )
 
 func TestApplyRuntimePolicyReport_enforcedViolationFromDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:    ts,
-			Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:    "network",
-			Action:  relayv1alpha1.PolicyDecisionDeny,
+			Action:  scrutineerv1alpha1.PolicyDecisionDeny,
 			Reason:  "DeniedCIDRs",
 			Target:  "10.0.0.0/8",
 			Message: "egress blocked by NetworkPolicy",
@@ -49,13 +49,13 @@ func TestApplyRuntimePolicyReport_enforcedViolationFromDecision(t *testing.T) {
 
 func TestApplyRuntimePolicyReport_dryRunViolation(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
-			Phase:  relayv1alpha1.PolicyDecisionPhaseRuntime,
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 			Type:   "tool",
-			Action: relayv1alpha1.PolicyDecisionDryRun,
+			Action: scrutineerv1alpha1.PolicyDecisionDryRun,
 			Target: "kubectl",
 		}},
 	})
@@ -66,12 +66,12 @@ func TestApplyRuntimePolicyReport_dryRunViolation(t *testing.T) {
 
 func TestApplyRuntimePolicyReport_auditNoViolation(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
 			Type:   "network",
-			Action: relayv1alpha1.PolicyDecisionAudit,
+			Action: scrutineerv1alpha1.PolicyDecisionAudit,
 			Target: "evil.example",
 		}},
 	})
@@ -82,16 +82,16 @@ func TestApplyRuntimePolicyReport_auditNoViolation(t *testing.T) {
 
 func TestApplyRuntimePolicyReport_explicitViolationsDeduped(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	v := relayv1alpha1.PolicyViolation{
+	v := scrutineerv1alpha1.PolicyViolation{
 		Time: ts, Type: "network", Target: "10.0.0.1", Message: "blocked",
 	}
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{{
-			Time: ts, Type: "network", Action: relayv1alpha1.PolicyDecisionDeny,
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Time: ts, Type: "network", Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Target: "10.0.0.1", Message: "blocked",
 		}},
-		Violations: []relayv1alpha1.PolicyViolation{v},
+		Violations: []scrutineerv1alpha1.PolicyViolation{v},
 	})
 	if len(session.Status.Violations) != 1 {
 		t.Fatalf("violations = %d, want deduped single entry", len(session.Status.Violations))
@@ -103,13 +103,13 @@ func TestApplyRuntimePolicyReport_toolGatewayReport(t *testing.T) {
 	ctx := enforcement.SessionContext{
 		SessionNamespace: "team-a",
 		SessionName:      "demo",
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy:           relayv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy:           scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
 	}
 	auth := toolgateway.EvaluateTool(ctx, toolgateway.ToolRequest{Tool: "kubectl"})
 	report := toolgateway.RuntimeReport(ctx, toolgateway.ToolRequest{Tool: "kubectl"}, auth, ts.Time)
 
-	session := &relayv1alpha1.AgentSession{}
+	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, report)
 
 	if len(session.Status.PolicyDecisions) != 1 || len(session.Status.Violations) != 1 {
@@ -122,9 +122,9 @@ func TestApplyRuntimePolicyReport_toolGatewayReport(t *testing.T) {
 
 func TestMergeViolationsInPlace_doesNotDuplicate(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	v := relayv1alpha1.PolicyViolation{Time: ts, Type: "network", Target: "x", Message: "blocked"}
-	dst := []relayv1alpha1.PolicyViolation{v}
-	mergeViolationsInPlace(&dst, []relayv1alpha1.PolicyViolation{v})
+	v := scrutineerv1alpha1.PolicyViolation{Time: ts, Type: "network", Target: "x", Message: "blocked"}
+	dst := []scrutineerv1alpha1.PolicyViolation{v}
+	mergeViolationsInPlace(&dst, []scrutineerv1alpha1.PolicyViolation{v})
 	if len(dst) != 1 {
 		t.Fatalf("len = %d", len(dst))
 	}

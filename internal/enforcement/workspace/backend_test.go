@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ package workspace
 import (
 	"testing"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 func TestBackend_metadata(t *testing.T) {
@@ -39,7 +39,7 @@ func TestBackendDesiredState(t *testing.T) {
 	raw, err = (Backend{}).DesiredState(enforcement.SessionContext{
 		SessionNamespace: "ns",
 		SessionName:      "s",
-		Policy: relayv1alpha1.PolicyRules{
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedPaths: []string{"/etc/**"},
 		},
 	})

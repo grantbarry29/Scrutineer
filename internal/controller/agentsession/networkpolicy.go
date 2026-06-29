@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,14 +21,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/enforcement"
-	"github.com/secureai/relay/internal/enforcement/networkpolicy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/networkpolicy"
 )
 
 // patchStatusWithEnforcement persists status and reconciles NetworkPolicy enforcement.
-func (r *AgentSessionReconciler) patchStatusWithEnforcement(ctx context.Context, original, session *relayv1alpha1.AgentSession, profile *relayv1alpha1.RuntimeProfile) error {
+func (r *AgentSessionReconciler) patchStatusWithEnforcement(ctx context.Context, original, session *scrutineerv1alpha1.AgentSession, profile *scrutineerv1alpha1.RuntimeProfile) error {
 	if isTerminal(session.Status.Phase) {
 		// Runtime tool-approval holds are only meaningful while the session runs;
 		// reconcileRuntimeApprovals does not run on terminal passes, so clear any
@@ -44,12 +44,12 @@ func (r *AgentSessionReconciler) patchStatusWithEnforcement(ctx context.Context,
 	return r.patchStatus(ctx, original, session)
 }
 
-func (r *AgentSessionReconciler) ensureNetworkPolicy(ctx context.Context, session *relayv1alpha1.AgentSession, profile *relayv1alpha1.RuntimeProfile) error {
+func (r *AgentSessionReconciler) ensureNetworkPolicy(ctx context.Context, session *scrutineerv1alpha1.AgentSession, profile *scrutineerv1alpha1.RuntimeProfile) error {
 	if session == nil {
 		return nil
 	}
 
-	enfCtx := enforcement.NewSessionContext(session, profile, relayjob.NameFor(session))
+	enfCtx := enforcement.NewSessionContext(session, profile, scrutineerjob.NameFor(session))
 	var backend networkpolicy.Backend
 	desired, err := backend.DesiredState(enfCtx)
 	if err != nil {

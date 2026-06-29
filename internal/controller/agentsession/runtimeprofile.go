@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,11 +18,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // resolveRuntimeProfile loads the referenced RuntimeProfile, writes status, and sets RuntimeProfileResolved.
-func (r *AgentSessionReconciler) resolveRuntimeProfile(ctx context.Context, session *relayv1alpha1.AgentSession) (*relayv1alpha1.RuntimeProfile, error) {
+func (r *AgentSessionReconciler) resolveRuntimeProfile(ctx context.Context, session *scrutineerv1alpha1.AgentSession) (*scrutineerv1alpha1.RuntimeProfile, error) {
 	ref := session.Spec.RuntimeProfileRef
 	if ref == nil {
 		session.Status.MatchedRuntimeProfile = nil
@@ -41,7 +41,7 @@ func (r *AgentSessionReconciler) resolveRuntimeProfile(ctx context.Context, sess
 		return nil, fmt.Errorf("spec.runtimeProfileRef.kind %q is not supported (allowed: RuntimeProfile)", kind)
 	}
 
-	var rp relayv1alpha1.RuntimeProfile
+	var rp scrutineerv1alpha1.RuntimeProfile
 	key := client.ObjectKey{Namespace: session.Namespace, Name: ref.Name}
 	if err := r.Get(ctx, key, &rp); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -58,12 +58,12 @@ func (r *AgentSessionReconciler) resolveRuntimeProfile(ctx context.Context, sess
 	return &rp, nil
 }
 
-func applyMatchedRuntimeProfileStatus(session *relayv1alpha1.AgentSession, rp *relayv1alpha1.RuntimeProfile) {
+func applyMatchedRuntimeProfileStatus(session *scrutineerv1alpha1.AgentSession, rp *scrutineerv1alpha1.RuntimeProfile) {
 	if rp == nil {
 		session.Status.MatchedRuntimeProfile = nil
 		return
 	}
-	session.Status.MatchedRuntimeProfile = &relayv1alpha1.MatchedRuntimeProfileRef{
+	session.Status.MatchedRuntimeProfile = &scrutineerv1alpha1.MatchedRuntimeProfileRef{
 		Kind:            "RuntimeProfile",
 		Name:            rp.Name,
 		UID:             string(rp.UID),

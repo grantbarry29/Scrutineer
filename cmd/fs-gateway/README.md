@@ -1,6 +1,6 @@
 # fs-gateway
 
-Relay's file-access enforcement sidecar. A minimal HTTP endpoint that in-pod agents call
+Scrutineer's file-access enforcement sidecar. A minimal HTTP endpoint that in-pod agents call
 before touching a workspace path, so per-session file policy is evaluated and reported at
 runtime.
 
@@ -49,14 +49,14 @@ env + defaults, `report.go`/`reporter_client.go` evidence).
 
 ## Interfaces & artifacts
 
-- **Endpoint:** `POST /v1/files/access` on `RELAY_FS_GATEWAY_LISTEN`
+- **Endpoint:** `POST /v1/files/access` on `SCRUTINEER_FS_GATEWAY_LISTEN`
   (default `127.0.0.1:19191`).
-- **Required env:** `RELAY_SESSION_NAMESPACE`, `RELAY_SESSION_NAME`, `RELAY_REPORTER_URL`,
-  `RELAY_REPORTER_TOKEN_PATH`.
+- **Required env:** `SCRUTINEER_SESSION_NAMESPACE`, `SCRUTINEER_SESSION_NAME`, `SCRUTINEER_REPORTER_URL`,
+  `SCRUTINEER_REPORTER_TOKEN_PATH`.
 - **Policy env:** `AGENT_POLICY_MODE` (default `audit-only`),
   `AGENT_POLICY_ALLOWED_PATHS` / `AGENT_POLICY_DENIED_PATHS`, and
   `AGENT_POLICY_MAX_WORKSPACE_BYTES`.
-- **Image:** `ghcr.io/secureai/relay-fs-gateway` (`workspace.DefaultFSGatewayImage`),
+- **Image:** `ghcr.io/grantbarry29/scrutineer-fs-gateway` (`workspace.DefaultFSGatewayImage`),
   distroless `nonroot` (UID 65532).
 
 ## Invariants & files that must change together

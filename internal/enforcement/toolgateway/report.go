@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 // RuntimeReport builds status evidence for a tool authorization outcome.
@@ -28,12 +28,12 @@ func RuntimeReport(ctx enforcement.SessionContext, req ToolRequest, auth ToolAut
 		target = req.Method
 	}
 
-	decision := relayv1alpha1.PolicyDecision{
+	decision := scrutineerv1alpha1.PolicyDecision{
 		Time:    ts,
-		Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+		Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 		Type:    "tool",
 		Action:  auth.Action,
-		Actor:   "relay-tool-gateway",
+		Actor:   "scrutineer-tool-gateway",
 		Target:  target,
 		Reason:  auth.Reason,
 		Message: formatToolMessage(ctx, req, auth),
@@ -42,10 +42,10 @@ func RuntimeReport(ctx enforcement.SessionContext, req ToolRequest, auth ToolAut
 	}
 
 	report := enforcement.RuntimeReport{
-		Decisions: []relayv1alpha1.PolicyDecision{decision},
+		Decisions: []scrutineerv1alpha1.PolicyDecision{decision},
 	}
 	if v, ok := enforcement.ViolationFromDecision(decision); ok {
-		report.Violations = []relayv1alpha1.PolicyViolation{v}
+		report.Violations = []scrutineerv1alpha1.PolicyViolation{v}
 	}
 	return report
 }
@@ -88,35 +88,35 @@ func ApprovalResolvedReport(ctx enforcement.SessionContext, req ToolRequest, arg
 		target = req.Method
 	}
 	reason := ReasonApprovalDenied
-	action := relayv1alpha1.PolicyDecisionDeny
+	action := scrutineerv1alpha1.PolicyDecisionDeny
 	if granted {
 		reason = ReasonApprovalGranted
-		action = relayv1alpha1.PolicyDecisionAllow
+		action = scrutineerv1alpha1.PolicyDecisionAllow
 	}
 	digest := argDigest
 	if digest == "" {
 		digest = "none"
 	}
-	decision := relayv1alpha1.PolicyDecision{
+	decision := scrutineerv1alpha1.PolicyDecision{
 		Time:    ts,
-		Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+		Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 		Type:    "approval",
 		Action:  action,
-		Actor:   "relay-tool-gateway",
+		Actor:   "scrutineer-tool-gateway",
 		Target:  target,
 		Reason:  reason,
 		Message: fmt.Sprintf("%s [argDigest=%s]", formatApprovalResolvedMessage(target, granted, ctx.Mode), digest),
 		Mode:    ctx.Mode,
 		Rule:    "requireHumanApproval",
 	}
-	report := enforcement.RuntimeReport{Decisions: []relayv1alpha1.PolicyDecision{decision}}
+	report := enforcement.RuntimeReport{Decisions: []scrutineerv1alpha1.PolicyDecision{decision}}
 	if v, ok := enforcement.ViolationFromDecision(decision); ok {
-		report.Violations = []relayv1alpha1.PolicyViolation{v}
+		report.Violations = []scrutineerv1alpha1.PolicyViolation{v}
 	}
 	return report
 }
 
-func formatApprovalResolvedMessage(tool string, granted bool, mode relayv1alpha1.PolicyMode) string {
+func formatApprovalResolvedMessage(tool string, granted bool, mode scrutineerv1alpha1.PolicyMode) string {
 	if granted {
 		return fmt.Sprintf("tool %q allowed by human approval (mode=%s)", tool, mode)
 	}

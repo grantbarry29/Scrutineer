@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ You may obtain a copy of the License at
 package toolgateway
 
 import (
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 // SidecarType is the RuntimeProfile sidecar type for tool gateways.
@@ -22,7 +22,7 @@ const SidecarType = "tool-gateway"
 
 // ToolRequest is metadata for a single tool invocation observed at the gateway.
 type ToolRequest struct {
-	// Tool is the stable tool identifier (MCP tool name or Relay tool id).
+	// Tool is the stable tool identifier (MCP tool name or Scrutineer tool id).
 	Tool string
 	// Server is the MCP server or upstream tool provider id, when known.
 	// +optional
@@ -44,8 +44,8 @@ type ToolRequest struct {
 // operands) — never the request's argument value — so it is safe to record in evidence.
 type ArgConstraintMatch struct {
 	Arg          string
-	Op           relayv1alpha1.ArgumentOperator
-	Effect       relayv1alpha1.ConstraintEffect
+	Op           scrutineerv1alpha1.ArgumentOperator
+	Effect       scrutineerv1alpha1.ConstraintEffect
 	PolicyValues []string
 }
 
@@ -64,16 +64,16 @@ type ToolAuthorization struct {
 // GatewayConfig is desired gateway configuration derived from session policy.
 // Control plane passes this to an injected tool-gateway sidecar (future slice).
 type GatewayConfig struct {
-	SessionNamespace  string                   `json:"sessionNamespace"`
-	SessionName       string                   `json:"sessionName"`
-	Mode              relayv1alpha1.PolicyMode `json:"mode"`
-	AllowedTools      []string                 `json:"allowedTools,omitempty"`
-	DeniedTools       []string                 `json:"deniedTools,omitempty"`
-	MaxToolCalls      *int32                   `json:"maxToolCalls,omitempty"`
-	MaxCallsPerMinute *int32                   `json:"maxCallsPerMinute,omitempty"`
-	RequireApproval   []string                 `json:"requireHumanApproval,omitempty"`
+	SessionNamespace  string                        `json:"sessionNamespace"`
+	SessionName       string                        `json:"sessionName"`
+	Mode              scrutineerv1alpha1.PolicyMode `json:"mode"`
+	AllowedTools      []string                      `json:"allowedTools,omitempty"`
+	DeniedTools       []string                      `json:"deniedTools,omitempty"`
+	MaxToolCalls      *int32                        `json:"maxToolCalls,omitempty"`
+	MaxCallsPerMinute *int32                        `json:"maxCallsPerMinute,omitempty"`
+	RequireApproval   []string                      `json:"requireHumanApproval,omitempty"`
 	// ArgumentRules constrain tool calls by their arguments (evaluated per-call).
-	ArgumentRules []relayv1alpha1.ToolArgumentRule `json:"argumentRules,omitempty"`
+	ArgumentRules []scrutineerv1alpha1.ToolArgumentRule `json:"argumentRules,omitempty"`
 	// ListenHost is the HTTP bind address (127.0.0.1:19090).
 	ListenHost string `json:"listenHost"`
 	// ListenAddr is the in-pod URL agents should target (contract default).

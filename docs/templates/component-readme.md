@@ -1,6 +1,6 @@
 # <Component name>
 
-> Reusable template for a Relay component README. Copy this into the component's
+> Reusable template for a Scrutineer component README. Copy this into the component's
 > directory as `README.md`, fill in what applies, and **delete sections that don't**.
 > Keep it concise and scannable — architectural intent, boundaries, and invariants,
 > not a line-by-line code summary. Infer only from code, build files, manifests,
@@ -11,7 +11,7 @@ One or two sentences: what this component is and why it exists.
 
 ## Purpose
 
-What problem this component solves and where it sits in Relay (control plane vs. data
+What problem this component solves and where it sits in Scrutineer (control plane vs. data
 plane; binary vs. in-process subsystem).
 
 ## Responsibilities / Non-responsibilities

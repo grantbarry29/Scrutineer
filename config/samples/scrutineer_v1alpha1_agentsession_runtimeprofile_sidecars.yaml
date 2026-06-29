@@ -1,6 +1,6 @@
 # AgentSession using enforced-sidecars RuntimeProfile (dns-proxy + tool-gateway).
-# Requires relay-controller-reporter Service in relay-system (make deploy).
-apiVersion: relay.secureai.dev/v1alpha1
+# Requires scrutineer-controller-reporter Service in scrutineer-system (make deploy).
+apiVersion: scrutineer.sh/v1alpha1
 kind: AgentSession
 metadata:
   name: sidecar-demo

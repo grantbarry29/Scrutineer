@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const invokePath = "/v1/tools/invoke"
@@ -147,11 +147,11 @@ func (g *Gateway) handleApprovalHold(w http.ResponseWriter, r *http.Request, ctx
 	state := resp.State
 	for {
 		switch state {
-		case string(relayv1alpha1.ApprovalStateGranted):
+		case string(scrutineerv1alpha1.ApprovalStateGranted):
 			g.reportApprovalResolved(r.Context(), ctx, toolReq, digest, true)
 			writeInvokeOK(w, toolReq.Tool)
 			return
-		case string(relayv1alpha1.ApprovalStateDenied), string(relayv1alpha1.ApprovalStateExpired):
+		case string(scrutineerv1alpha1.ApprovalStateDenied), string(scrutineerv1alpha1.ApprovalStateExpired):
 			g.reportApprovalResolved(r.Context(), ctx, toolReq, digest, false)
 			http.Error(w, fmt.Sprintf("tool %q denied by human approval (%s)", toolReq.Tool, state), http.StatusForbidden)
 			return
@@ -250,5 +250,5 @@ func (g *Gateway) now() time.Time {
 }
 
 func shouldReport(auth ToolAuthorization) bool {
-	return auth.Reason != ReasonAllowed || auth.Action != relayv1alpha1.PolicyDecisionAllow
+	return auth.Reason != ReasonAllowed || auth.Action != scrutineerv1alpha1.PolicyDecisionAllow
 }

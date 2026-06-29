@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,15 +13,15 @@ package policy
 import (
 	"testing"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestMergeRules_unionsLists(t *testing.T) {
-	base := relayv1alpha1.PolicyRules{
+	base := scrutineerv1alpha1.PolicyRules{
 		AllowedDomains: []string{"a.com"},
 		DeniedTools:    []string{"kubectl"},
 	}
-	overlay := relayv1alpha1.PolicyRules{
+	overlay := scrutineerv1alpha1.PolicyRules{
 		AllowedDomains: []string{"b.com", "a.com"},
 		DeniedTools:    []string{"deploy"},
 	}
@@ -71,8 +71,8 @@ func TestMergeRules_minCaps(t *testing.T) {
 	a := int32(100)
 	b := int32(25)
 	got := MergeRules(
-		relayv1alpha1.PolicyRules{MaxToolCalls: &a},
-		relayv1alpha1.PolicyRules{MaxToolCalls: &b},
+		scrutineerv1alpha1.PolicyRules{MaxToolCalls: &a},
+		scrutineerv1alpha1.PolicyRules{MaxToolCalls: &b},
 	)
 	if got.MaxToolCalls == nil || *got.MaxToolCalls != 25 {
 		t.Fatalf("MaxToolCalls = %v, want 25", got.MaxToolCalls)
@@ -83,8 +83,8 @@ func TestMergeRules_minMaxCallsPerMinute(t *testing.T) {
 	a := int32(60)
 	b := int32(10)
 	got := MergeRules(
-		relayv1alpha1.PolicyRules{MaxCallsPerMinute: &a},
-		relayv1alpha1.PolicyRules{MaxCallsPerMinute: &b},
+		scrutineerv1alpha1.PolicyRules{MaxCallsPerMinute: &a},
+		scrutineerv1alpha1.PolicyRules{MaxCallsPerMinute: &b},
 	)
 	if got.MaxCallsPerMinute == nil || *got.MaxCallsPerMinute != 10 {
 		t.Fatalf("MaxCallsPerMinute = %v, want 10", got.MaxCallsPerMinute)
@@ -93,8 +93,8 @@ func TestMergeRules_minMaxCallsPerMinute(t *testing.T) {
 
 func TestMergeRules_unionsPaths(t *testing.T) {
 	got := MergeRules(
-		relayv1alpha1.PolicyRules{AllowedPaths: []string{"/workspace/**"}},
-		relayv1alpha1.PolicyRules{DeniedPaths: []string{"/etc/**"}},
+		scrutineerv1alpha1.PolicyRules{AllowedPaths: []string{"/workspace/**"}},
+		scrutineerv1alpha1.PolicyRules{DeniedPaths: []string{"/etc/**"}},
 	)
 	if len(got.AllowedPaths) != 1 || got.AllowedPaths[0] != "/workspace/**" {
 		t.Fatalf("AllowedPaths = %v", got.AllowedPaths)
@@ -108,8 +108,8 @@ func TestMergeRules_minWorkspaceBytes(t *testing.T) {
 	a := int64(1_000_000_000)
 	b := int64(500_000_000)
 	got := MergeRules(
-		relayv1alpha1.PolicyRules{MaxWorkspaceBytes: &a},
-		relayv1alpha1.PolicyRules{MaxWorkspaceBytes: &b},
+		scrutineerv1alpha1.PolicyRules{MaxWorkspaceBytes: &a},
+		scrutineerv1alpha1.PolicyRules{MaxWorkspaceBytes: &b},
 	)
 	if got.MaxWorkspaceBytes == nil || *got.MaxWorkspaceBytes != b {
 		t.Fatalf("MaxWorkspaceBytes = %v, want 500000000", got.MaxWorkspaceBytes)
@@ -117,16 +117,16 @@ func TestMergeRules_minWorkspaceBytes(t *testing.T) {
 }
 
 func TestMergeRules_concatenatesArgumentRules(t *testing.T) {
-	base := relayv1alpha1.PolicyRules{
-		ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+	base := scrutineerv1alpha1.PolicyRules{
+		ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
 			Tools:       []string{"read_file"},
-			Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: relayv1alpha1.ConstraintEffectAllow}},
+			Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: scrutineerv1alpha1.ConstraintEffectAllow}},
 		}},
 	}
-	overlay := relayv1alpha1.PolicyRules{
-		ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+	overlay := scrutineerv1alpha1.PolicyRules{
+		ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
 			Tools:       []string{"kubectl"},
-			Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "args[0]", Op: relayv1alpha1.ArgOpIn, Values: []string{"delete"}}},
+			Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "args[0]", Op: scrutineerv1alpha1.ArgOpIn, Values: []string{"delete"}}},
 		}},
 	}
 	got := MergeRules(base, overlay)
@@ -139,13 +139,13 @@ func TestMergeRules_concatenatesArgumentRules(t *testing.T) {
 }
 
 func TestMergeRules_dedupesIdenticalArgumentRules(t *testing.T) {
-	rule := relayv1alpha1.ToolArgumentRule{
+	rule := scrutineerv1alpha1.ToolArgumentRule{
 		Tools:       []string{"read_file"},
-		Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpMatches, Values: []string{"\\.\\."}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+		Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpMatches, Values: []string{"\\.\\."}, Effect: scrutineerv1alpha1.ConstraintEffectDeny}},
 	}
 	got := MergeRules(
-		relayv1alpha1.PolicyRules{ArgumentRules: []relayv1alpha1.ToolArgumentRule{rule}},
-		relayv1alpha1.PolicyRules{ArgumentRules: []relayv1alpha1.ToolArgumentRule{rule}},
+		scrutineerv1alpha1.PolicyRules{ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{rule}},
+		scrutineerv1alpha1.PolicyRules{ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{rule}},
 	)
 	if len(got.ArgumentRules) != 1 {
 		t.Fatalf("identical rule not deduped: %+v", got.ArgumentRules)
@@ -153,17 +153,17 @@ func TestMergeRules_dedupesIdenticalArgumentRules(t *testing.T) {
 }
 
 func TestMergeRules_distinguishesArgumentRulesByEffect(t *testing.T) {
-	allow := relayv1alpha1.ToolArgumentRule{
+	allow := scrutineerv1alpha1.ToolArgumentRule{
 		Tools:       []string{"read_file"},
-		Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/x"}, Effect: relayv1alpha1.ConstraintEffectAllow}},
+		Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/x"}, Effect: scrutineerv1alpha1.ConstraintEffectAllow}},
 	}
-	deny := relayv1alpha1.ToolArgumentRule{
+	deny := scrutineerv1alpha1.ToolArgumentRule{
 		Tools:       []string{"read_file"},
-		Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/x"}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+		Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/x"}, Effect: scrutineerv1alpha1.ConstraintEffectDeny}},
 	}
 	got := MergeRules(
-		relayv1alpha1.PolicyRules{ArgumentRules: []relayv1alpha1.ToolArgumentRule{allow}},
-		relayv1alpha1.PolicyRules{ArgumentRules: []relayv1alpha1.ToolArgumentRule{deny}},
+		scrutineerv1alpha1.PolicyRules{ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{allow}},
+		scrutineerv1alpha1.PolicyRules{ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{deny}},
 	)
 	if len(got.ArgumentRules) != 2 {
 		t.Fatalf("effect not part of identity: %+v", got.ArgumentRules)
@@ -172,27 +172,27 @@ func TestMergeRules_distinguishesArgumentRulesByEffect(t *testing.T) {
 
 func TestStrictestMode(t *testing.T) {
 	got := StrictestMode(
-		relayv1alpha1.PolicyModeAuditOnly,
-		relayv1alpha1.PolicyModeDryRun,
-		relayv1alpha1.PolicyModeEnforced,
+		scrutineerv1alpha1.PolicyModeAuditOnly,
+		scrutineerv1alpha1.PolicyModeDryRun,
+		scrutineerv1alpha1.PolicyModeEnforced,
 	)
-	if got != relayv1alpha1.PolicyModeEnforced {
+	if got != scrutineerv1alpha1.PolicyModeEnforced {
 		t.Fatalf("mode = %q, want enforced", got)
 	}
 }
 
 func TestResolve_inlineOverrides(t *testing.T) {
 	layers := []Layer{{
-		Rules: relayv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
-		Mode:  relayv1alpha1.PolicyModeAuditOnly,
-		Match: &relayv1alpha1.MatchedPolicyRef{Kind: "AgentPolicy", Name: "baseline"},
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
+		Mode:  scrutineerv1alpha1.PolicyModeAuditOnly,
+		Match: &scrutineerv1alpha1.MatchedPolicyRef{Kind: "AgentPolicy", Name: "baseline"},
 	}}
-	inline := relayv1alpha1.PolicyRules{DeniedTools: []string{"deploy"}}
+	inline := scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"deploy"}}
 	resolved := Resolve(layers, inline)
 	if len(resolved.Rules.DeniedTools) != 2 {
 		t.Fatalf("DeniedTools = %v", resolved.Rules.DeniedTools)
 	}
-	if resolved.Mode != relayv1alpha1.PolicyModeAuditOnly {
+	if resolved.Mode != scrutineerv1alpha1.PolicyModeAuditOnly {
 		t.Fatalf("mode = %q", resolved.Mode)
 	}
 	if len(resolved.Matched) != 1 || resolved.Matched[0].Name != "baseline" {

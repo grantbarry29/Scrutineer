@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,21 +15,21 @@ package job
 const (
 	LabelAppName      = "app.kubernetes.io/name"
 	LabelAppComponent = "app.kubernetes.io/component"
-	LabelSessionRef   = "relay.secureai.dev/session"
+	LabelSessionRef   = "scrutineer.sh/session"
 
-	AppNameRelay       = "relay"
+	AppNameScrutineer  = "scrutineer"
 	ComponentSession   = "agent-session"
 	AgentContainerName = "agent"
 
-	NamePrefix = "relay-session-"
+	NamePrefix = "scrutineer-session-"
 
 	DefaultWorkspaceMountPath = "/workspace"
 )
 
 // Environment variable keys injected into the agent container.
 const (
-	EnvRelaySessionName            = "RELAY_SESSION_NAME"
-	EnvRelaySessionNamespace       = "RELAY_SESSION_NAMESPACE"
+	EnvScrutineerSessionName       = "SCRUTINEER_SESSION_NAME"
+	EnvScrutineerSessionNamespace  = "SCRUTINEER_SESSION_NAMESPACE"
 	EnvTaskDescription             = "AGENT_TASK_DESCRIPTION"
 	EnvTaskPrompt                  = "AGENT_TASK_PROMPT"
 	EnvModelProvider               = "AGENT_MODEL_PROVIDER"
@@ -53,5 +53,5 @@ const (
 
 // Runtime reporter wiring (Phase 3b). Audience must match internal/reporter.TokenAudience.
 const (
-	ReporterTokenAudience = "relay-reporter"
+	ReporterTokenAudience = "scrutineer-reporter"
 )

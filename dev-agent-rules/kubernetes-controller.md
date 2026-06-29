@@ -17,7 +17,7 @@ You are working on production-grade Kubernetes controller code. Optimize for cor
 
 2. **Reconcile must be level-based, not event-based.** Treat watch events as hints only. Do not depend on event ordering or assume every event is delivered. Do not assume cache reads are perfectly fresh. Re-read the object at the start of reconcile.
 
-3. **Use finalizers for external cleanup.** If the controller creates external resources, add a finalizer *before* creating them. On deletion, check `deletionTimestamp`. Cleanup must be idempotent. Remove the finalizer only after cleanup succeeds or is proven unnecessary. Never delete external resources unless ownership is proven. Finalizer names must be domain-qualified (e.g. `relay.secureai.dev/finalizer`).
+3. **Use finalizers for external cleanup.** If the controller creates external resources, add a finalizer *before* creating them. On deletion, check `deletionTimestamp`. Cleanup must be idempotent. Remove the finalizer only after cleanup succeeds or is proven unnecessary. Never delete external resources unless ownership is proven. Finalizer names must be domain-qualified (e.g. `scrutineer.sh/finalizer`).
 
 4. **Spec is user-owned desired state; status is controller-owned observed state.** Do not mutate spec from the controller. Enable the status subresource. Update status via `Status().Patch` or `Status().Update`. Do not use status as the source of desired behavior or require users to edit it.
 

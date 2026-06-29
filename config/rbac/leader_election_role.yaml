@@ -1,8 +1,8 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: relay-leader-election-role
-  namespace: relay-system
+  name: scrutineer-leader-election-role
+  namespace: scrutineer-system
 rules:
 - apiGroups:
   - ""

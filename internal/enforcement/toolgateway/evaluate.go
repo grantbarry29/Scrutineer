@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ package toolgateway
 import (
 	"strings"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const (
@@ -38,7 +38,7 @@ const DefaultListenAddr = "http://127.0.0.1:19090"
 const DefaultListenHost = "127.0.0.1:19090"
 
 // HasToolPolicy reports whether effective policy contains tool governance hints.
-func HasToolPolicy(rules relayv1alpha1.PolicyRules) bool {
+func HasToolPolicy(rules scrutineerv1alpha1.PolicyRules) bool {
 	return len(rules.AllowedTools) > 0 ||
 		len(rules.DeniedTools) > 0 ||
 		len(rules.RequireHumanApproval) > 0 ||
@@ -73,8 +73,8 @@ func EvaluateTool(ctx enforcement.SessionContext, req ToolRequest) ToolAuthoriza
 		return ToolAuthorization{
 			Evaluation: enforcement.Evaluation{
 				Allowed: false,
-				Action:  relayv1alpha1.PolicyDecisionDeny,
-				Blocked: ctx.Mode == relayv1alpha1.PolicyModeEnforced,
+				Action:  scrutineerv1alpha1.PolicyDecisionDeny,
+				Blocked: ctx.Mode == scrutineerv1alpha1.PolicyModeEnforced,
 			},
 			Reason: "EmptyTool",
 		}
@@ -105,13 +105,13 @@ func EvaluateTool(ctx enforcement.SessionContext, req ToolRequest) ToolAuthoriza
 	return ToolAuthorization{
 		Evaluation: enforcement.Evaluation{
 			Allowed: true,
-			Action:  relayv1alpha1.PolicyDecisionAllow,
+			Action:  scrutineerv1alpha1.PolicyDecisionAllow,
 		},
 		Reason: ReasonAllowed,
 	}
 }
 
-func authorize(mode relayv1alpha1.PolicyMode, ruleWouldDeny bool, reason string) ToolAuthorization {
+func authorize(mode scrutineerv1alpha1.PolicyMode, ruleWouldDeny bool, reason string) ToolAuthorization {
 	return ToolAuthorization{
 		Evaluation: enforcement.EvaluateRestrictive(mode, ruleWouldDeny),
 		Reason:     reason,

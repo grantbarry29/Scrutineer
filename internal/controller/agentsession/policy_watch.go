@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func (r *AgentSessionReconciler) mapAgentPolicyToSessions(ctx context.Context, obj client.Object) []reconcile.Request {
-	ap, ok := obj.(*relayv1alpha1.AgentPolicy)
+	ap, ok := obj.(*scrutineerv1alpha1.AgentPolicy)
 	if !ok {
 		return nil
 	}
@@ -29,7 +29,7 @@ func (r *AgentSessionReconciler) mapAgentPolicyToSessions(ctx context.Context, o
 }
 
 func (r *AgentSessionReconciler) mapToolPolicyToSessions(ctx context.Context, obj client.Object) []reconcile.Request {
-	tp, ok := obj.(*relayv1alpha1.ToolPolicy)
+	tp, ok := obj.(*scrutineerv1alpha1.ToolPolicy)
 	if !ok {
 		return nil
 	}
@@ -37,7 +37,7 @@ func (r *AgentSessionReconciler) mapToolPolicyToSessions(ctx context.Context, ob
 }
 
 func (r *AgentSessionReconciler) sessionsReferencingPolicy(ctx context.Context, namespace, kind, name string) []reconcile.Request {
-	var sessions relayv1alpha1.AgentSessionList
+	var sessions scrutineerv1alpha1.AgentSessionList
 	if err := r.List(ctx, &sessions, client.InNamespace(namespace)); err != nil {
 		return nil
 	}
@@ -56,7 +56,7 @@ func (r *AgentSessionReconciler) sessionsReferencingPolicy(ctx context.Context, 
 	return out
 }
 
-func sessionReferencesPolicy(session *relayv1alpha1.AgentSession, kind, policyName string) bool {
+func sessionReferencesPolicy(session *scrutineerv1alpha1.AgentSession, kind, policyName string) bool {
 	for _, ref := range session.Spec.PolicyRefs {
 		if ref.Name != policyName {
 			continue
@@ -73,6 +73,6 @@ func sessionReferencesPolicy(session *relayv1alpha1.AgentSession, kind, policyNa
 }
 
 // sessionReferencesAgentPolicy supports tests that predate ToolPolicy.
-func sessionReferencesAgentPolicy(session *relayv1alpha1.AgentSession, policyName string) bool {
+func sessionReferencesAgentPolicy(session *scrutineerv1alpha1.AgentSession, policyName string) bool {
 	return sessionReferencesPolicy(session, "AgentPolicy", policyName)
 }

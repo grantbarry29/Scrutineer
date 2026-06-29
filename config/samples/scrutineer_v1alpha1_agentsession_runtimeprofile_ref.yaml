@@ -1,4 +1,4 @@
-apiVersion: relay.secureai.dev/v1alpha1
+apiVersion: scrutineer.sh/v1alpha1
 kind: AgentSession
 metadata:
   name: session-with-runtimeprofile

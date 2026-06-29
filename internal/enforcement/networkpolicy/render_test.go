@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,17 +15,17 @@ import (
 
 	networkingv1 "k8s.io/api/networking/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 func TestBuild_nilWhenAuditOnly(t *testing.T) {
 	ctx := enforcement.SessionContext{
 		SessionNamespace: "team-a",
 		SessionName:      "demo",
-		Mode:             relayv1alpha1.PolicyModeAuditOnly,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeAuditOnly,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedCIDRs: []string{"203.0.113.0/24"},
 		},
 	}
@@ -38,8 +38,8 @@ func TestBuild_nilForDomainsOnly(t *testing.T) {
 	ctx := enforcement.SessionContext{
 		SessionNamespace: "team-a",
 		SessionName:      "demo",
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedDomains: []string{"evil.example"},
 		},
 	}
@@ -52,8 +52,8 @@ func TestBuild_allowedCIDRs(t *testing.T) {
 	ctx := enforcement.SessionContext{
 		SessionNamespace: "team-a",
 		SessionName:      "demo",
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedCIDRs: []string{"203.0.113.5", "198.51.100.0/24"},
 		},
 	}
@@ -64,7 +64,7 @@ func TestBuild_allowedCIDRs(t *testing.T) {
 	if np.Name != NameFor("team-a", "demo") {
 		t.Fatalf("name = %q", np.Name)
 	}
-	if np.Spec.PodSelector.MatchLabels[relayjob.LabelSessionRef] != "demo" {
+	if np.Spec.PodSelector.MatchLabels[scrutineerjob.LabelSessionRef] != "demo" {
 		t.Fatalf("selector = %#v", np.Spec.PodSelector.MatchLabels)
 	}
 	if len(np.Spec.Egress) != 3 { // DNS + 2 CIDR rules
@@ -79,8 +79,8 @@ func TestBuild_deniedCIDRs(t *testing.T) {
 	ctx := enforcement.SessionContext{
 		SessionNamespace: "team-a",
 		SessionName:      "demo",
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedCIDRs: []string{"10.0.0.0/8"},
 		},
 	}
@@ -109,8 +109,8 @@ func TestBackendDesiredState(t *testing.T) {
 	raw, err := b.DesiredState(enforcement.SessionContext{
 		SessionNamespace: "ns",
 		SessionName:      "s",
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy:           relayv1alpha1.PolicyRules{AllowedCIDRs: []string{"1.2.3.4/32"}},
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy:           scrutineerv1alpha1.PolicyRules{AllowedCIDRs: []string{"1.2.3.4/32"}},
 	})
 	if err != nil {
 		t.Fatal(err)
