@@ -39,7 +39,11 @@ type IdentityVerifier interface {
 
 // KubeIdentityVerifier validates bearer tokens via TokenReview and checks pod→Job→session ownership.
 type KubeIdentityVerifier struct {
-	Client   client.Client
+	Client client.Client
+	// Reader is the uncached reader for the per-request pod/Job ownership lookups.
+	// Uncached by design (see the read-consistency policy on reporter.Options, #47):
+	// it keeps the standalone reporter's get-only RBAC and avoids an informer cache
+	// over all pods/Jobs in the namespace.
 	Reader   client.Reader
 	Audience string
 }

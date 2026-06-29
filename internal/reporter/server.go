@@ -24,13 +24,37 @@ import (
 )
 
 // Options configures the runtime reporter HTTP server.
+//
+// Read-consistency policy: every hot-path read in this package goes through the
+// uncached APIReader (mgr.GetAPIReader()), never the cached manager client. This
+// is deliberate, not an oversight (issue #47):
+//
+//   - Consistency: the status-merge path (PatchRuntimePolicyReport) does
+//     optimistic-concurrency Update inside a retry loop. A cached read returns a
+//     stale resourceVersion, so the Update would conflict, retry, re-read the same
+//     stale version, and exhaust its retries — turning every report under
+//     contention into a spurious 409. It needs read-after-write consistency.
+//   - Least privilege / footprint: the reporter ships a dedicated get-only
+//     reporter-role and the standalone --reporter-only Deployment runs under a
+//     128Mi budget (issue #34). A cached client is informer-backed, so it would
+//     require list;watch on AgentSessions/Pods/Jobs/ApprovalRequests and hold
+//     namespace-wide informer caches in memory — undermining exactly the
+//     least-privilege, low-footprint design the standalone reporter exists for.
+//
+// Reads are instead bounded by per-session rate limiting (see ratelimit.go). If
+// the standalone reporter's RBAC/footprint constraints are ever relaxed, the
+// non-consistency-critical reads (session existence pre-read, identity pod/Job
+// lookups, countOutstandingHolds) could move to the cached client; the
+// status-merge read must remain uncached regardless.
 type Options struct {
 	BindAddress string
 	Client      client.Client
-	APIReader   client.Reader
-	Recorder    record.EventRecorder
-	Audience    string
-	Verifier    IdentityVerifier
+	// APIReader is the uncached reader used for ALL reporter reads — see the
+	// read-consistency policy on Options above.
+	APIReader client.Reader
+	Recorder  record.EventRecorder
+	Audience  string
+	Verifier  IdentityVerifier
 }
 
 // +kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create

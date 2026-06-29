@@ -33,7 +33,10 @@ const reportPath = "/v1/report"
 
 // Handler serves POST /v1/report.
 type Handler struct {
-	Writer    client.StatusWriter
+	Writer client.StatusWriter
+	// Reader is the uncached reader (see reporter.Options read-consistency policy):
+	// used for the session pre-read here and passed to PatchRuntimePolicyReport,
+	// whose optimistic-concurrency Update requires read-after-write consistency.
 	Reader    client.Reader
 	Verifier  IdentityVerifier
 	Recorder  record.EventRecorder
@@ -115,6 +118,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Uncached read by design — see the read-consistency policy on reporter.Options.
+	// This pre-read supplies the effective policy mode for normalization and the
+	// object for the RuntimeViolation event; the authoritative read happens inside
+	// PatchRuntimePolicyReport below.
 	var session scrutineerv1alpha1.AgentSession
 	if err := h.Reader.Get(r.Context(), sessionKey, &session); err != nil {
 		if apierrors.IsNotFound(err) {

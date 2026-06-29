@@ -86,6 +86,29 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   > reporter identity. That overlay is what actually reduces the manager SA's runtime
   > privilege (issue #34).
 
+## Read consistency & caching (decision: #47)
+
+Every hot-path read in this package goes through the **uncached** `APIReader`
+(`mgr.GetAPIReader()`), never the cached manager client. This is deliberate:
+
+- **Consistency-critical (must stay uncached):** the status-merge path
+  `agentsession.PatchRuntimePolicyReport` does an optimistic-concurrency `Update`
+  inside a retry loop. A cached read returns a stale `resourceVersion`, so the
+  `Update` would conflict, retry, re-read the same stale version, and exhaust its
+  retries — turning every report under contention into a spurious `409`.
+- **Not consistency-critical, still uncached on purpose:** the session-existence
+  pre-read (`handler.go`), the identity pod/Job lookups (`auth.go`), and the
+  `countOutstandingHolds` cap List (`approvals.go`). A cached client is
+  informer-backed, so using it would require `list;watch` on
+  AgentSessions/Pods/Jobs/ApprovalRequests **and** hold namespace-wide informer
+  caches in memory. That directly undermines the reporter's dedicated **get-only
+  `reporter-role`** and the standalone `--reporter-only` Deployment's 128Mi budget
+  (issue #34). Reads are bounded by per-session rate limiting instead.
+
+If the standalone reporter's RBAC/footprint constraints are ever relaxed, the
+non-consistency-critical reads could move to the cached client; the status-merge
+read must remain uncached regardless.
+
 ## Invariants & files that must change together
 
 - The **controller is the sole writer of `ApprovalRequest.status`**; this service only

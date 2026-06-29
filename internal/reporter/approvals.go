@@ -56,7 +56,10 @@ const (
 type ApprovalHandler struct {
 	// Client is a full client used to create runtime ApprovalRequests.
 	Client client.Client
-	// Reader is an uncached reader for fresh get/lookup (avoids stale-cache races).
+	// Reader is the uncached reader for all reads on this handler — fresh
+	// get/lookup avoids stale-cache races, and the uncached path keeps the
+	// standalone reporter's least-privilege get-only RBAC + low memory footprint
+	// (no informer cache). See the read-consistency policy on reporter.Options (#47).
 	Reader   client.Reader
 	Verifier IdentityVerifier
 	// Limiter throttles the creation of NEW holds per session (nil disables).
@@ -164,6 +167,14 @@ func (h *ApprovalHandler) register(w http.ResponseWriter, r *http.Request) {
 
 // countOutstandingHolds returns the number of undecided runtime ApprovalRequests
 // gating the given session (the cap denominator).
+//
+// This namespace-scoped List runs only on the registration of a genuinely NEW
+// hold (re-registration/keepalive is exempt) and is further throttled by the
+// per-session Limiter, so it is not on the per-tool-call poll path. It uses the
+// uncached reader for the same least-privilege reason as the rest of the handler
+// (a cached List would need list;watch + an informer cache that the standalone
+// reporter deliberately avoids — #47); a slightly stale count is acceptable for
+// an abuse cap, but switching to the cache is not free here.
 func (h *ApprovalHandler) countOutstandingHolds(ctx context.Context, namespace, sessionName string) (int, error) {
 	var list scrutineerv1alpha1.ApprovalRequestList
 	if err := h.Reader.List(ctx, &list, client.InNamespace(namespace)); err != nil {

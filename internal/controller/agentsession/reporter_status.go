@@ -27,6 +27,12 @@ const maxStatusPatchRetries = 5
 // PatchRuntimePolicyReport merges runtime evidence into AgentSession status and updates
 // the apiserver. It re-reads the live object, unions runtime decisions/violations with
 // concurrent writers, and retries on optimistic-concurrency conflicts.
+//
+// The reader MUST be uncached. The retry loop below reads the live object to obtain a
+// current resourceVersion for the optimistic-concurrency Update; a cached reader returns
+// a stale version, so every Update would conflict and the loop would exhaust its retries
+// on stale data. Callers (the reporter) pass mgr.GetAPIReader() — see the read-consistency
+// policy on reporter.Options (#47).
 func PatchRuntimePolicyReport(
 	ctx context.Context,
 	writer client.StatusWriter,
