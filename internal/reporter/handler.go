@@ -119,9 +119,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Uncached read by design — see the read-consistency policy on reporter.Options.
-	// This pre-read supplies the effective policy mode for normalization and the
-	// object for the RuntimeViolation event; the authoritative read happens inside
-	// PatchRuntimePolicyReport below.
+	// This single pre-read supplies the effective policy mode for normalization and
+	// the object for the RuntimeViolation event, and is then handed to
+	// PatchRuntimePolicyReport as its seed so the merge reuses it instead of issuing
+	// a second GET on the no-conflict path (#53).
 	var session scrutineerv1alpha1.AgentSession
 	if err := h.Reader.Get(r.Context(), sessionKey, &session); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -163,7 +164,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := agentsession.PatchRuntimePolicyReport(r.Context(), h.Writer, h.Reader, sessionKey, report); err != nil {
+	if err := agentsession.PatchRuntimePolicyReport(r.Context(), h.Writer, h.Reader, sessionKey, report, &session); err != nil {
 		h.ReportIDs.release(reportKey)
 		if apierrors.IsNotFound(err) {
 			result = "not_found"

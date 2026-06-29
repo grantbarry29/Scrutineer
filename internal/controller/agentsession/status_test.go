@@ -262,7 +262,7 @@ var _ = Describe("PatchRuntimePolicyReport", func() {
 			}},
 		}
 
-		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report)).To(Succeed())
+		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report, nil)).To(Succeed())
 
 		var after scrutineerv1alpha1.AgentSession
 		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
@@ -277,12 +277,46 @@ var _ = Describe("PatchRuntimePolicyReport", func() {
 		Expect(after.Status.Usage.NetworkRequests).To(Equal(int64(1)))
 
 		By("re-delivering the same report is idempotent")
-		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report)).To(Succeed())
+		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report, nil)).To(Succeed())
 		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
 		Expect(runtimeDecisionsWithTarget(after.Status.PolicyDecisions, "evil.example.com")).To(HaveLen(1))
 		Expect(after.Status.Violations).To(HaveLen(1))
 		Expect(after.Status.Events).To(HaveLen(1))
 		Expect(after.Status.Usage.NetworkRequests).To(Equal(int64(1)))
+	})
+
+	It("merges using a caller-provided seed without re-reading", func() {
+		ns := newTestNamespace()
+		session := minimalAgentSession(ns, "reporter-patch-seed")
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		key := client.ObjectKeyFromObject(session)
+
+		// A caller's already-read object (as the reporter's session pre-read).
+		var seed scrutineerv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, key, &seed)).To(Succeed())
+
+		ts := metav1.NewTime(time.Unix(8484, 0))
+		report := enforcement.RuntimeReport{
+			Decisions: []scrutineerv1alpha1.PolicyDecision{{
+				Time:    ts,
+				Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
+				Type:    "network",
+				Action:  scrutineerv1alpha1.PolicyDecisionDeny,
+				Reason:  "DeniedDomain",
+				Target:  "seed.example.com",
+				Message: "egress blocked",
+			}},
+		}
+
+		Expect(PatchRuntimePolicyReport(testCtx, k8sClient.Status(), k8sClient, key, report, &seed)).To(Succeed())
+
+		var after scrutineerv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, key, &after)).To(Succeed())
+		Expect(runtimeDecisionsWithTarget(after.Status.PolicyDecisions, "seed.example.com")).To(HaveLen(1))
+		Expect(after.Status.Violations).To(HaveLen(1))
+		Expect(after.Status.Violations[0].Target).To(Equal("seed.example.com"))
+		// The seed must be treated as read-only.
+		Expect(seed.Status.PolicyDecisions).To(BeEmpty())
 	})
 })
 

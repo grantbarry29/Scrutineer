@@ -86,7 +86,7 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   > reporter identity. That overlay is what actually reduces the manager SA's runtime
   > privilege (issue #34).
 
-## Read consistency & caching (decision: #47)
+## Read consistency & caching (decisions: #47, #53)
 
 Every hot-path read in this package goes through the **uncached** `APIReader`
 (`mgr.GetAPIReader()`), never the cached manager client. This is deliberate:
@@ -108,6 +108,13 @@ Every hot-path read in this package goes through the **uncached** `APIReader`
 If the standalone reporter's RBAC/footprint constraints are ever relaxed, the
 non-consistency-critical reads could move to the cached client; the status-merge
 read must remain uncached regardless.
+
+**GET count on the report path (#53):** a successful `POST /v1/report` does a
+**single** AgentSession GET. The handler's pre-read is passed to
+`PatchRuntimePolicyReport` as a *seed*, so the merge reuses it instead of issuing
+its own read, and the merge no longer does a redundant second read before the
+optimistic-concurrency `Update`. On a conflict, the retry re-reads fresh (the seed
+is only used on the first attempt), so consistency is unchanged.
 
 ## Invariants & files that must change together
 

@@ -25,20 +25,27 @@ import (
 const maxStatusPatchRetries = 5
 
 // PatchRuntimePolicyReport merges runtime evidence into AgentSession status and updates
-// the apiserver. It re-reads the live object, unions runtime decisions/violations with
-// concurrent writers, and retries on optimistic-concurrency conflicts.
+// the apiserver. It unions runtime decisions/violations with concurrent writers and
+// retries on optimistic-concurrency conflicts.
 //
 // The reader MUST be uncached. The retry loop below reads the live object to obtain a
 // current resourceVersion for the optimistic-concurrency Update; a cached reader returns
 // a stale version, so every Update would conflict and the loop would exhaust its retries
 // on stale data. Callers (the reporter) pass mgr.GetAPIReader() — see the read-consistency
 // policy on reporter.Options (#47).
+//
+// seed, when non-nil, is an object the caller has already read (e.g. the reporter's
+// session pre-read); the first attempt reuses it instead of issuing its own GET, so the
+// common no-conflict path costs one fewer apiserver read (#53). It is treated as
+// read-only (deep-copied internally) and only ever used on attempt 0 — a conflict means
+// the seed is stale, so retries always re-read fresh.
 func PatchRuntimePolicyReport(
 	ctx context.Context,
 	writer client.StatusWriter,
 	reader client.Reader,
 	sessionKey client.ObjectKey,
 	report enforcement.RuntimeReport,
+	seed *scrutineerv1alpha1.AgentSession,
 ) error {
 	var lastErr error
 	for attempt := 0; attempt < maxStatusPatchRetries; attempt++ {
@@ -49,7 +56,13 @@ func PatchRuntimePolicyReport(
 			case <-time.After(time.Duration(attempt) * 20 * time.Millisecond):
 			}
 		}
-		conflict, err := patchRuntimePolicyReportOnce(ctx, writer, reader, sessionKey, report)
+		// Only the first attempt may reuse the caller's read; once we have hit a
+		// conflict the seed is stale and every retry must re-read fresh.
+		attemptSeed := seed
+		if attempt > 0 {
+			attemptSeed = nil
+		}
+		conflict, err := patchRuntimePolicyReportOnce(ctx, writer, reader, sessionKey, report, attemptSeed)
 		if err == nil {
 			return nil
 		}
@@ -71,9 +84,15 @@ func patchRuntimePolicyReportOnce(
 	reader client.Reader,
 	sessionKey client.ObjectKey,
 	report enforcement.RuntimeReport,
+	seed *scrutineerv1alpha1.AgentSession,
 ) (conflict bool, err error) {
 	var live scrutineerv1alpha1.AgentSession
-	if err := reader.Get(ctx, sessionKey, &live); err != nil {
+	if seed != nil {
+		// Reuse the caller's already-read object to skip a duplicate apiserver GET on
+		// the common path. Deep-copy so we never mutate the caller's copy; a stale
+		// resourceVersion just yields a conflict and a fresh re-read on retry.
+		seed.DeepCopyInto(&live)
+	} else if err := reader.Get(ctx, sessionKey, &live); err != nil {
 		if apierrors.IsNotFound(err) {
 			return false, err
 		}
@@ -84,6 +103,11 @@ func patchRuntimePolicyReportOnce(
 	updated := live.DeepCopy()
 	ApplyRuntimePolicyReport(updated, report)
 
+	// ApplyRuntimePolicyReport already unions the report onto the live status, so
+	// merging back the (snapshotted) original status is the belt-and-suspenders union
+	// against concurrent writers reflected in this same read. A genuinely concurrent
+	// write that landed after this read is caught by the optimistic-concurrency Update
+	// below and folded in on the retry's fresh read.
 	desired := updated.Status.DeepCopy()
 	mergeStatusConditionsInPlace(&desired.Conditions, original.Status.Conditions)
 	mergeRuntimePolicyDecisionsInPlace(&desired.PolicyDecisions, original.Status.PolicyDecisions)
@@ -91,22 +115,12 @@ func patchRuntimePolicyReportOnce(
 	mergeEventsInPlace(&desired.Events, original.Status.Events)
 	mergeUsageInPlace(&desired.Usage, original.Status.Usage)
 
-	var liveAgain scrutineerv1alpha1.AgentSession
-	if err := reader.Get(ctx, sessionKey, &liveAgain); err != nil {
-		return false, fmt.Errorf("re-read AgentSession: %w", err)
-	}
-	mergeStatusConditionsInPlace(&desired.Conditions, liveAgain.Status.Conditions)
-	mergeRuntimePolicyDecisionsInPlace(&desired.PolicyDecisions, liveAgain.Status.PolicyDecisions)
-	mergeViolationsInPlace(&desired.Violations, liveAgain.Status.Violations)
-	mergeEventsInPlace(&desired.Events, liveAgain.Status.Events)
-	mergeUsageInPlace(&desired.Usage, liveAgain.Status.Usage)
-
-	if equalStatus(&liveAgain.Status, desired) {
+	if equalStatus(&live.Status, desired) {
 		return false, nil
 	}
 
-	liveAgain.Status = *desired
-	if err := writer.Update(ctx, &liveAgain); err != nil {
+	live.Status = *desired
+	if err := writer.Update(ctx, &live); err != nil {
 		if apierrors.IsConflict(err) {
 			return true, err
 		}
