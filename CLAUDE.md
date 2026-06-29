@@ -16,6 +16,7 @@ cooperative in-pod sidecars enforce it. Orientation:
 
 These are the always-on rules — read them before doing work in this repo:
 
+- [`dev-agent-rules/devcontainer.md`](dev-agent-rules/devcontainer.md) — **all build/test/codegen runs inside the provided devcontainer, never on the host** (the host's Go version breaks the pinned toolchain); host failures of `make`/codegen/envtest are environment artifacts, not bugs.
 - [`dev-agent-rules/scrutineer-product-vision.md`](dev-agent-rules/scrutineer-product-vision.md) — product direction, threat model, scope boundaries (one slice at a time; don't overstate enforcement strength; control-plane/data-plane split).
 - [`dev-agent-rules/task-management.md`](dev-agent-rules/task-management.md) — GitHub Issues/Projects are the sole source of task state; claim one issue before editing; out-of-scope work → an issue in the same session.
 - [`dev-agent-rules/component-docs.md`](dev-agent-rules/component-docs.md) — every component keeps a local README; update it in the same change.
