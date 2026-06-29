@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
@@ -137,8 +138,37 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	defer clientConn.Close()
 
 	_, _ = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
-	go func() { _, _ = io.Copy(destConn, clientConn) }()
-	_, _ = io.Copy(clientConn, destConn)
+
+	// Tunnel both directions concurrently. When a direction finishes (its source
+	// hit EOF), half-close the peer's write side so the other end observes EOF and
+	// the tunnel tears down promptly instead of lingering half-open — e.g. a client
+	// that sends FIN on its write side while still reading. wg.Wait blocks until
+	// both copies complete, so the deferred Closes above fully close both ends.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go tunnelHalfDuplex(&wg, destConn, clientConn) // client -> dest
+	go tunnelHalfDuplex(&wg, clientConn, destConn) // dest -> client
+	wg.Wait()
+}
+
+// tunnelHalfDuplex copies one direction of a CONNECT tunnel, then half-closes the
+// destination's write side so the peer reads EOF.
+func tunnelHalfDuplex(wg *sync.WaitGroup, dst, src net.Conn) {
+	defer wg.Done()
+	_, _ = io.Copy(dst, src)
+	closeWrite(dst)
+}
+
+// closeWrite shuts down only the write half of c when supported (e.g.
+// *net.TCPConn, *tls.Conn), so the peer reads EOF while c's read half stays open
+// to drain the other direction. Falls back to a full Close when half-close is
+// unavailable (e.g. net.Pipe).
+func closeWrite(c net.Conn) {
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
+		return
+	}
+	_ = c.Close()
 }
 
 func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {

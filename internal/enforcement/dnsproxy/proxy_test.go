@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package dnsproxy
 
 import (
+	"bufio"
 	"encoding/json"
 	"io"
 	"net"
@@ -131,6 +132,89 @@ func TestProxy_allowsHTTPViaDial(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%q", resp.StatusCode, body)
+	}
+}
+
+// TestProxy_connectHalfClose verifies the CONNECT tunnel propagates a client
+// write-side half-close to the upstream. The upstream replies only after it reads
+// EOF, so without CloseWrite propagation the upstream never unblocks and the
+// client read times out.
+func TestProxy_connectHalfClose(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	// Upstream: drain to EOF, then send a sentinel and close.
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_, _ = io.Copy(io.Discard, conn) // returns only when the client half-closes
+		_, _ = conn.Write([]byte("BYE"))
+	}()
+
+	env := RuntimeEnv{
+		SessionNamespace: "ns1",
+		SessionName:      "sess-a",
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+	}
+	proxy := httptest.NewServer(&Proxy{
+		Env: env,
+		Dial: func(network, address string) (net.Conn, error) {
+			return net.Dial("tcp", ln.Addr().String())
+		},
+	})
+	defer proxy.Close()
+
+	raw, err := net.Dial("tcp", strings.TrimPrefix(proxy.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	client := raw.(*net.TCPConn)
+	_ = client.SetDeadline(time.Now().Add(3 * time.Second))
+
+	if _, err := client.Write([]byte("CONNECT allowed.example.com:443 HTTP/1.1\r\nHost: allowed.example.com:443\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	br := bufio.NewReader(client)
+	status, err := br.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read status line: %v", err)
+	}
+	if !strings.Contains(status, "200") {
+		t.Fatalf("CONNECT status = %q", status)
+	}
+	// Consume the rest of the response header (blank line terminator).
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read header: %v", err)
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	// Send a payload, then half-close the write side while still reading.
+	if _, err := client.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := io.ReadAll(br)
+	if err != nil {
+		t.Fatalf("read upstream reply after half-close: %v", err)
+	}
+	if string(got) != "BYE" {
+		t.Fatalf("reply = %q, want \"BYE\" (upstream did not observe client EOF)", got)
 	}
 }
 

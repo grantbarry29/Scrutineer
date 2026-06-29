@@ -33,6 +33,10 @@ Agent → `HTTP_PROXY`/`HTTPS_PROXY` → this proxy → `EvaluateEgress(host:por
 allowed forwards upstream / denied returns `403`; non-allow outcomes are submitted to
 the reporter (`SCRUTINEER_REPORTER_URL`) as self-reported evidence.
 
+For an allowed `CONNECT`, both tunnel directions are copied concurrently and each
+direction half-closes (`CloseWrite`) its peer when its source hits EOF, so a one-sided
+close propagates and the tunnel tears down promptly instead of lingering half-open.
+
 ## Major internal packages / directories
 
 Core logic: [`internal/enforcement/dnsproxy`](../../internal/enforcement/dnsproxy)
