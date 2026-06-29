@@ -84,5 +84,5 @@ Core logic: [`internal/enforcement/toolgateway`](../../internal/enforcement/tool
 
 No health endpoint; readiness is process-up. Logs a startup line with listen addr,
 session, and mode. Common failure modes: missing required env (fatal), reporter/approval
-channel unreachable (approval-required calls fail closed). TODO: verify whether metrics
-are exported.
+channel unreachable (approval-required calls fail closed). No Prometheus metrics are
+exported (the binary serves only the gateway handler) — tracked in issue #55.

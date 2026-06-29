@@ -76,5 +76,5 @@ env + defaults, `report.go`/`reporter_client.go` evidence).
 
 No health endpoint; readiness is process-up. Logs a startup line with listen addr,
 session, and mode. Common failure modes: missing required env (fatal), unreachable
-reporter (decisions still enforced; evidence dropped). TODO: verify whether metrics are
-exported.
+reporter (decisions still enforced; evidence dropped). No Prometheus metrics are
+exported (the binary serves only the gateway handler) — tracked in issue #55.
