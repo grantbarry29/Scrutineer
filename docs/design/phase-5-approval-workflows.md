@@ -100,13 +100,16 @@ status:
 
 New phase `PhaseAwaitingApproval` and condition `ApprovalRequired` (proposed constants).
 
+Validation is synchronous within a reconcile and surfaced via the `Validated`
+condition, not a distinct phase (the `Validating` phase was removed as dead state —
+see issue #31), so `Pending` transitions directly to the post-validation outcome.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Pending
-    Pending --> Validating
-    Validating --> Denied: invalid spec/policy
-    Validating --> AwaitingApproval: requireHumanApproval matched + ApprovalPolicy applies
-    Validating --> Starting: no approval needed
+    Pending --> Denied: invalid spec/policy
+    Pending --> AwaitingApproval: requireHumanApproval matched + ApprovalPolicy applies
+    Pending --> Starting: no approval needed
     AwaitingApproval --> Starting: ApprovalRequest Granted (not expired)
     AwaitingApproval --> Denied: ApprovalRequest Denied or onTimeout=deny
     Starting --> Running

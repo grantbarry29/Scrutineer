@@ -662,7 +662,7 @@ func setReadyCondition(session *scrutineerv1alpha1.AgentSession) {
 	case scrutineerv1alpha1.PhaseAwaitingApproval:
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "AwaitingApproval", "Session is blocked on a human approval gate")
 	default:
-		// Pending/Validating/Starting and any unknown phase.
+		// Pending/Starting and any unknown phase.
 		setCondition(session, ConditionReady, metav1.ConditionFalse, "NotReady", "Session is not ready yet")
 	}
 }
