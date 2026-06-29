@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 // podDeadlineExceededReason is the Pod status.reason set by the kubelet when a Pod is
@@ -34,7 +34,7 @@ const podDeadlineExceededReason = "DeadlineExceeded"
 // kubernetesPodBackend runs governed AgentSessions as a single bare Kubernetes Pod
 // (no Job wrapper). It reuses the shared agent pod template (job.BuildPodTemplateSpec)
 // so the data-plane wiring is identical to the Job backend; only the runtime object
-// kind differs. It is the second reference backend proving Relay is orchestrator-agnostic.
+// kind differs. It is the second reference backend proving Scrutineer is orchestrator-agnostic.
 //
 // This slice covers the create/observe/stop happy path. Completion/timeout/drift edge
 // cases and watch wiring are handled in later Phase 6 slices.
@@ -55,7 +55,7 @@ func (b *kubernetesPodBackend) ownedType() client.Object { return &corev1.Pod{} 
 // ensure creates the agent Pod if absent, reconciles policy/runtime-profile drift, and
 // returns a normalized observation. It never writes to session status. Returns
 // ErrJobNotOwned on an ownership conflict at the deterministic name.
-func (b *kubernetesPodBackend) ensure(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (observation, error) {
+func (b *kubernetesPodBackend) ensure(ctx context.Context, session *scrutineerv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) (observation, error) {
 	podKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 	desired := b.buildPod(session, task, pol, profile)
 
@@ -82,7 +82,7 @@ func (b *kubernetesPodBackend) ensure(ctx context.Context, session *relayv1alpha
 // drift can only be resolved by delete+recreate while the Pod has not started; on a
 // running Pod the drift is surfaced (policyInSync=false) without disruption, mirroring
 // the Job backend's PolicyEnvDrift semantics.
-func (b *kubernetesPodBackend) reconcileExisting(ctx context.Context, session *relayv1alpha1.AgentSession, existing, desired *corev1.Pod, podKey client.ObjectKey) (observation, error) {
+func (b *kubernetesPodBackend) reconcileExisting(ctx context.Context, session *scrutineerv1alpha1.AgentSession, existing, desired *corev1.Pod, podKey client.ObjectKey) (observation, error) {
 	policyDrift := podPolicyEnvDrift(existing, desired)
 	profileDrift := podRuntimeProfileDrift(existing, desired)
 
@@ -121,7 +121,7 @@ func (b *kubernetesPodBackend) reconcileExisting(ctx context.Context, session *r
 
 // buildPod renders the desired agent Pod from the shared pod template, adding the
 // deterministic name and the active deadline derived from spec.runtime.timeoutSeconds.
-func (b *kubernetesPodBackend) buildPod(session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) *corev1.Pod {
+func (b *kubernetesPodBackend) buildPod(session *scrutineerv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) *corev1.Pod {
 	tmpl := job.BuildPodTemplateSpec(session, toJobTask(task), pol, profile)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -140,7 +140,7 @@ func (b *kubernetesPodBackend) buildPod(session *relayv1alpha1.AgentSession, tas
 
 // createPod creates the desired Pod, resolving AlreadyExists races. didCreate is true
 // only when this call actually created the object.
-func (b *kubernetesPodBackend) createPod(ctx context.Context, session *relayv1alpha1.AgentSession, desired *corev1.Pod, podKey client.ObjectKey) (*corev1.Pod, bool, error) {
+func (b *kubernetesPodBackend) createPod(ctx context.Context, session *scrutineerv1alpha1.AgentSession, desired *corev1.Pod, podKey client.ObjectKey) (*corev1.Pod, bool, error) {
 	if err := controllerutil.SetControllerReference(session, desired, b.scheme); err != nil {
 		return nil, false, fmt.Errorf("set owner reference on Pod: %w", err)
 	}
@@ -171,7 +171,7 @@ func (b *kubernetesPodBackend) observe(pod *corev1.Pod, created bool) observatio
 	return observation{
 		phase:       podRuntimePhase(pod),
 		runtimeName: pod.Name,
-		runtimeRef: &relayv1alpha1.RuntimeRef{
+		runtimeRef: &scrutineerv1alpha1.RuntimeRef{
 			APIVersion: corev1.SchemeGroupVersion.String(),
 			Kind:       "Pod",
 			Name:       pod.Name,
@@ -195,7 +195,7 @@ func (b *kubernetesPodBackend) getPod(ctx context.Context, key client.ObjectKey,
 
 // runtimeGone reports whether the owned Pod is fully removed (NotFound) or already
 // deleting (deletionTimestamp set).
-func (b *kubernetesPodBackend) runtimeGone(ctx context.Context, session *relayv1alpha1.AgentSession) (bool, error) {
+func (b *kubernetesPodBackend) runtimeGone(ctx context.Context, session *scrutineerv1alpha1.AgentSession) (bool, error) {
 	podKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 	var pod corev1.Pod
 	if err := b.getPod(ctx, podKey, &pod); err != nil {
@@ -210,7 +210,7 @@ func (b *kubernetesPodBackend) runtimeGone(ctx context.Context, session *relayv1
 // stop deletes the deterministic Pod for the AgentSession. A missing Pod is treated as
 // already stopped. blockOwnerDeletion was cleared at create time, so deletion does not
 // deadlock against the still-present session.
-func (b *kubernetesPodBackend) stop(ctx context.Context, session *relayv1alpha1.AgentSession) error {
+func (b *kubernetesPodBackend) stop(ctx context.Context, session *scrutineerv1alpha1.AgentSession) error {
 	podKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 
 	var existing corev1.Pod

@@ -1,4 +1,4 @@
-module github.com/secureai/relay
+module github.com/grantbarry29/scrutineer
 
 go 1.23
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestProxy_deniesAndReportsEnforcedEgress(t *testing.T) {
@@ -49,8 +49,8 @@ func TestProxy_deniesAndReportsEnforcedEgress(t *testing.T) {
 		SessionName:      "sess-a",
 		ReporterURL:      reporterSrv.URL,
 		ReporterToken:    tokenPath,
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedDomains: []string{"evil.example"},
 		},
 	}
@@ -83,7 +83,7 @@ func TestProxy_deniesAndReportsEnforcedEgress(t *testing.T) {
 		if len(report.Decisions) != 1 {
 			t.Fatalf("decisions = %d", len(report.Decisions))
 		}
-		if report.Decisions[0].Action != relayv1alpha1.PolicyDecisionDeny {
+		if report.Decisions[0].Action != scrutineerv1alpha1.PolicyDecisionDeny {
 			t.Fatalf("action = %q", report.Decisions[0].Action)
 		}
 		if len(report.Violations) != 1 {
@@ -107,7 +107,7 @@ func TestProxy_allowsHTTPViaDial(t *testing.T) {
 	env := RuntimeEnv{
 		SessionNamespace: "ns1",
 		SessionName:      "sess-a",
-		Mode:             relayv1alpha1.PolicyModeEnforced,
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
 	}
 	proxy := httptest.NewServer(&Proxy{
 		Env: env,

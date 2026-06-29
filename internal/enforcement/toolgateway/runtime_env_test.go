@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@ package toolgateway
 import (
 	"testing"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestLoadRuntimeEnv_full(t *testing.T) {
@@ -21,7 +21,7 @@ func TestLoadRuntimeEnv_full(t *testing.T) {
 	t.Setenv(EnvSessionName, "sess")
 	t.Setenv(EnvReporterURL, "http://reporter")
 	t.Setenv(EnvReporterToken, writeTempToken(t, "tok"))
-	t.Setenv(EnvPolicyMode, string(relayv1alpha1.PolicyModeEnforced))
+	t.Setenv(EnvPolicyMode, string(scrutineerv1alpha1.PolicyModeEnforced))
 	t.Setenv(EnvPolicyDeniedTools, "kubectl, deploy")
 	t.Setenv(EnvPolicyMaxToolCalls, "25")
 	t.Setenv(EnvPolicyMaxToolCallsPerMinute, "not-a-number")
@@ -30,7 +30,7 @@ func TestLoadRuntimeEnv_full(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if env.Mode != relayv1alpha1.PolicyModeEnforced {
+	if env.Mode != scrutineerv1alpha1.PolicyModeEnforced {
 		t.Fatalf("mode = %q", env.Mode)
 	}
 	if len(env.Policy.DeniedTools) != 2 {

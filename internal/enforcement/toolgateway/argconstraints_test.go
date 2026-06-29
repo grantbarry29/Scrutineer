@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestResolveArg_paths(t *testing.T) {
@@ -51,20 +51,20 @@ func TestConstraintMatches_operators(t *testing.T) {
 	args := map[string]any{"path": "/etc/shadow", "verb": "delete"}
 	cases := []struct {
 		name string
-		c    relayv1alpha1.ArgumentConstraint
+		c    scrutineerv1alpha1.ArgumentConstraint
 		want bool
 	}{
-		{"equals", relayv1alpha1.ArgumentConstraint{Arg: "verb", Op: relayv1alpha1.ArgOpEquals, Values: []string{"delete"}}, true},
-		{"in", relayv1alpha1.ArgumentConstraint{Arg: "verb", Op: relayv1alpha1.ArgOpIn, Values: []string{"get", "delete"}}, true},
-		{"notIn", relayv1alpha1.ArgumentConstraint{Arg: "verb", Op: relayv1alpha1.ArgOpNotIn, Values: []string{"get"}}, true},
-		{"hasPrefix", relayv1alpha1.ArgumentConstraint{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/etc/"}}, true},
-		{"notHasPrefix", relayv1alpha1.ArgumentConstraint{Arg: "path", Op: relayv1alpha1.ArgOpNotHasPrefix, Values: []string{"/workspace/"}}, true},
-		{"matches", relayv1alpha1.ArgumentConstraint{Arg: "path", Op: relayv1alpha1.ArgOpMatches, Values: []string{"shadow$"}}, true},
-		{"notMatches", relayv1alpha1.ArgumentConstraint{Arg: "path", Op: relayv1alpha1.ArgOpNotMatches, Values: []string{"^/workspace"}}, true},
-		{"exists", relayv1alpha1.ArgumentConstraint{Arg: "path", Op: relayv1alpha1.ArgOpExists}, true},
-		{"notExists", relayv1alpha1.ArgumentConstraint{Arg: "absent", Op: relayv1alpha1.ArgOpNotExists}, true},
-		{"missing value op is non-match", relayv1alpha1.ArgumentConstraint{Arg: "absent", Op: relayv1alpha1.ArgOpEquals, Values: []string{"x"}}, false},
-		{"missing negated op is non-match", relayv1alpha1.ArgumentConstraint{Arg: "absent", Op: relayv1alpha1.ArgOpNotEquals, Values: []string{"x"}}, false},
+		{"equals", scrutineerv1alpha1.ArgumentConstraint{Arg: "verb", Op: scrutineerv1alpha1.ArgOpEquals, Values: []string{"delete"}}, true},
+		{"in", scrutineerv1alpha1.ArgumentConstraint{Arg: "verb", Op: scrutineerv1alpha1.ArgOpIn, Values: []string{"get", "delete"}}, true},
+		{"notIn", scrutineerv1alpha1.ArgumentConstraint{Arg: "verb", Op: scrutineerv1alpha1.ArgOpNotIn, Values: []string{"get"}}, true},
+		{"hasPrefix", scrutineerv1alpha1.ArgumentConstraint{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/etc/"}}, true},
+		{"notHasPrefix", scrutineerv1alpha1.ArgumentConstraint{Arg: "path", Op: scrutineerv1alpha1.ArgOpNotHasPrefix, Values: []string{"/workspace/"}}, true},
+		{"matches", scrutineerv1alpha1.ArgumentConstraint{Arg: "path", Op: scrutineerv1alpha1.ArgOpMatches, Values: []string{"shadow$"}}, true},
+		{"notMatches", scrutineerv1alpha1.ArgumentConstraint{Arg: "path", Op: scrutineerv1alpha1.ArgOpNotMatches, Values: []string{"^/workspace"}}, true},
+		{"exists", scrutineerv1alpha1.ArgumentConstraint{Arg: "path", Op: scrutineerv1alpha1.ArgOpExists}, true},
+		{"notExists", scrutineerv1alpha1.ArgumentConstraint{Arg: "absent", Op: scrutineerv1alpha1.ArgOpNotExists}, true},
+		{"missing value op is non-match", scrutineerv1alpha1.ArgumentConstraint{Arg: "absent", Op: scrutineerv1alpha1.ArgOpEquals, Values: []string{"x"}}, false},
+		{"missing negated op is non-match", scrutineerv1alpha1.ArgumentConstraint{Arg: "absent", Op: scrutineerv1alpha1.ArgOpNotEquals, Values: []string{"x"}}, false},
 	}
 	for _, tc := range cases {
 		if got := constraintMatches(tc.c, args); got != tc.want {
@@ -74,18 +74,18 @@ func TestConstraintMatches_operators(t *testing.T) {
 }
 
 func TestEvaluateArgumentRules_denyAndAllowlist(t *testing.T) {
-	rules := []relayv1alpha1.ToolArgumentRule{
+	rules := []scrutineerv1alpha1.ToolArgumentRule{
 		{
 			Tools: []string{"read_file"},
-			Constraints: []relayv1alpha1.ArgumentConstraint{
-				{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: relayv1alpha1.ConstraintEffectAllow},
-				{Arg: "path", Op: relayv1alpha1.ArgOpMatches, Values: []string{`\.\.`}, Effect: relayv1alpha1.ConstraintEffectDeny},
+			Constraints: []scrutineerv1alpha1.ArgumentConstraint{
+				{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: scrutineerv1alpha1.ConstraintEffectAllow},
+				{Arg: "path", Op: scrutineerv1alpha1.ArgOpMatches, Values: []string{`\.\.`}, Effect: scrutineerv1alpha1.ConstraintEffectDeny},
 			},
 		},
 		{
 			Tools: []string{"*"},
-			Constraints: []relayv1alpha1.ArgumentConstraint{
-				{Arg: "args[0]", Op: relayv1alpha1.ArgOpIn, Values: []string{"delete"}, Effect: relayv1alpha1.ConstraintEffectDeny},
+			Constraints: []scrutineerv1alpha1.ArgumentConstraint{
+				{Arg: "args[0]", Op: scrutineerv1alpha1.ArgOpIn, Values: []string{"delete"}, Effect: scrutineerv1alpha1.ConstraintEffectDeny},
 			},
 		},
 	}
@@ -113,10 +113,10 @@ func TestEvaluateArgumentRules_denyAndAllowlist(t *testing.T) {
 }
 
 func TestEvaluateArgumentRules_serverScope(t *testing.T) {
-	rules := []relayv1alpha1.ToolArgumentRule{{
+	rules := []scrutineerv1alpha1.ToolArgumentRule{{
 		Tools:       []string{"query"},
 		Server:      "prod-db",
-		Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "sql", Op: relayv1alpha1.ArgOpMatches, Values: []string{"(?i)drop"}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+		Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "sql", Op: scrutineerv1alpha1.ArgOpMatches, Values: []string{"(?i)drop"}, Effect: scrutineerv1alpha1.ConstraintEffectDeny}},
 	}}
 	// Same tool, different server: rule does not apply.
 	if reason, _ := evaluateArgumentRules(rules, ToolRequest{Tool: "query", Server: "dev-db", Arguments: map[string]any{"sql": "DROP TABLE t"}}); reason != "" {
@@ -129,43 +129,43 @@ func TestEvaluateArgumentRules_serverScope(t *testing.T) {
 }
 
 func TestEvaluateTool_argumentDeny_modes(t *testing.T) {
-	rules := relayv1alpha1.PolicyRules{
+	rules := scrutineerv1alpha1.PolicyRules{
 		AllowedTools: []string{"read_file"},
-		ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+		ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
 			Tools:       []string{"read_file"},
-			Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/etc/"}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+			Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/etc/"}, Effect: scrutineerv1alpha1.ConstraintEffectDeny}},
 		}},
 	}
 	req := ToolRequest{Tool: "read_file", Arguments: map[string]any{"path": "/etc/shadow"}}
 
-	enforced := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeEnforced, rules), req)
+	enforced := EvaluateTool(baseCtx(scrutineerv1alpha1.PolicyModeEnforced, rules), req)
 	if enforced.Allowed || !enforced.Blocked || enforced.Reason != ReasonArgumentDenied || enforced.ArgMatch == nil {
 		t.Fatalf("enforced: %+v", enforced)
 	}
-	dry := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeDryRun, rules), req)
-	if !dry.Allowed || dry.Blocked || !dry.WouldDeny || dry.Action != relayv1alpha1.PolicyDecisionDryRun {
+	dry := EvaluateTool(baseCtx(scrutineerv1alpha1.PolicyModeDryRun, rules), req)
+	if !dry.Allowed || dry.Blocked || !dry.WouldDeny || dry.Action != scrutineerv1alpha1.PolicyDecisionDryRun {
 		t.Fatalf("dry-run: %+v", dry)
 	}
-	audit := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeAuditOnly, rules), req)
-	if !audit.Allowed || audit.Action != relayv1alpha1.PolicyDecisionAudit {
+	audit := EvaluateTool(baseCtx(scrutineerv1alpha1.PolicyModeAuditOnly, rules), req)
+	if !audit.Allowed || audit.Action != scrutineerv1alpha1.PolicyDecisionAudit {
 		t.Fatalf("audit: %+v", audit)
 	}
 	// Compliant path passes argument rules.
-	ok := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "read_file", Arguments: map[string]any{"path": "/workspace/ok"}})
+	ok := EvaluateTool(baseCtx(scrutineerv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "read_file", Arguments: map[string]any{"path": "/workspace/ok"}})
 	if !ok.Allowed || ok.Reason != ReasonAllowed {
 		t.Fatalf("compliant: %+v", ok)
 	}
 }
 
 func TestEvaluateTool_nameDenyTakesPrecedence(t *testing.T) {
-	rules := relayv1alpha1.PolicyRules{
+	rules := scrutineerv1alpha1.PolicyRules{
 		DeniedTools: []string{"read_file"},
-		ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+		ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
 			Tools:       []string{"read_file"},
-			Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/etc/"}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+			Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/etc/"}, Effect: scrutineerv1alpha1.ConstraintEffectDeny}},
 		}},
 	}
-	auth := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "read_file", Arguments: map[string]any{"path": "/workspace/ok"}})
+	auth := EvaluateTool(baseCtx(scrutineerv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "read_file", Arguments: map[string]any{"path": "/workspace/ok"}})
 	if auth.Reason != ReasonDeniedTools {
 		t.Fatalf("expected DeniedTools precedence, got %+v", auth)
 	}
@@ -174,37 +174,37 @@ func TestEvaluateTool_nameDenyTakesPrecedence(t *testing.T) {
 func TestEvaluateTool_argDenyBeatsApproval(t *testing.T) {
 	// A tool both requiring approval and matching a deny argument rule must be
 	// auto-denied (never escalated to a human).
-	rules := relayv1alpha1.PolicyRules{
+	rules := scrutineerv1alpha1.PolicyRules{
 		RequireHumanApproval: []string{"deploy"},
-		ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+		ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
 			Tools:       []string{"deploy"},
-			Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "env", Op: relayv1alpha1.ArgOpEquals, Values: []string{"prod"}, Effect: relayv1alpha1.ConstraintEffectDeny}},
+			Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "env", Op: scrutineerv1alpha1.ArgOpEquals, Values: []string{"prod"}, Effect: scrutineerv1alpha1.ConstraintEffectDeny}},
 		}},
 	}
-	auth := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "deploy", Arguments: map[string]any{"env": "prod"}})
+	auth := EvaluateTool(baseCtx(scrutineerv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "deploy", Arguments: map[string]any{"env": "prod"}})
 	if auth.Reason != ReasonArgumentDenied {
 		t.Fatalf("expected ArgumentDenied to beat approval, got %+v", auth)
 	}
 	// Same tool that does NOT match the deny rule still routes to approval.
-	hold := EvaluateTool(baseCtx(relayv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "deploy", Arguments: map[string]any{"env": "staging"}})
+	hold := EvaluateTool(baseCtx(scrutineerv1alpha1.PolicyModeEnforced, rules), ToolRequest{Tool: "deploy", Arguments: map[string]any{"env": "staging"}})
 	if hold.Reason != ReasonApprovalRequired {
 		t.Fatalf("expected ApprovalRequired, got %+v", hold)
 	}
 }
 
 func TestRuntimeReport_argumentDeny_redactsValue(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{})
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{})
 	secret := "/etc/shadow-supersecret"
 	auth := ToolAuthorization{
 		Reason: ReasonArgumentDenied,
 		ArgMatch: &ArgConstraintMatch{
 			Arg:          "path",
-			Op:           relayv1alpha1.ArgOpHasPrefix,
-			Effect:       relayv1alpha1.ConstraintEffectDeny,
+			Op:           scrutineerv1alpha1.ArgOpHasPrefix,
+			Effect:       scrutineerv1alpha1.ConstraintEffectDeny,
 			PolicyValues: []string{"/etc/"},
 		},
 	}
-	auth.Action = relayv1alpha1.PolicyDecisionDeny
+	auth.Action = scrutineerv1alpha1.PolicyDecisionDeny
 	auth.Blocked = true
 
 	report := RuntimeReport(ctx, ToolRequest{Tool: "read_file", Arguments: map[string]any{"path": secret}}, auth, time.Unix(0, 0))
@@ -230,18 +230,18 @@ func TestRuntimeReport_argumentDeny_redactsValue(t *testing.T) {
 }
 
 func TestArgumentRules_envRoundTrip(t *testing.T) {
-	rules := []relayv1alpha1.ToolArgumentRule{{
+	rules := []scrutineerv1alpha1.ToolArgumentRule{{
 		Tools:       []string{"read_file"},
-		Constraints: []relayv1alpha1.ArgumentConstraint{{Arg: "path", Op: relayv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: relayv1alpha1.ConstraintEffectAllow}},
+		Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: scrutineerv1alpha1.ConstraintEffectAllow}},
 	}}
-	cfg := BuildConfig(baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{ArgumentRules: rules}))
+	cfg := BuildConfig(baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{ArgumentRules: rules}))
 	env := envMap(EnvForConfig(cfg))
 	raw, ok := env[EnvPolicyArgumentRules]
 	if !ok || raw == "" {
 		t.Fatalf("argument rules env not emitted: %+v", env)
 	}
 	parsed := argumentRulesEnv(raw)
-	if len(parsed) != 1 || parsed[0].Tools[0] != "read_file" || parsed[0].Constraints[0].Effect != relayv1alpha1.ConstraintEffectAllow {
+	if len(parsed) != 1 || parsed[0].Tools[0] != "read_file" || parsed[0].Constraints[0].Effect != scrutineerv1alpha1.ConstraintEffectAllow {
 		t.Fatalf("round-trip mismatch: %+v", parsed)
 	}
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/secureai/relay/internal/enforcement/toolgateway"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
 )
 
 func main() {
@@ -39,7 +39,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("relay tool-gateway listening on %s (session %s/%s, mode=%s)",
+		log.Printf("scrutineer tool-gateway listening on %s (session %s/%s, mode=%s)",
 			env.ListenHost, env.SessionNamespace, env.SessionName, env.Mode)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %v", err)

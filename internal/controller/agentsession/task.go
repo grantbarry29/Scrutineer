@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // ResolvedTask holds the task fields used when building the runtime Job. Prompt may
@@ -32,7 +32,7 @@ type ResolvedTask struct {
 // resolveTask loads the effective task content for an AgentSession. When
 // promptConfigMapRef is set, the prompt is read from the referenced ConfigMap key
 // in the same namespace as the AgentSession.
-func (r *AgentSessionReconciler) resolveTask(ctx context.Context, session *relayv1alpha1.AgentSession) (*ResolvedTask, error) {
+func (r *AgentSessionReconciler) resolveTask(ctx context.Context, session *scrutineerv1alpha1.AgentSession) (*ResolvedTask, error) {
 	task := session.Spec.Task
 	resolved := &ResolvedTask{
 		Description: task.Description,
@@ -63,7 +63,7 @@ func (r *AgentSessionReconciler) resolveTask(ctx context.Context, session *relay
 }
 
 // validatePromptConfigMapRef checks ref fields when present. Called from validateSpec.
-func validatePromptConfigMapRef(ref *relayv1alpha1.PromptConfigMapRef) error {
+func validatePromptConfigMapRef(ref *scrutineerv1alpha1.PromptConfigMapRef) error {
 	if ref == nil {
 		return nil
 	}

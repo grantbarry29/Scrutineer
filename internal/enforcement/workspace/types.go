@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,13 +12,13 @@ You may obtain a copy of the License at
 // fs-gateway sidecar (`cmd/fs-gateway`, `Dockerfile.fs-gateway`).
 package workspace
 
-import "github.com/secureai/relay/internal/enforcement"
+import "github.com/grantbarry29/scrutineer/internal/enforcement"
 
 // SidecarType is the RuntimeProfile sidecar type for FS gateways.
 const SidecarType = "fs-gateway"
 
 // DefaultFSGatewayImage is the first-party fs-gateway container image reference.
-const DefaultFSGatewayImage = "ghcr.io/secureai/relay-fs-gateway:latest"
+const DefaultFSGatewayImage = "ghcr.io/grantbarry29/scrutineer-fs-gateway:latest"
 
 // DefaultListenHost is the bind address for the fs-gateway HTTP server.
 const DefaultListenHost = "127.0.0.1:19191"

@@ -1,13 +1,13 @@
-# Relay
+# Scrutineer
 
-**Relay is a Kubernetes-native governance layer for autonomous AI agent execution.**
+**Scrutineer is a Kubernetes-native governance layer for autonomous AI agent execution.**
 
-Relay is **not** a workflow engine. It is not trying to replace
+Scrutineer is **not** a workflow engine. It is not trying to replace
 [Kubernetes Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/),
 [Tekton](https://tekton.dev/), [Argo Workflows](https://argoproj.github.io/argo-workflows/),
 or [Temporal](https://temporal.io/) — those systems already run work.
 
-Relay's job is different: it is the control plane that **governs** autonomous AI
+Scrutineer's job is different: it is the control plane that **governs** autonomous AI
 agents while they run inside enterprise environments. It wraps execution with
 policy, identity isolation, audit, observability, and (eventually) strong
 runtime enforcement, then delegates the actual *running* of the agent to one of
@@ -22,11 +22,11 @@ gates sensitive actions behind human approval workflows.
 
 ---
 
-> **Design docs:** architecture and per-phase design live in [`docs/design/`](docs/design/) — start with [`architecture.md`](docs/design/architecture.md). **Task tracking and the roadmap are in [GitHub Issues / Projects](https://github.com/grantbarry29/Relay/issues)**; durable technical context lives in `docs/design/` and component `README.md`s.
+> **Design docs:** architecture and per-phase design live in [`docs/design/`](docs/design/) — start with [`architecture.md`](docs/design/architecture.md). **Task tracking and the roadmap are in [GitHub Issues / Projects](https://github.com/grantbarry29/scrutineer/issues)**; durable technical context lives in `docs/design/` and component `README.md`s.
 
 ## Long-term product vision
 
-Relay aims to become the runtime control plane for safely running autonomous AI
+Scrutineer aims to become the runtime control plane for safely running autonomous AI
 agents inside enterprise environments.
 
 **Shipped today** (Phases 0–5):
@@ -48,17 +48,17 @@ agents inside enterprise environments.
 - An operational governance/observability UI
 
 Live task state and the product roadmap are in
-[GitHub Issues / Projects](https://github.com/grantbarry29/Relay/issues); durable technical context
+[GitHub Issues / Projects](https://github.com/grantbarry29/scrutineer/issues); durable technical context
 lives in [`docs/design/`](docs/design/) and component `README.md`s.
 
 ---
 
-## What Relay does today
+## What Scrutineer does today
 
 **Control plane (the manager — [`cmd/main.go`](cmd/main.go)):**
 
-1. Defines namespaced CRDs (`relay.secureai.dev/v1alpha1`): `AgentSession`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`, `ApprovalRequest`.
-2. Reconciles each `AgentSession` into a runtime object named `relay-session-<name>`, owned by the session, behind a backend-neutral `runtimeBackend` interface: a `batch/v1` Job (`kubernetes-job`, default) or a bare `v1` Pod (`kubernetes-pod`). `status.runtimeRef` records which object was created.
+1. Defines namespaced CRDs (`scrutineer.sh/v1alpha1`): `AgentSession`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`, `ApprovalRequest`.
+2. Reconciles each `AgentSession` into a runtime object named `scrutineer-session-<name>`, owned by the session, behind a backend-neutral `runtimeBackend` interface: a `batch/v1` Job (`kubernetes-job`, default) or a bare `v1` Pod (`kubernetes-pod`). `status.runtimeRef` records which object was created.
 3. Merges reusable policies (`spec.policyRefs`) with inline `spec.policy` overrides → `status.effectivePolicy`, `status.policyDecisions`, and `AGENT_POLICY_*` env vars.
 4. Applies optional `RuntimeProfile` hardening and injects enabled enforcement sidecars into the Job pod template via `spec.runtimeProfileRef` / `spec.sidecars[]`.
 5. Tracks lifecycle in `status.phase` and structured `status.conditions` (including aggregate `Ready`), emits Kubernetes Events, supports cancellation and finalizer-gated deletion.
@@ -144,7 +144,7 @@ a generic workflow task. The spec captures four things:
 
 Set `spec.cancelRequested: true` on an existing `AgentSession` (or create one with it already set). The controller:
 
-1. Deletes the owned Job `relay-session-<session-name>` (and child Pods via `Background` propagation).
+1. Deletes the owned Job `scrutineer-session-<session-name>` (and child Pods via `Background` propagation).
 2. Sets `status.phase` to `Cancelled`, `status.result.outcome` to `cancelled`, and a `Completed` condition with reason `SessionCancelled`.
 3. Emits a `SessionCancelled` Kubernetes Event.
 4. Does **not** create a new Job while cancellation remains requested.
@@ -160,7 +160,7 @@ kubectl describe agentsession my-session   # Event: SessionCancelled
 **Create an already-cancelled session** (no Job is started):
 
 ```bash
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_cancel.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_cancel.yaml
 ```
 
 Cancellation stops the **Kubernetes runtime** (Job/Pod). It does not send a graceful shutdown signal to agent logic inside the container; stronger teardown belongs in future runtime profiles.
@@ -185,7 +185,7 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 
 | Source | Fields merged into Job |
 |--------|------------------------|
-| Relay baseline | Capability drops (`ALL`), `allowPrivilegeEscalation: false` (busybox-friendly; no forced `runAsNonRoot`) |
+| Scrutineer baseline | Capability drops (`ALL`), `allowPrivilegeEscalation: false` (busybox-friendly; no forced `runAsNonRoot`) |
 | `RuntimeProfile.spec.container` | `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities` (profile wins when set) |
 | `RuntimeProfile.spec.pod` | `runtimeClassName`, `seccompProfile` |
 
@@ -196,17 +196,17 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 | `status.matchedRuntimeProfile` | Which `RuntimeProfile` was applied (name, UID, resourceVersion) |
 | `RuntimeProfileResolved` condition | `ProfileApplied` when a ref resolves; `NoProfileRef` when unset |
 
-**Enforcement sidecars:** enabled `spec.sidecars[]` entries are injected into the Job pod template. **dns-proxy** (`ghcr.io/secureai/relay-dns-proxy`), **tool-gateway** (`ghcr.io/secureai/relay-tool-gateway`), and **fs-gateway** (`ghcr.io/secureai/relay-fs-gateway`) use first-party images (build: `make docker-build-<name>`; load into kind: `make kind-load-<name>`) and enforce network / tool / file policy respectively. `envoy` still uses a placeholder `busybox` image until its image ships. See the per-sidecar READMEs under [`cmd/`](cmd/).
+**Enforcement sidecars:** enabled `spec.sidecars[]` entries are injected into the Job pod template. **dns-proxy** (`ghcr.io/grantbarry29/scrutineer-dns-proxy`), **tool-gateway** (`ghcr.io/grantbarry29/scrutineer-tool-gateway`), and **fs-gateway** (`ghcr.io/grantbarry29/scrutineer-fs-gateway`) use first-party images (build: `make docker-build-<name>`; load into kind: `make kind-load-<name>`) and enforce network / tool / file policy respectively. `envoy` still uses a placeholder `busybox` image until its image ships. See the per-sidecar READMEs under [`cmd/`](cmd/).
 
 **Runtime reporter wiring (Phase 3b):** when any enabled enforcement sidecar is present, the Job pod template also includes:
 
 | Injected into sidecars | Value |
 |------------------------|-------|
-| `RELAY_REPORTER_URL` | `http://relay-controller-reporter.relay-system.svc:8088` (base URL; append `/v1/report`) |
-| `RELAY_REPORTER_TOKEN_PATH` | `/var/run/secrets/relay/reporter-token/token` |
-| Projected volume | ServiceAccount token with audience `relay-reporter` (600s expiry, kubelet-refreshed) |
+| `SCRUTINEER_REPORTER_URL` | `http://scrutineer-controller-reporter.scrutineer-system.svc:8088` (base URL; append `/v1/report`) |
+| `SCRUTINEER_REPORTER_TOKEN_PATH` | `/var/run/secrets/scrutineer/reporter-token/token` |
+| Projected volume | ServiceAccount token with audience `scrutineer-reporter` (600s expiry, kubelet-refreshed) |
 
-The agent container does **not** receive the reporter URL or token — only sidecars report runtime evidence. Deploy the controller with `make deploy` (or `make dev-deploy`) so the `relay-controller-reporter` Service exposes port `:8088`. Contract: [`docs/design/phase-3-runtime-reporter-contract.md`](docs/design/phase-3-runtime-reporter-contract.md).
+The agent container does **not** receive the reporter URL or token — only sidecars report runtime evidence. Deploy the controller with `make deploy` (or `make dev-deploy`) so the `scrutineer-controller-reporter` Service exposes port `:8088`. Contract: [`docs/design/phase-3-runtime-reporter-contract.md`](docs/design/phase-3-runtime-reporter-contract.md).
 
 **Profile change behavior:**
 
@@ -217,10 +217,10 @@ The agent container does **not** receive the reporter URL or token — only side
 **Samples:**
 
 ```bash
-kubectl apply -f config/samples/relay_v1alpha1_runtimeprofile.yaml
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml
-kubectl apply -f config/samples/relay_v1alpha1_runtimeprofile_sidecars.yaml
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_runtimeprofile_sidecars.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_runtimeprofile.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_runtimeprofile_ref.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_runtimeprofile_sidecars.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_runtimeprofile_sidecars.yaml
 ```
 
 ### Reusable policy (`AgentPolicy` + `ToolPolicy`)
@@ -234,7 +234,7 @@ Platform teams can publish baseline governance once; sessions reference policies
 3. List fields are unioned; numeric caps take the **minimum** (strictest); `argumentRules` are **concatenated** (constraints only tighten)
 4. Effective **mode** = strictest across matched policies (`enforced` > `dry-run` > `audit-only`)
 
-**Tool argument rules (`ToolPolicy.spec.argumentRules`):** constrain a tool call by its **arguments**, not just its name — applied only to calls that already pass `allowedTools`/`deniedTools`. Each rule binds tools (`"*"` = any) to `constraints` (dotted arg path + operator + `Allow`/`Deny` effect); a `Deny` match blocks, `Allow` constraints act as an allowlist. Merged and propagated to the [tool-gateway](cmd/tool-gateway/), which evaluates them per call and reports redacted evidence (argument values never leave the pod). See [`docs/design/phase-3-tool-argument-constraints.md`](docs/design/phase-3-tool-argument-constraints.md) and `config/samples/relay_v1alpha1_toolpolicy.yaml`.
+**Tool argument rules (`ToolPolicy.spec.argumentRules`):** constrain a tool call by its **arguments**, not just its name — applied only to calls that already pass `allowedTools`/`deniedTools`. Each rule binds tools (`"*"` = any) to `constraints` (dotted arg path + operator + `Allow`/`Deny` effect); a `Deny` match blocks, `Allow` constraints act as an allowlist. Merged and propagated to the [tool-gateway](cmd/tool-gateway/), which evaluates them per call and reports redacted evidence (argument values never leave the pod). See [`docs/design/phase-3-tool-argument-constraints.md`](docs/design/phase-3-tool-argument-constraints.md) and `config/samples/scrutineer_v1alpha1_toolpolicy.yaml`.
 
 **Status written on reconcile:**
 
@@ -256,18 +256,18 @@ Platform teams can publish baseline governance once; sessions reference policies
 **Samples:**
 
 ```bash
-kubectl apply -f config/samples/relay_v1alpha1_agentpolicy.yaml
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_policy_ref.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentpolicy.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_policy_ref.yaml
 
-kubectl apply -f config/samples/relay_v1alpha1_toolpolicy.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_toolpolicy.yaml
 # prod-agents-baseline must exist for the combined sample:
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_toolpolicy_ref.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_toolpolicy_ref.yaml
 ```
 
 ### Inline sample
 
 ```yaml
-apiVersion: relay.secureai.dev/v1alpha1
+apiVersion: scrutineer.sh/v1alpha1
 kind: AgentSession
 metadata:
   name: github-readme-update
@@ -338,11 +338,11 @@ spec:
 
 ### Environment variables injected into the agent container
 
-Relay always injects these (empty when not set):
+Scrutineer always injects these (empty when not set):
 
 ```
-RELAY_SESSION_NAME
-RELAY_SESSION_NAMESPACE
+SCRUTINEER_SESSION_NAME
+SCRUTINEER_SESSION_NAMESPACE
 AGENT_TASK_DESCRIPTION
 AGENT_TASK_PROMPT
 AGENT_MODEL_PROVIDER
@@ -377,7 +377,7 @@ The controller lives in [`internal/controller/agentsession/`](internal/controlle
 |--------|-----------|--------|
 | `AgentSession` | Primary `For()` watch | Any spec/status change on the session |
 | Owned `Job` | `Owns(&batchv1.Job{})` | Job status transitions re-queue the parent session |
-| Session `Pod` | `Watches(&corev1.Pod{})` | Job-owned Pods labeled `relay.secureai.dev/session=<name>` re-queue the session (faster `podName` / Running updates) |
+| Session `Pod` | `Watches(&corev1.Pod{})` | Job-owned Pods labeled `scrutineer.sh/session=<name>` re-queue the session (faster `podName` / Running updates) |
 | `AgentPolicy` | Secondary watch | Sessions with matching `spec.policyRefs` re-reconcile |
 | `ToolPolicy` | Secondary watch | Sessions with matching `spec.policyRefs` re-reconcile |
 | `RuntimeProfile` | Secondary watch | Sessions with matching `spec.runtimeProfileRef` re-reconcile |
@@ -391,7 +391,7 @@ Fetch AgentSession
     │
     ├─ deleting? ──► stop owned Job ──► remove finalizer ──► return
     │
-    ├─ ensure finalizer relay.secureai.dev/finalizer
+    ├─ ensure finalizer scrutineer.sh/finalizer
     │
     ├─ phase = Pending (first observation); observedGeneration = generation
     │
@@ -423,7 +423,7 @@ Fetch AgentSession
     └─ patch status; requeue after 15s if non-terminal
 ```
 
-Reconciliation is **idempotent**. Status updates use the status subresource with condition merging so concurrent writes do not drop condition types. The owned Job is named deterministically `relay-session-<session-name>`; a foreign Job at that name causes `Phase=Denied` (`JobConflict`).
+Reconciliation is **idempotent**. Status updates use the status subresource with condition merging so concurrent writes do not drop condition types. The owned Job is named deterministically `scrutineer-session-<session-name>`; a foreign Job at that name causes `Phase=Denied` (`JobConflict`).
 
 ### Validation (`validateSpec`)
 
@@ -474,8 +474,8 @@ When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` 
 
 | Setting | Value |
 |---------|-------|
-| Name | `relay-session-<session-name>` |
-| Labels | `relay.secureai.dev/session`, `app.kubernetes.io/name=relay`, `app.kubernetes.io/component=agent-session` |
+| Name | `scrutineer-session-<session-name>` |
+| Labels | `scrutineer.sh/session`, `app.kubernetes.io/name=scrutineer`, `app.kubernetes.io/component=agent-session` |
 | `backoffLimit` | `0` |
 | `ttlSecondsAfterFinished` | `300` |
 | Container | `agent`; baseline drops `ALL` capabilities, `allowPrivilegeEscalation=false` |
@@ -493,7 +493,7 @@ When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` 
 
 ### `status.podName` selection
 
-1. List Pods in the session namespace with label `relay.secureai.dev/session=<session.Name>`
+1. List Pods in the session namespace with label `scrutineer.sh/session=<session.Name>`
 2. Keep only Pods whose ownerReference points at the **current** Job UID
 3. Pick the Pod with the latest `creationTimestamp` (name breaks ties lexicographically)
 
@@ -501,7 +501,7 @@ When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` 
 
 **Cancellation** (`spec.cancelRequested: true`): deletes the owned Job, sets `phase=Cancelled`, `result.outcome=cancelled`, `Completed=True` / `SessionCancelled`, `Ready=False`. Idempotent when the Job is already gone.
 
-**Deletion**: finalizer `relay.secureai.dev/finalizer` blocks AgentSession removal until the owned Job is deleted. `blockOwnerDeletion` is cleared on the Job so deletion cannot deadlock.
+**Deletion**: finalizer `scrutineer.sh/finalizer` blocks AgentSession removal until the owned Job is deleted. `blockOwnerDeletion` is cleared on the Job so deletion cannot deadlock.
 
 ### Conditions
 
@@ -558,15 +558,15 @@ kubectl get agentsession <name> -o jsonpath='{.status.phase}{"\n"}{range .status
 kubectl get agentsession <name> -o jsonpath='{.status.effectivePolicy.mode}{"\n"}{.status.jobName}{"\n"}{.status.podName}{"\n"}'
 
 # Owned Job and labeled Pods
-kubectl get job relay-session-<name> -o wide
-kubectl get pods -l relay.secureai.dev/session=<name>
+kubectl get job scrutineer-session-<name> -o wide
+kubectl get pods -l scrutineer.sh/session=<name>
 ```
 
 ---
 
 ## Quick start with the dev container (recommended)
 
-The repo ships with a `.devcontainer/` that gives you a fully wired Relay dev
+The repo ships with a `.devcontainer/` that gives you a fully wired Scrutineer dev
 environment with **zero host setup beyond Docker + Cursor/VS Code**.
 
 What you get when you open the folder in a Dev Container:
@@ -574,8 +574,8 @@ What you get when you open the folder in a Dev Container:
 - Go 1.23 toolchain
 - Docker-in-Docker
 - `kubectl`, `kind`, `kustomize` pre-installed
-- A local `kind` cluster named **`relay-dev`** created automatically
-- The Relay CRD installed into that cluster on first start
+- A local `kind` cluster named **`scrutineer-dev`** created automatically
+- The Scrutineer CRD installed into that cluster on first start
 
 ### Open it
 
@@ -589,8 +589,8 @@ On first build the `postCreateCommand` (`.devcontainer/bootstrap.sh`) will:
 
 1. Wait for the in-container Docker daemon.
 2. `go mod download`.
-3. Create the `relay-dev` kind cluster (idempotent — re-runs are safe).
-4. `kubectl apply` the Relay CRD.
+3. Create the `scrutineer-dev` kind cluster (idempotent — re-runs are safe).
+4. `kubectl apply` the Scrutineer CRD.
 5. Print the next-step commands.
 
 ### Inside the container
@@ -600,10 +600,10 @@ On first build the `postCreateCommand` (`.devcontainer/bootstrap.sh`) will:
 make run
 
 # (2) In a second terminal, apply a sample AgentSession:
-kubectl apply -f config/samples/relay_v1alpha1_agentsession.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession.yaml
 kubectl get agentsessions -w
 kubectl describe agentsession github-readme-update
-kubectl logs job/relay-session-github-readme-update
+kubectl logs job/scrutineer-session-github-readme-update
 
 # (3) Or build, kind-load, and deploy the controller as an in-cluster Pod:
 make dev-deploy
@@ -619,13 +619,13 @@ make dev-down
 
 | Target          | What it does                                                       |
 |-----------------|--------------------------------------------------------------------|
-| `make kind-up`  | Create the `relay-dev` kind cluster (no-op if it exists).          |
-| `make kind-down`| Delete the `relay-dev` kind cluster.                               |
+| `make kind-up`  | Create the `scrutineer-dev` kind cluster (no-op if it exists).          |
+| `make kind-down`| Delete the `scrutineer-dev` kind cluster.                               |
 | `make kind-load`| `docker-build` the controller image + `kind load docker-image`.    |
 | `make dev-up`   | `kind-up` + install CRDs. Use with `make run` for the dev loop.    |
 | `make dev-deploy`| Build + load + deploy the controller into the kind cluster.       |
 | `make dev-sample`| Apply success + failing sample AgentSessions.                     |
-| `make verify-samples` | Server-side dry-run all `config/samples/relay_*.yaml` (needs CRDs). |
+| `make verify-samples` | Server-side dry-run all `config/samples/scrutineer_*.yaml` (needs CRDs). |
 | `make dev-down` | Alias for `kind-down`.                                             |
 
 You can also run these targets **outside** the dev container as long as Docker,
@@ -675,7 +675,7 @@ make manifests   # regenerate config/crd/bases and RBAC
 ```
 
 A pre-generated CRD is already checked in at
-`config/crd/bases/relay.secureai.dev_agentsessions.yaml`, so this step is only
+`config/crd/bases/scrutineer.sh_agentsessions.yaml`, so this step is only
 needed after editing `api/v1alpha1/*.go`.
 
 ### 2. Install the CRD
@@ -700,7 +700,7 @@ current kubeconfig user.
 ### 4. Apply a sample AgentSession
 
 ```
-kubectl apply -f config/samples/relay_v1alpha1_agentsession.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession.yaml
 ```
 
 ### 5. Observe it
@@ -709,7 +709,7 @@ kubectl apply -f config/samples/relay_v1alpha1_agentsession.yaml
 kubectl get agentsessions
 kubectl describe agentsession github-readme-update
 kubectl get jobs
-kubectl logs job/relay-session-github-readme-update
+kubectl logs job/scrutineer-session-github-readme-update
 ```
 
 You should see:
@@ -717,12 +717,12 @@ You should see:
 - `kubectl get agentsessions` showing `Phase` transition
   `Starting` → `Running` → `Succeeded`
 - `kubectl describe` showing Events: `JobCreated`, `JobRunning`, `JobSucceeded`
-- `kubectl logs` showing the injected `RELAY_*` / `AGENT_*` env values
+- `kubectl logs` showing the injected `SCRUTINEER_*` / `AGENT_*` env values
 
 ### 6. Try the failing sample
 
 ```
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_failing.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_failing.yaml
 kubectl get agentsessions
 ```
 
@@ -732,7 +732,7 @@ It should transition to `Failed` with a `JobFailed` event and
 ### 7. Try the prompt ConfigMap sample
 
 ```
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_prompt_cm.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_prompt_cm.yaml
 kubectl get agentsession github-readme-from-cm -w
 ```
 
@@ -742,23 +742,23 @@ Applies a ConfigMap plus an AgentSession that loads `spec.task.promptConfigMapRe
 ### 8. Try the cancellation sample
 
 ```
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_cancel.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_cancel.yaml
 kubectl get agentsession cancel-at-create-sample -w
 ```
 
-Expect `Phase=Cancelled` and no `relay-session-cancel-at-create-sample` Job.
+Expect `Phase=Cancelled` and no `scrutineer-session-cancel-at-create-sample` Job.
 
 To cancel a long-running session, apply the success sample, wait for `Running`, then patch `cancelRequested` as described in [Cancelling a running session](#cancelling-a-running-session).
 
 ### 9. Try the RuntimeProfile sample
 
 ```
-kubectl apply -f config/samples/relay_v1alpha1_runtimeprofile.yaml
-kubectl apply -f config/samples/relay_v1alpha1_agentsession_runtimeprofile_ref.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_runtimeprofile.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_runtimeprofile_ref.yaml
 kubectl get agentsession session-with-runtimeprofile -w
 ```
 
-Expect a Job whose pod template includes settings from `hardened-agent` (see `kubectl get job relay-session-session-with-runtimeprofile -o yaml`). The sample uses stricter container hardening; use an image compatible with `runAsNonRoot` / `readOnlyRootFilesystem` in production.
+Expect a Job whose pod template includes settings from `hardened-agent` (see `kubectl get job scrutineer-session-session-with-runtimeprofile -o yaml`). The sample uses stricter container hardening; use an image compatible with `runAsNonRoot` / `readOnlyRootFilesystem` in production.
 
 ### Validate samples against the installed CRD
 
@@ -768,7 +768,7 @@ After `make install` (or `make dev-up`), check that hand-maintained samples stil
 make verify-samples
 ```
 
-This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap, AgentPolicy/ToolPolicy/RuntimeProfile refs).
+This runs `kubectl apply --dry-run=server` on each `config/samples/scrutineer_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap, AgentPolicy/ToolPolicy/RuntimeProfile refs).
 
 ---
 
@@ -794,14 +794,14 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/relay_*.yaml`
 | `status.artifacts` | Yes | Logs (ConfigMap) + workspace tar (Secret) when `spec.outputs` enabled |
 | Pod watch · `Ready` condition · finalizer cleanup · cancellation | Yes | See controller reference above |
 
-Live task state & roadmap: [GitHub Issues](https://github.com/grantbarry29/Relay/issues). Durable context: [`docs/design/`](docs/design/).
+Live task state & roadmap: [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues). Durable context: [`docs/design/`](docs/design/).
 
 ### Deploying the controller into the cluster
 
 ```
-make docker-build IMG=ghcr.io/secureai/relay:dev
-make docker-push  IMG=ghcr.io/secureai/relay:dev
-make deploy       IMG=ghcr.io/secureai/relay:dev
+make docker-build IMG=ghcr.io/grantbarry29/scrutineer:dev
+make docker-push  IMG=ghcr.io/grantbarry29/scrutineer:dev
+make deploy       IMG=ghcr.io/grantbarry29/scrutineer:dev
 ```
 
 To remove:
@@ -819,7 +819,7 @@ After running the controller and applying the success sample:
 
 - [x] `AgentSession` CRD is installed in the cluster
 - [x] The sample AgentSession is accepted
-- [x] The controller creates a Job named `relay-session-github-readme-update`
+- [x] The controller creates a Job named `scrutineer-session-github-readme-update`
 - [x] The Job runs and exits 0
 - [x] `status.phase` transitions `Pending` → `Starting` → `Running` → `Succeeded`
 - [x] `status.jobName` is populated
@@ -836,7 +836,7 @@ Phases 0–5 have shipped (control-plane reconciliation, reusable policy + runti
 profiles, data-plane enforcement for network/tool/file, the runtime-evidence loop,
 observability/audit export, and human approval workflows). Phase 6 is in progress.
 Live task state and the **roadmap** are in
-[GitHub Issues / Projects](https://github.com/grantbarry29/Relay/issues); durable technical context and
+[GitHub Issues / Projects](https://github.com/grantbarry29/scrutineer/issues); durable technical context and
 design docs are in [`docs/design/`](docs/design/). Highlights of what remains:
 
 ### Shipped CRDs
@@ -849,7 +849,7 @@ endpoint) and `SessionTemplate` (parameterized blueprints) remain future work.
 
 - **Phase 6 — orchestrator adapters.** The backend-neutral `runtimeBackend`
   interface, `status.runtimeRef`, and a second in-tree backend (`kubernetes-pod`)
-  have shipped, proving Relay is orchestrator-agnostic. Next is the external
+  have shipped, proving Scrutineer is orchestrator-agnostic. Next is the external
   adapter design (`tekton` first, then `argo`, `temporal`, `external`). Design:
   [`docs/design/phase-6-orchestrator-interface.md`](docs/design/phase-6-orchestrator-interface.md).
 

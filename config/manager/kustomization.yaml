@@ -7,5 +7,5 @@ kind: Kustomization
 
 images:
 - name: controller
-  newName: ghcr.io/secureai/relay
+  newName: ghcr.io/grantbarry29/scrutineer
   newTag: latest

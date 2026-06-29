@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: relay-controller-reporter
-  namespace: relay-system
+  name: scrutineer-controller-reporter
+  namespace: scrutineer-system
   labels:
-    app.kubernetes.io/name: relay
+    app.kubernetes.io/name: scrutineer
     app.kubernetes.io/component: controller-manager
 spec:
   selector:
-    app.kubernetes.io/name: relay
+    app.kubernetes.io/name: scrutineer
     app.kubernetes.io/component: controller-manager
   ports:
   - name: reporter

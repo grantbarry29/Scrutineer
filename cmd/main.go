@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Command manager is the Relay controller-manager entrypoint.
+// Command manager is the Scrutineer controller-manager entrypoint.
 package main
 
 import (
@@ -26,14 +26,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/approval"
-	"github.com/secureai/relay/internal/audit"
-	"github.com/secureai/relay/internal/controller/agentsession"
-	"github.com/secureai/relay/internal/metrics"
-	"github.com/secureai/relay/internal/reporter"
-	"github.com/secureai/relay/internal/tracing"
-	relaywebhookv1alpha1 "github.com/secureai/relay/internal/webhook/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/approval"
+	"github.com/grantbarry29/scrutineer/internal/audit"
+	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
+	"github.com/grantbarry29/scrutineer/internal/metrics"
+	"github.com/grantbarry29/scrutineer/internal/reporter"
+	"github.com/grantbarry29/scrutineer/internal/tracing"
+	scrutineerwebhookv1alpha1 "github.com/grantbarry29/scrutineer/internal/webhook/v1alpha1"
 )
 
 var (
@@ -43,7 +43,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(relayv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(scrutineerv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
@@ -68,7 +68,7 @@ func main() {
 		"Address the runtime evidence reporter endpoint binds to (POST /v1/report).")
 	flag.StringVar(&otelEndpoint, "otel-exporter-otlp-endpoint", "",
 		"OTLP HTTP endpoint for trace export (e.g. http://localhost:4318). Empty disables tracing export.")
-	flag.StringVar(&otelServiceName, "otel-service-name", "relay-controller",
+	flag.StringVar(&otelServiceName, "otel-service-name", "scrutineer-controller",
 		"OpenTelemetry service.name resource attribute.")
 	flag.BoolVar(&otelInsecure, "otel-exporter-otlp-insecure", true,
 		"Disable TLS verification for the OTLP trace exporter.")
@@ -129,7 +129,7 @@ func main() {
 		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "relay.secureai.dev",
+		LeaderElectionID:       "scrutineer.sh",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -159,7 +159,7 @@ func main() {
 		}
 
 		if enableWebhooks {
-			if err := relaywebhookv1alpha1.SetupApprovalRequestWebhookWithManager(mgr); err != nil {
+			if err := scrutineerwebhookv1alpha1.SetupApprovalRequestWebhookWithManager(mgr); err != nil {
 				setupLog.Error(err, "unable to set up admission webhook", "webhook", "ApprovalRequest")
 				os.Exit(1)
 			}
@@ -176,7 +176,7 @@ func main() {
 			BindAddress: reporterAddr,
 			Client:      mgr.GetClient(),
 			APIReader:   mgr.GetAPIReader(),
-			Recorder:    mgr.GetEventRecorderFor("relay-runtime-reporter"),
+			Recorder:    mgr.GetEventRecorderFor("scrutineer-runtime-reporter"),
 		})); err != nil {
 			setupLog.Error(err, "unable to set up runtime reporter")
 			os.Exit(1)
@@ -194,7 +194,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting Relay manager")
+	setupLog.Info("starting Scrutineer manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

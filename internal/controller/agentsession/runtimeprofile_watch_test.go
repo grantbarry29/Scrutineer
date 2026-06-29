@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,13 +13,13 @@ package agentsession
 import (
 	"testing"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestSessionReferencesRuntimeProfile(t *testing.T) {
-	session := &relayv1alpha1.AgentSession{
-		Spec: relayv1alpha1.AgentSessionSpec{
-			RuntimeProfileRef: &relayv1alpha1.RuntimeProfileRef{Name: "hardened"},
+	session := &scrutineerv1alpha1.AgentSession{
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			RuntimeProfileRef: &scrutineerv1alpha1.RuntimeProfileRef{Name: "hardened"},
 		},
 	}
 	if !sessionReferencesRuntimeProfile(session, "hardened") {

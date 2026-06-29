@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // These tests are exercised via `make test`, which sets KUBEBUILDER_ASSETS to point at
@@ -62,7 +62,7 @@ var _ = BeforeSuite(func() {
 	Expect(cfg).NotTo(BeNil())
 
 	Expect(clientgoscheme.AddToScheme(clientgoscheme.Scheme)).To(Succeed())
-	Expect(relayv1alpha1.AddToScheme(clientgoscheme.Scheme)).To(Succeed())
+	Expect(scrutineerv1alpha1.AddToScheme(clientgoscheme.Scheme)).To(Succeed())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: clientgoscheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
@@ -82,7 +82,7 @@ var _ = BeforeSuite(func() {
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor("relay-test"),
+		Recorder:  mgr.GetEventRecorderFor("scrutineer-test"),
 		Notifier:  testNotifier,
 	}).SetupWithManager(mgr)).To(Succeed())
 

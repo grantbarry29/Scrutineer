@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,9 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 // runtimePhase is the backend-neutral lifecycle of a runtime. The reconciler maps it onto
@@ -48,7 +48,7 @@ type observation struct {
 	runtimeName string
 	// runtimeRef is the backend-neutral identity of the created runtime object (kind +
 	// apiVersion + name [+ uid]). Empty until a runtime exists. Feeds status.runtimeRef.
-	runtimeRef *relayv1alpha1.RuntimeRef
+	runtimeRef *scrutineerv1alpha1.RuntimeRef
 	// workloadName feeds status.podName (e.g. the Pod name). Empty if none yet.
 	workloadName string
 	// created reports that the runtime object was created on this reconcile (drives
@@ -79,14 +79,14 @@ type runtimeBackend interface {
 	// ensure creates the runtime if absent, reconciles drift, and returns normalized
 	// observed state without mutating the session. Idempotent. Returns ErrJobNotOwned on
 	// an ownership conflict.
-	ensure(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (observation, error)
+	ensure(ctx context.Context, session *scrutineerv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) (observation, error)
 
 	// stop terminates the runtime (cancellation/finalizer). Idempotent; NotFound is success.
-	stop(ctx context.Context, session *relayv1alpha1.AgentSession) error
+	stop(ctx context.Context, session *scrutineerv1alpha1.AgentSession) error
 
 	// runtimeGone reports whether the runtime object is fully removed (or deleting), used
 	// to gate finalizer removal.
-	runtimeGone(ctx context.Context, session *relayv1alpha1.AgentSession) (bool, error)
+	runtimeGone(ctx context.Context, session *scrutineerv1alpha1.AgentSession) (bool, error)
 
 	// ownedType is the runtime object kind to watch via Owns() so completions trigger
 	// reconciles (e.g. &batchv1.Job{}).
@@ -124,7 +124,7 @@ func (b *kubernetesJobBackend) ownedType() client.Object { return &batchv1.Job{}
 
 // ensure drives create→observe→pod-discovery and returns a normalized observation. It
 // performs runtime mutations (create/delete) but never writes to session status.
-func (b *kubernetesJobBackend) ensure(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (observation, error) {
+func (b *kubernetesJobBackend) ensure(ctx context.Context, session *scrutineerv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) (observation, error) {
 	runtimeJob, meta, err := b.ensureJob(ctx, session, task, pol, profile)
 	if err != nil {
 		return observation{}, err
@@ -136,7 +136,7 @@ func (b *kubernetesJobBackend) ensure(ctx context.Context, session *relayv1alpha
 	return observation{
 		phase:       jobRuntimePhase(runtimeJob),
 		runtimeName: runtimeJob.Name,
-		runtimeRef: &relayv1alpha1.RuntimeRef{
+		runtimeRef: &scrutineerv1alpha1.RuntimeRef{
 			APIVersion: batchv1.SchemeGroupVersion.String(),
 			Kind:       "Job",
 			Name:       runtimeJob.Name,
@@ -161,7 +161,7 @@ func (b *kubernetesJobBackend) getJob(ctx context.Context, key client.ObjectKey,
 
 // runtimeGone reports whether the owned Job is fully removed (NotFound) or already
 // deleting (deletionTimestamp set). A live Job without a deletion timestamp is not gone.
-func (b *kubernetesJobBackend) runtimeGone(ctx context.Context, session *relayv1alpha1.AgentSession) (bool, error) {
+func (b *kubernetesJobBackend) runtimeGone(ctx context.Context, session *scrutineerv1alpha1.AgentSession) (bool, error) {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 	var runtimeJob batchv1.Job
 	if err := b.getJob(ctx, jobKey, &runtimeJob); err != nil {
@@ -176,7 +176,7 @@ func (b *kubernetesJobBackend) runtimeGone(ctx context.Context, session *relayv1
 // stop deletes the deterministic Job for the AgentSession. A missing Job is treated as
 // already stopped. Delete is issued after a Get so the blockOwnerDeletion patch can be
 // applied; NotFound at any point is success.
-func (b *kubernetesJobBackend) stop(ctx context.Context, session *relayv1alpha1.AgentSession) error {
+func (b *kubernetesJobBackend) stop(ctx context.Context, session *scrutineerv1alpha1.AgentSession) error {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 
 	var existing batchv1.Job
@@ -217,7 +217,7 @@ type ensureMeta struct {
 // ensureJob fetches the Job owned by the AgentSession, creating it if it does not yet
 // exist and reconciling policy/runtime-profile drift. It returns the live Job and an
 // ensureMeta describing what happened. It does not mutate session status.
-func (b *kubernetesJobBackend) ensureJob(ctx context.Context, session *relayv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) (*batchv1.Job, ensureMeta, error) {
+func (b *kubernetesJobBackend) ensureJob(ctx context.Context, session *scrutineerv1alpha1.AgentSession, task *ResolvedTask, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) (*batchv1.Job, ensureMeta, error) {
 	jobKey := client.ObjectKey{Namespace: session.Namespace, Name: job.NameFor(session)}
 
 	desired := job.Build(session, toJobTask(task), pol, profile)
@@ -260,7 +260,7 @@ func (b *kubernetesJobBackend) ensureJob(ctx context.Context, session *relayv1al
 
 // createJob creates the desired Job, resolving AlreadyExists races. created is true only
 // when this call actually created the object (false when it already existed).
-func (b *kubernetesJobBackend) createJob(ctx context.Context, session *relayv1alpha1.AgentSession, desired *batchv1.Job, jobKey client.ObjectKey) (*batchv1.Job, bool, error) {
+func (b *kubernetesJobBackend) createJob(ctx context.Context, session *scrutineerv1alpha1.AgentSession, desired *batchv1.Job, jobKey client.ObjectKey) (*batchv1.Job, bool, error) {
 	if err := controllerutil.SetControllerReference(session, desired, b.scheme); err != nil {
 		return nil, false, fmt.Errorf("set owner reference on Job: %w", err)
 	}

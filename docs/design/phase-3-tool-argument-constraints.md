@@ -11,13 +11,13 @@ Today tool governance is **name-granular**: `allowedTools` / `deniedTools` decid
 - `kubectl({args: ["delete", "ns", "prod"]})` — an allowed admin tool doing a destructive action.
 - `db_query({sql: "DROP TABLE ..."})` — an allowed query tool issuing a mutation.
 
-Name-level allow/deny cannot express "allow `read_file` only under `/workspace`" or "deny `kubectl delete` in prod". This doc adds an **argument constraint** layer that the tool gateway evaluates per call, with the same declared-policy / propagated / observed / enforced distinction Relay already uses (env vars propagate; the gateway enforces; status records evidence).
+Name-level allow/deny cannot express "allow `read_file` only under `/workspace`" or "deny `kubectl delete` in prod". This doc adds an **argument constraint** layer that the tool gateway evaluates per call, with the same declared-policy / propagated / observed / enforced distinction Scrutineer already uses (env vars propagate; the gateway enforces; status records evidence).
 
 ## Non-goals
 
 - **No enforcement implementation in this slice.** This is schema + contract design only; the tool gateway (`internal/enforcement/toolgateway`) wires it in a later slice.
 - **No general policy engine yet.** v1 uses structured matchers, not CEL/Rego/JSONLogic. A full expression language is a tracked open question, not this slice.
-- **No MCP tool-schema validation.** Relay does not fetch or validate each tool's JSON schema; it matches against the argument object as observed at the gateway.
+- **No MCP tool-schema validation.** Scrutineer does not fetch or validate each tool's JSON schema; it matches against the argument object as observed at the gateway.
 - **No new CRD.** Argument constraints extend the existing `ToolPolicy` CRD and `PolicyRules`; they do not add a CRD.
 - **No change to name-level rules.** `allowedTools`/`deniedTools`/caps keep their current meaning; argument constraints are an *additional* gate applied only to calls that already passed the name gate.
 

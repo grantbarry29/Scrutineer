@@ -4,7 +4,7 @@
 > **Audience:** the engineer/agent implementing slice 2 and the data-plane sidecars.
 > **Read first:** [`architecture.md`](architecture.md) · [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md)
 
-This document specifies **how a running data-plane sidecar reports runtime evidence back to the Relay controller**, so that `AgentSession.status.policyDecisions` and `AgentSession.status.violations` reflect what actually happened at runtime. It is the missing edge that turns *propagated* governance into *observed* governance.
+This document specifies **how a running data-plane sidecar reports runtime evidence back to the Scrutineer controller**, so that `AgentSession.status.policyDecisions` and `AgentSession.status.violations` reflect what actually happened at runtime. It is the missing edge that turns *propagated* governance into *observed* governance.
 
 This is a **contract specification**, not an implementation. It is intentionally prescriptive so the implementation slice can follow it closely.
 
@@ -52,12 +52,12 @@ flowchart LR
     subgraph pod["Agent Pod (session runtime)"]
         agent["agent container"]
         sidecar["dns-proxy / tool-gateway sidecar\n(enforces + observes)"]
-        token["projected SA token\n(audience: relay-reporter)"]
+        token["projected SA token\n(audience: scrutineer-reporter)"]
         agent -- "egress / tool calls" --> sidecar
         token -. mounted .-> sidecar
     end
 
-    subgraph cp["Relay Controller Manager (control plane)"]
+    subgraph cp["Scrutineer Controller Manager (control plane)"]
         reporter["Reporter HTTP endpoint\n:8088 /v1/report"]
         authz["Identity verifier\n(TokenReview + pod->session check)"]
         merge["ApplyRuntimePolicyReport\n(dedup + caps + derive violations)"]
@@ -131,7 +131,7 @@ Single endpoint for the MVP. Versioned path (`/v1/`) so the payload schema can e
 }
 ```
 
-The `decisions[]` / `violations[]` element shapes map **1:1** onto the existing `relayv1alpha1.PolicyDecision` / `relayv1alpha1.PolicyViolation` API types. Optional `usage` maps to `relayv1alpha1.SessionUsage` deltas. The wire payload deserializes into `enforcement.RuntimeReport`. **Do not invent a parallel schema** — reuse the API types.
+The `decisions[]` / `violations[]` element shapes map **1:1** onto the existing `scrutineerv1alpha1.PolicyDecision` / `scrutineerv1alpha1.PolicyViolation` API types. Optional `usage` maps to `scrutineerv1alpha1.SessionUsage` deltas. The wire payload deserializes into `enforcement.RuntimeReport`. **Do not invent a parallel schema** — reuse the API types.
 
 **Usage aggregation (Phase 4):** novel runtime `decisions[]` with `type: network` increment `status.usage.networkRequests`; `type: tool` increment `toolCalls`. Explicit `usage` deltas add token (or counter) fields. Re-delivered decision reports do not double-count bundled usage deltas when all decisions are duplicates.
 
@@ -160,7 +160,7 @@ Because the controller is the only writer (§2.1 option A), an agent **cannot** 
 
 ### 5.1 Authentication — projected ServiceAccount token (MVP)
 
-1. The session pod mounts a **projected ServiceAccount token** with `audience: relay-reporter` and a short expiry (e.g. 600s, auto-refreshed by kubelet). This is added to the sidecar (and only the sidecar container) when the reporter feature is enabled — wiring detail for the sidecar-injection slice.
+1. The session pod mounts a **projected ServiceAccount token** with `audience: scrutineer-reporter` and a short expiry (e.g. 600s, auto-refreshed by kubelet). This is added to the sidecar (and only the sidecar container) when the reporter feature is enabled — wiring detail for the sidecar-injection slice.
 2. The sidecar sends this token as `Authorization: Bearer`.
 3. The reporter calls the Kubernetes **`TokenReview`** API with the expected audience. TokenReview returns the authenticated username (the pod's ServiceAccount, e.g. `system:serviceaccount:team-a:default`) and, for bound tokens, a `BoundObjectRef` identifying the **Pod** the token was issued for.
 
@@ -168,9 +168,9 @@ Because the controller is the only writer (§2.1 option A), an agent **cannot** 
 
 After authentication, the reporter verifies the report targets the caller's **own** session:
 
-1. Resolve the calling **Pod** (from the token's bound object ref, or from a required `X-Relay-Pod` header cross-checked against the token's namespace).
+1. Resolve the calling **Pod** (from the token's bound object ref, or from a required `X-Scrutineer-Pod` header cross-checked against the token's namespace).
 2. Confirm `pod.metadata.namespace == body.session.namespace`.
-3. Walk ownership: `Pod → ownerRef(Job) → Job.labels["relay.secureai.dev/session"]` **or** the Job's ownerRef back to the AgentSession. Confirm it equals `body.session.name`.
+3. Walk ownership: `Pod → ownerRef(Job) → Job.labels["scrutineer.sh/session"]` **or** the Job's ownerRef back to the AgentSession. Confirm it equals `body.session.name`.
 4. If any check fails → `403`.
 
 This guarantees a sidecar can only ever populate evidence for the exact session it runs in. Namespace isolation is preserved.
@@ -184,7 +184,7 @@ sequenceDiagram
     participant TR as TokenReview API
     participant K as kube-apiserver
     S->>R: POST /v1/report (Bearer token, JSON report)
-    R->>TR: TokenReview(token, audience=relay-reporter)
+    R->>TR: TokenReview(token, audience=scrutineer-reporter)
     TR-->>R: authenticated SA + bound Pod ref
     alt token invalid
         R-->>S: 401
@@ -312,6 +312,6 @@ Each out-of-scope item above must already be a GitHub Issue, or be filed as one 
 
 ## 12. Open questions (resolve during impl, not blocking the contract)
 
-- Bound-token `BoundObjectRef` availability vs. requiring an explicit `X-Relay-Pod` header — pick based on the cluster K8s version floor (≥1.31 in CI).
-- Whether to expose the reporter via a headless `Service` + DNS name injected as `RELAY_REPORTER_URL`, mirroring `RELAY_TOOL_GATEWAY_URL`.
+- Bound-token `BoundObjectRef` availability vs. requiring an explicit `X-Scrutineer-Pod` header — pick based on the cluster K8s version floor (≥1.31 in CI).
+- Whether to expose the reporter via a headless `Service` + DNS name injected as `SCRUTINEER_REPORTER_URL`, mirroring `SCRUTINEER_TOOL_GATEWAY_URL`.
 - Whether a first runtime violation should also flip a `Ready`/new condition (likely a Phase 4 concern; keep status conditions stable for now).

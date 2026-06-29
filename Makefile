@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= ghcr.io/secureai/relay:latest
+IMG ?= ghcr.io/grantbarry29/scrutineer:latest
 
 # CONTAINER_TOOL defines the container tool to be used for building images.
 CONTAINER_TOOL ?= docker
@@ -47,7 +47,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 .PHONY: verify-samples
 verify-samples: manifests install ## Server-side dry-run of config/samples manifests (requires kubectl + CRDs).
 	@set -e; \
-	for f in config/samples/relay_*.yaml; do \
+	for f in config/samples/scrutineer_*.yaml; do \
 	  echo ">> verifying $$f"; \
 	  kubectl apply --dry-run=server -f "$$f"; \
 	done
@@ -58,7 +58,7 @@ test-e2e-images: kind-load kind-load-dns-proxy kind-load-tool-gateway kind-load-
 .PHONY: test-e2e
 test-e2e: manifests install ## Run e2e tests against the live kind cluster (assumes `make dev-up` has been run).
 	@echo ">> running e2e suite against $$(kubectl config current-context)"
-	@echo ">> ensure no other relay controller is running (no concurrent 'make run')"
+	@echo ">> ensure no other scrutineer controller is running (no concurrent 'make run')"
 	@echo ">> live evidence specs need images in kind: run 'make test-e2e-images' once"
 	go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v
 
@@ -105,7 +105,7 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 
 ##@ Dev cluster (kind)
 
-KIND_CLUSTER_NAME ?= relay-dev
+KIND_CLUSTER_NAME ?= scrutineer-dev
 KIND_CONFIG ?= .devcontainer/kind-config.yaml
 
 .PHONY: kind-up
@@ -114,7 +114,7 @@ kind-up: ## Create the local kind cluster if it does not exist.
 	@# kind v0.31.0's flaky "remove control-plane taint" step (it manually
 	@# installs the CNI and removes the taint if kind aborted early) and
 	@# also wires the dev container onto the kind docker network.
-	@if [ "$${RELAY_DEVCONTAINER:-0}" = "1" ] && [ -x .devcontainer/kind-up.sh ]; then \
+	@if [ "$${SCRUTINEER_DEVCONTAINER:-0}" = "1" ] && [ -x .devcontainer/kind-up.sh ]; then \
 		.devcontainer/kind-up.sh; \
 	else \
 		if kind get clusters 2>/dev/null | grep -qx $(KIND_CLUSTER_NAME); then \
@@ -134,7 +134,7 @@ kind-load: docker-build ## Build the controller image and load it into kind.
 	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-dns-proxy kind-load-dns-proxy
-DNS_PROXY_IMG ?= ghcr.io/secureai/relay-dns-proxy:latest
+DNS_PROXY_IMG ?= ghcr.io/grantbarry29/scrutineer-dns-proxy:latest
 
 docker-build-dns-proxy: ## Build the dns-proxy sidecar image.
 	$(CONTAINER_TOOL) build -f Dockerfile.dns-proxy -t ${DNS_PROXY_IMG} .
@@ -143,7 +143,7 @@ kind-load-dns-proxy: docker-build-dns-proxy ## Build and load dns-proxy image in
 	kind load docker-image $(DNS_PROXY_IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-tool-gateway kind-load-tool-gateway
-TOOL_GATEWAY_IMG ?= ghcr.io/secureai/relay-tool-gateway:latest
+TOOL_GATEWAY_IMG ?= ghcr.io/grantbarry29/scrutineer-tool-gateway:latest
 
 docker-build-tool-gateway: ## Build the tool-gateway sidecar image.
 	$(CONTAINER_TOOL) build -f Dockerfile.tool-gateway -t ${TOOL_GATEWAY_IMG} .
@@ -152,7 +152,7 @@ kind-load-tool-gateway: docker-build-tool-gateway ## Build and load tool-gateway
 	kind load docker-image $(TOOL_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-fs-gateway kind-load-fs-gateway
-FS_GATEWAY_IMG ?= ghcr.io/secureai/relay-fs-gateway:latest
+FS_GATEWAY_IMG ?= ghcr.io/grantbarry29/scrutineer-fs-gateway:latest
 
 docker-build-fs-gateway: ## Build the fs-gateway sidecar image.
 	$(CONTAINER_TOOL) build -f Dockerfile.fs-gateway -t ${FS_GATEWAY_IMG} .
@@ -163,19 +163,19 @@ kind-load-fs-gateway: docker-build-fs-gateway ## Build and load fs-gateway image
 .PHONY: dev-up
 dev-up: kind-up install ## Bring up kind + install CRDs (controller runs locally via `make run`).
 	@echo ""
-	@echo "Cluster $(KIND_CLUSTER_NAME) is up and Relay CRDs are installed."
+	@echo "Cluster $(KIND_CLUSTER_NAME) is up and Scrutineer CRDs are installed."
 	@echo "Run 'make run' in another terminal to start the controller against this cluster,"
 	@echo "then 'kubectl apply -f config/samples/' to try the sample AgentSessions."
 
 .PHONY: dev-deploy
 dev-deploy: kind-up kind-load deploy ## Build, load, and deploy the controller into the kind cluster.
-	@kubectl -n relay-system rollout status deployment/relay-controller-manager --timeout=2m
-	@echo "Relay controller is running in-cluster."
+	@kubectl -n scrutineer-system rollout status deployment/scrutineer-controller-manager --timeout=2m
+	@echo "Scrutineer controller is running in-cluster."
 
 .PHONY: dev-sample
 dev-sample: ## Apply both sample AgentSessions to the kind cluster.
-	kubectl apply -f config/samples/relay_v1alpha1_agentsession.yaml
-	kubectl apply -f config/samples/relay_v1alpha1_agentsession_failing.yaml
+	kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession.yaml
+	kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_failing.yaml
 
 .PHONY: dev-down
 dev-down: kind-down ## Tear down the local kind cluster.

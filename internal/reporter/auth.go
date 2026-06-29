@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,11 +23,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayjob "github.com/secureai/relay/internal/controller/job"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
 )
 
 const (
-	headerRelayPod       = "X-Relay-Pod"
+	headerScrutineerPod  = "X-Scrutineer-Pod"
 	podNameExtraKey      = "authentication.kubernetes.io/pod-name"
 	serviceAccountPrefix = "system:serviceaccount:"
 )
@@ -76,9 +76,9 @@ func (v *KubeIdentityVerifier) Verify(ctx context.Context, r *http.Request, sess
 	namespace := session.Namespace
 	podName, ok := podNameFromTokenReview(review.Status)
 	if !ok {
-		podName = strings.TrimSpace(r.Header.Get(headerRelayPod))
+		podName = strings.TrimSpace(r.Header.Get(headerScrutineerPod))
 		if podName == "" {
-			return CallerIdentity{}, fmt.Errorf("%w: pod identity not found in token or %s header", ErrUnauthorized, headerRelayPod)
+			return CallerIdentity{}, fmt.Errorf("%w: pod identity not found in token or %s header", ErrUnauthorized, headerScrutineerPod)
 		}
 	}
 
@@ -149,7 +149,7 @@ func (v *KubeIdentityVerifier) authorizePodForSession(ctx context.Context, names
 		return fmt.Errorf("get Job: %w", err)
 	}
 
-	if job.Labels[relayjob.LabelSessionRef] != sessionName {
+	if job.Labels[scrutineerjob.LabelSessionRef] != sessionName {
 		return fmt.Errorf("%w: pod Job does not own session %q", ErrForbidden, sessionName)
 	}
 

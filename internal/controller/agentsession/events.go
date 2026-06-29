@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // MaxSessionEvents caps status.events entries per AgentSession.
@@ -19,7 +19,7 @@ const MaxSessionEvents = 256
 
 // AppendSessionEvents appends runtime events onto session status without exceeding the cap.
 // Duplicate events (same sessionEventKey) are skipped for idempotent reporter delivery.
-func AppendSessionEvents(session *relayv1alpha1.AgentSession, incoming []relayv1alpha1.SessionEvent) {
+func AppendSessionEvents(session *scrutineerv1alpha1.AgentSession, incoming []scrutineerv1alpha1.SessionEvent) {
 	if session == nil || len(incoming) == 0 {
 		return
 	}
@@ -29,7 +29,7 @@ func AppendSessionEvents(session *relayv1alpha1.AgentSession, incoming []relayv1
 		keys[sessionEventKey(e)] = struct{}{}
 	}
 
-	out := append([]relayv1alpha1.SessionEvent(nil), session.Status.Events...)
+	out := append([]scrutineerv1alpha1.SessionEvent(nil), session.Status.Events...)
 	for _, e := range incoming {
 		key := sessionEventKey(e)
 		if _, ok := keys[key]; ok {
@@ -52,17 +52,17 @@ func AppendSessionEvents(session *relayv1alpha1.AgentSession, incoming []relayv1
 
 	out = out[:MaxSessionEvents-1]
 	last := incoming[len(incoming)-1]
-	out = append(out, relayv1alpha1.SessionEvent{
+	out = append(out, scrutineerv1alpha1.SessionEvent{
 		Time:    last.Time,
-		Type:    relayv1alpha1.SessionEventTypeSystem,
-		Source:  "relay-controller",
+		Type:    scrutineerv1alpha1.SessionEventTypeSystem,
+		Source:  "scrutineer-controller",
 		Action:  "truncate",
 		Message: formatEventTruncationMessage(omitted, MaxSessionEvents),
 	})
 	session.Status.Events = out
 }
 
-func sessionEventKey(e relayv1alpha1.SessionEvent) string {
+func sessionEventKey(e scrutineerv1alpha1.SessionEvent) string {
 	if e.EventID != "" {
 		return "id\x00" + e.EventID
 	}
@@ -88,7 +88,7 @@ func itoaEvents(n int) string {
 }
 
 // mergeEventsInPlace appends events from preserve that are absent from dst.
-func mergeEventsInPlace(dst *[]relayv1alpha1.SessionEvent, preserve []relayv1alpha1.SessionEvent) {
+func mergeEventsInPlace(dst *[]scrutineerv1alpha1.SessionEvent, preserve []scrutineerv1alpha1.SessionEvent) {
 	if dst == nil || len(preserve) == 0 {
 		return
 	}
@@ -96,7 +96,7 @@ func mergeEventsInPlace(dst *[]relayv1alpha1.SessionEvent, preserve []relayv1alp
 	for _, e := range *dst {
 		keys[sessionEventKey(e)] = struct{}{}
 	}
-	var missing []relayv1alpha1.SessionEvent
+	var missing []scrutineerv1alpha1.SessionEvent
 	for _, e := range preserve {
 		if _, ok := keys[sessionEventKey(e)]; !ok {
 			missing = append(missing, e)
@@ -106,7 +106,7 @@ func mergeEventsInPlace(dst *[]relayv1alpha1.SessionEvent, preserve []relayv1alp
 		return
 	}
 	// Reuse append helper for cap enforcement on the combined list.
-	tmp := &relayv1alpha1.AgentSession{Status: relayv1alpha1.AgentSessionStatus{Events: *dst}}
+	tmp := &scrutineerv1alpha1.AgentSession{Status: scrutineerv1alpha1.AgentSessionStatus{Events: *dst}}
 	AppendSessionEvents(tmp, missing)
 	*dst = tmp.Status.Events
 }

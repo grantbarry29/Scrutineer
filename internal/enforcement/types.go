@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -8,14 +8,14 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package enforcement defines the control-plane contract between Relay and
+// Package enforcement defines the control-plane contract between Scrutineer and
 // replaceable data-plane enforcement backends (NetworkPolicy, egress proxy, tool gateway).
 //
 // Phase 3 slice 1: types, mode semantics, and reporting helpers only. Concrete backends
 // and reconciler wiring arrive in later slices. See docs/design/phase-3-enforcement-architecture.md.
 package enforcement
 
-import relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+import scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 
 // BackendKind identifies an enforcement backend implementation.
 type BackendKind string
@@ -42,16 +42,16 @@ type SessionContext struct {
 	SessionName      string
 	JobName          string
 	PodName          string
-	Mode             relayv1alpha1.PolicyMode
-	Policy           relayv1alpha1.PolicyRules
-	Sidecars         []relayv1alpha1.RuntimeProfileSidecar
+	Mode             scrutineerv1alpha1.PolicyMode
+	Policy           scrutineerv1alpha1.PolicyRules
+	Sidecars         []scrutineerv1alpha1.RuntimeProfileSidecar
 }
 
 // RuntimeReport is evidence produced by a data-plane backend for controller aggregation.
 type RuntimeReport struct {
-	Decisions  []relayv1alpha1.PolicyDecision
-	Violations []relayv1alpha1.PolicyViolation
-	Events     []relayv1alpha1.SessionEvent
+	Decisions  []scrutineerv1alpha1.PolicyDecision
+	Violations []scrutineerv1alpha1.PolicyViolation
+	Events     []scrutineerv1alpha1.SessionEvent
 	// Usage is an optional additive delta (e.g. token counts from the agent runtime).
-	Usage *relayv1alpha1.SessionUsage
+	Usage *scrutineerv1alpha1.SessionUsage
 }

@@ -1,7 +1,7 @@
 //go:build e2e
 
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,22 +20,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller/agentsession"
-	relayjob "github.com/secureai/relay/internal/controller/job"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
 )
 
 var _ = Describe("kubernetes-pod backend e2e against kind", func() {
 
 	It("runs a session as a bare Pod (no Job) and reaches Succeeded", func(ctx SpecContext) {
-		ns := newTestNamespace("relay-e2e-pod")
+		ns := newTestNamespace("scrutineer-e2e-pod")
 		session := newAgentSession(ns, "pod-happy",
 			withOrchestrator(agentsession.OrchestratorKubernetesPod),
 			withCommand("sh", "-c", "echo running; exit 0"),
 		)
 		key := createAgentSession(ctx, session)
 
-		waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseSucceeded)
+		waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseSucceeded)
 
 		got := getSession(ctx, key)
 
@@ -51,7 +51,7 @@ var _ = Describe("kubernetes-pod backend e2e against kind", func() {
 		// The agent Pod is owned by the session (controller ref) and labeled for it.
 		var pod corev1.Pod
 		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: ns, Name: got.Status.PodName}, &pod)).To(Succeed())
-		Expect(pod.Labels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+		Expect(pod.Labels[scrutineerjob.LabelSessionRef]).To(Equal(session.Name))
 		owner := metav1.GetControllerOf(&pod)
 		Expect(owner).NotTo(BeNil())
 		Expect(owner.Kind).To(Equal("AgentSession"))

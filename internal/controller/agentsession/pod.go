@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller/job"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/controller/job"
 )
 
 // Pod selection for status.podName (MVP and retry scenarios):
 //
-//   - List Pods in the session namespace with label relay.secureai.dev/session=<session.Name>
+//   - List Pods in the session namespace with label scrutineer.sh/session=<session.Name>
 //     (the same label applied to the Job pod template).
 //   - Consider only Pods whose ownerReference points at the current Job UID with Kind "Job".
 //     Pods from a prior Job (different UID after recreate) or unrelated Jobs are ignored even
@@ -36,7 +36,7 @@ import (
 //
 // MVP sets Job backoffLimit=0, so a single Pod per Job is typical. The same rules apply when
 // backoffLimit>0 (multiple Pods per Job UID) or when manual tests inject extra labeled Pods.
-func (b *kubernetesJobBackend) findPodName(ctx context.Context, session *relayv1alpha1.AgentSession, runtimeJob *batchv1.Job) (string, error) {
+func (b *kubernetesJobBackend) findPodName(ctx context.Context, session *scrutineerv1alpha1.AgentSession, runtimeJob *batchv1.Job) (string, error) {
 	if runtimeJob == nil {
 		return "", nil
 	}

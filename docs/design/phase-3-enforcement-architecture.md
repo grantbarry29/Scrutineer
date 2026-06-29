@@ -1,6 +1,6 @@
 # Phase 3 Enforcement Architecture
 
-Relay Phase 3 moves from policy declaration and propagation to data-plane enforcement. The goal is not to turn Relay into an orchestrator or agent framework. The controller should keep declaring desired governance state; enforcement backends should observe, enforce, and report evidence.
+Scrutineer Phase 3 moves from policy declaration and propagation to data-plane enforcement. The goal is not to turn Scrutineer into an orchestrator or agent framework. The controller should keep declaring desired governance state; enforcement backends should observe, enforce, and report evidence.
 
 ## Goals
 
@@ -111,7 +111,7 @@ Implemented in `internal/enforcement/networkpolicy/` and `internal/controller/ag
 - DNS egress to all namespaces on port 53 (required for resolution; FQDN policy still needs slice 7)
 - Applied only when effective policy mode is **enforced** and CIDR rules are present
 - `allowedDomains` / `deniedDomains` are **not** enforced by NetworkPolicy
-- Reconciler creates/updates/deletes owned `relay-netpol-<session>` objects; removed on terminal phase
+- Reconciler creates/updates/deletes owned `scrutineer-netpol-<session>` objects; removed on terminal phase
 
 Acceptance:
 
@@ -141,7 +141,7 @@ Implemented in `internal/controller/job/sidecars.go`:
 
 - Injects enabled `dns-proxy`, `tool-gateway`, and `envoy` sidecars from `RuntimeProfile.spec.sidecars[]`
 - Skips disabled and unknown types; placeholder `busybox` images until data-plane images ship
-- Sets `RELAY_TOOL_GATEWAY_URL` on the agent when tool-gateway is enabled
+- Sets `SCRUTINEER_TOOL_GATEWAY_URL` on the agent when tool-gateway is enabled
 - `RuntimeProfileDrift` detects sidecar template changes
 
 Acceptance:
@@ -192,7 +192,7 @@ Design only. See [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-pol
 
 Slices 1–8 shipped contracts, design docs, and in-process merge helpers, but **nothing running in-cluster produces or reports runtime evidence**. `status.policyDecisions`, `status.violations`, and `status.usage` are empty at runtime. Phase 3b closes that gap and is a prerequisite for Phase 4 observability — it is the critical path, not optional hardening.
 
-Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/Relay/issues)):
+Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)):
 
 1. **Runtime reporter mechanism design** — `docs/design/phase-3-runtime-reporter-contract.md`.
 2. **Runtime reporter loop (impl)** — controller-owned PATCH callback populates status.
@@ -212,4 +212,4 @@ Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/Relay
 
 ## Recommended Next Work
 
-Phase 3 slices 1–8 are complete. Pick the next slice from [GitHub Issues](https://github.com/grantbarry29/Relay/issues).
+Phase 3 slices 1–8 are complete. Pick the next slice from [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues).

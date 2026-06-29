@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package metrics exposes Relay control-plane Prometheus metrics on the controller
+// Package metrics exposes Scrutineer control-plane Prometheus metrics on the controller
 // manager metrics endpoint (controller-runtime /metrics).
 package metrics
 
@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	namespace = "relay"
+	namespace = "scrutineer"
 )
 
 var (
@@ -68,7 +68,7 @@ var (
 	registerErr  error
 )
 
-// Register wires Relay metrics and the AgentSession collector into the controller-runtime registry.
+// Register wires Scrutineer metrics and the AgentSession collector into the controller-runtime registry.
 func Register(collector *AgentSessionCollector) error {
 	registerOnce.Do(func() {
 		collectors := []prometheus.Collector{

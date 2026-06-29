@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,21 +20,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 // Avoid an unused import lint when intstr is not needed.
 var _ = intstr.FromInt
 
 // NameFor returns the deterministic Job name for an AgentSession.
-func NameFor(session *relayv1alpha1.AgentSession) string {
+func NameFor(session *scrutineerv1alpha1.AgentSession) string {
 	return NamePrefix + session.Name
 }
 
-func labelsFor(session *relayv1alpha1.AgentSession) map[string]string {
+func labelsFor(session *scrutineerv1alpha1.AgentSession) map[string]string {
 	return map[string]string{
-		LabelAppName:      AppNameRelay,
+		LabelAppName:      AppNameScrutineer,
 		LabelAppComponent: ComponentSession,
 		LabelSessionRef:   session.Name,
 	}
@@ -43,7 +43,7 @@ func labelsFor(session *relayv1alpha1.AgentSession) map[string]string {
 // Build renders the batch/v1 Job that should run the AgentSession. The agent Pod
 // template is produced by BuildPodTemplateSpec (shared across runtime backends);
 // Build only adds the Job-specific wrapper (name, backoff/TTL, deadline).
-func Build(session *relayv1alpha1.AgentSession, task *Task, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) *batchv1.Job {
+func Build(session *scrutineerv1alpha1.AgentSession, task *Task, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) *batchv1.Job {
 	rt := session.Spec.Runtime
 
 	backoffLimit := int32(0)
@@ -80,7 +80,7 @@ func defaultContainerSecurityContext() *corev1.SecurityContext {
 	}
 }
 
-func mergeContainerSecurityContext(base *corev1.SecurityContext, profile *relayv1alpha1.RuntimeProfile) *corev1.SecurityContext {
+func mergeContainerSecurityContext(base *corev1.SecurityContext, profile *scrutineerv1alpha1.RuntimeProfile) *corev1.SecurityContext {
 	if base == nil {
 		base = defaultContainerSecurityContext()
 	}
@@ -104,7 +104,7 @@ func mergeContainerSecurityContext(base *corev1.SecurityContext, profile *relayv
 	return out
 }
 
-func applyRuntimeProfileToPodSpec(spec *corev1.PodSpec, profile *relayv1alpha1.RuntimeProfile) {
+func applyRuntimeProfileToPodSpec(spec *corev1.PodSpec, profile *scrutineerv1alpha1.RuntimeProfile) {
 	if spec == nil || profile == nil || profile.Spec.Pod == nil {
 		return
 	}
@@ -121,7 +121,7 @@ func applyRuntimeProfileToPodSpec(spec *corev1.PodSpec, profile *relayv1alpha1.R
 	}
 }
 
-func buildWorkspaceVolumes(ws *relayv1alpha1.WorkspaceSpec) ([]corev1.Volume, []corev1.VolumeMount) {
+func buildWorkspaceVolumes(ws *scrutineerv1alpha1.WorkspaceSpec) ([]corev1.Volume, []corev1.VolumeMount) {
 	if ws == nil || !ws.Ephemeral {
 		return nil, nil
 	}
@@ -149,20 +149,20 @@ func buildWorkspaceVolumes(ws *relayv1alpha1.WorkspaceSpec) ([]corev1.Volume, []
 	return []corev1.Volume{v}, []corev1.VolumeMount{m}
 }
 
-func buildEnv(session *relayv1alpha1.AgentSession, task *Task, resolved *policy.Resolved) []corev1.EnvVar {
+func buildEnv(session *scrutineerv1alpha1.AgentSession, task *Task, resolved *policy.Resolved) []corev1.EnvVar {
 	if task == nil {
 		task = &Task{}
 	}
 	rules := session.Spec.Policy.PolicyRules
-	mode := relayv1alpha1.PolicyModeAuditOnly
+	mode := scrutineerv1alpha1.PolicyModeAuditOnly
 	if resolved != nil {
 		rules = resolved.Rules
 		mode = resolved.Mode
 	}
 
 	env := []corev1.EnvVar{
-		{Name: EnvRelaySessionName, Value: session.Name},
-		{Name: EnvRelaySessionNamespace, Value: session.Namespace},
+		{Name: EnvScrutineerSessionName, Value: session.Name},
+		{Name: EnvScrutineerSessionNamespace, Value: session.Namespace},
 		{Name: EnvTaskDescription, Value: task.Description},
 		{Name: EnvTaskPrompt, Value: task.Prompt},
 		{Name: EnvModelProvider, Value: session.Spec.Model.Provider},

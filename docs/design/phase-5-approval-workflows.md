@@ -1,6 +1,6 @@
 # Phase 5 — Human Approval Workflows
 
-> **Status:** Design (Phase 5 · slice 1). No code yet. Defines the CRD shapes, controller gate/resume state machine, and invariants for scoped, auditable approvals. Implementation lands in later slices (tracked in [GitHub Issues](https://github.com/grantbarry29/Relay/issues)).
+> **Status:** Design (Phase 5 · slice 1). No code yet. Defines the CRD shapes, controller gate/resume state machine, and invariants for scoped, auditable approvals. Implementation lands in later slices (tracked in [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)).
 
 ## Purpose
 
@@ -37,10 +37,10 @@ This aligns with the product vision (*Policy And Enforcement Model*): "Human app
 
 ### `ApprovalPolicy` (declarative — slice 2 — **shipped 2026-06-21**)
 
-Shipped in `api/v1alpha1/approvalpolicy_types.go` (CRD `approvalpolicies`, short names `appol`/`approvalpol`). `requirement` (`default`/`allOf`, default `default`) and `onTimeout` (`deny`/`allow`, default `deny` — fail closed) are enum-validated with defaults; `actions` is required (`minItems: 1`); `approvers[].kind` is an enum (`User`/`Group`/`ServiceAccount`); `expiresAfter` is a Go duration string. No controller behavior yet (slice 3). Sample: `config/samples/relay_v1alpha1_approvalpolicy.yaml`.
+Shipped in `api/v1alpha1/approvalpolicy_types.go` (CRD `approvalpolicies`, short names `appol`/`approvalpol`). `requirement` (`default`/`allOf`, default `default`) and `onTimeout` (`deny`/`allow`, default `deny` — fail closed) are enum-validated with defaults; `actions` is required (`minItems: 1`); `approvers[].kind` is an enum (`User`/`Group`/`ServiceAccount`); `expiresAfter` is a Go duration string. No controller behavior yet (slice 3). Sample: `config/samples/scrutineer_v1alpha1_approvalpolicy.yaml`.
 
 ```yaml
-apiVersion: relay.secureai.dev/v1alpha1
+apiVersion: scrutineer.sh/v1alpha1
 kind: ApprovalPolicy
 metadata:
   name: prod-deploys
@@ -68,7 +68,7 @@ spec:
 Shipped in `api/v1alpha1/approvalrequest_types.go` (CRD `approvalrequests`, short names `appreq`/`approvalreq`). Created **by the controller** (owner-referenced by the `AgentSession`) when a gated session needs approval. Humans act on it by patching `spec.decision` (RBAC-scoped) or via a future UI/CLI. `spec.decision` is enum `""`/`granted`/`denied`; `status` (controller-owned) carries `state`/`decidedBy`/`decidedAt`/`expiresAt`/`reason`. One request per session (name = session name, 1:1 for MVP).
 
 ```yaml
-apiVersion: relay.secureai.dev/v1alpha1
+apiVersion: scrutineer.sh/v1alpha1
 kind: ApprovalRequest
 metadata:
   name: my-session-deploy        # derived, stable per (session, scope)
@@ -149,8 +149,8 @@ Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope*
 ## Implementation slices (tracking)
 
 Phase 5 shipped (slices 1–8); remaining loose ends are tracked as GitHub Issues
-([#6](https://github.com/grantbarry29/Relay/issues/6) webhook e2e,
-[#7](https://github.com/grantbarry29/Relay/issues/7) concurrent multi-grant):
+([#6](https://github.com/grantbarry29/scrutineer/issues/6) webhook e2e,
+[#7](https://github.com/grantbarry29/scrutineer/issues/7) concurrent multi-grant):
 
 1. **This doc** (design). — **done**
 2. `ApprovalPolicy` CRD (declarative only). — **done (2026-06-21)**
@@ -159,7 +159,7 @@ Phase 5 shipped (slices 1–8); remaining loose ends are tracked as GitHub Issue
 5. Approver allowlist (best-effort `decidedBy`). — **done (2026-06-21)** — see open questions #1/#2.
 6. Multi-approver (`allOf`). — **done (2026-06-21)** — `status.approvedBy[]` accumulation; gate opens on full coverage; `ApprovalPartiallyApproved` event. See open question #3.
 7. Approval-decision audit records. — **done (2026-06-21)** — `approval.granted`/`approval.denied` OTLP records on the gate (see Audit trail above + `phase-4-observability-export.md`).
-8. Authenticated approver identity (mutating admission webhook). — **done (2026-06-24)** — `internal/webhook/v1alpha1/approvalrequest_webhook.go` stamps `spec.decidedBy` from the authenticated `req.UserInfo` on decision writes (opt-in via `--enable-webhooks`; cert-manager overlay `config/webhooks`); resolves open questions #1 and #3. **Remaining:** committed opt-in webhook-mode e2e (needs cert-manager in kind) — GitHub Issue [#6](https://github.com/grantbarry29/Relay/issues/6).
+8. Authenticated approver identity (mutating admission webhook). — **done (2026-06-24)** — `internal/webhook/v1alpha1/approvalrequest_webhook.go` stamps `spec.decidedBy` from the authenticated `req.UserInfo` on decision writes (opt-in via `--enable-webhooks`; cert-manager overlay `config/webhooks`); resolves open questions #1 and #3. **Remaining:** committed opt-in webhook-mode e2e (needs cert-manager in kind) — GitHub Issue [#6](https://github.com/grantbarry29/scrutineer/issues/6).
 
 ## Related
 

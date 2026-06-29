@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // argIndexRE matches a trailing array index segment, e.g. "args[0]".
@@ -33,17 +33,17 @@ var argIndexRE = regexp.MustCompile(`^(.*)\[(\d+)\]$`)
 //   - Allow-effect constraints form an allowlist: if a rule has ≥1 Allow constraint and
 //     none match, the call is denied (ArgumentNotAllowed).
 //   - Across rules, the first deny wins; constraints can only tighten.
-func evaluateArgumentRules(rules []relayv1alpha1.ToolArgumentRule, req ToolRequest) (string, *ArgConstraintMatch) {
+func evaluateArgumentRules(rules []scrutineerv1alpha1.ToolArgumentRule, req ToolRequest) (string, *ArgConstraintMatch) {
 	for i := range rules {
 		rule := rules[i]
 		if !ruleApplies(rule, req) {
 			continue
 		}
 
-		var allow []relayv1alpha1.ArgumentConstraint
+		var allow []scrutineerv1alpha1.ArgumentConstraint
 		for j := range rule.Constraints {
 			c := rule.Constraints[j]
-			if c.Effect == relayv1alpha1.ConstraintEffectAllow {
+			if c.Effect == scrutineerv1alpha1.ConstraintEffectAllow {
 				allow = append(allow, c)
 				continue
 			}
@@ -60,7 +60,7 @@ func evaluateArgumentRules(rules []relayv1alpha1.ToolArgumentRule, req ToolReque
 	return "", nil
 }
 
-func ruleApplies(rule relayv1alpha1.ToolArgumentRule, req ToolRequest) bool {
+func ruleApplies(rule scrutineerv1alpha1.ToolArgumentRule, req ToolRequest) bool {
 	if rule.Server != "" && rule.Server != req.Server {
 		return false
 	}
@@ -72,7 +72,7 @@ func ruleApplies(rule relayv1alpha1.ToolArgumentRule, req ToolRequest) bool {
 	return false
 }
 
-func anyConstraintMatches(cs []relayv1alpha1.ArgumentConstraint, args map[string]any) bool {
+func anyConstraintMatches(cs []scrutineerv1alpha1.ArgumentConstraint, args map[string]any) bool {
 	for i := range cs {
 		if constraintMatches(cs[i], args) {
 			return true
@@ -84,13 +84,13 @@ func anyConstraintMatches(cs []relayv1alpha1.ArgumentConstraint, args map[string
 // constraintMatches reports whether the constraint's condition holds for the request
 // arguments. Missing arguments only satisfy Exists/NotExists; for all value operators a
 // missing argument is a non-match (avoids "absent arg denies everything" footguns).
-func constraintMatches(c relayv1alpha1.ArgumentConstraint, args map[string]any) bool {
+func constraintMatches(c scrutineerv1alpha1.ArgumentConstraint, args map[string]any) bool {
 	value, present := resolveArg(args, c.Arg)
 
 	switch c.Op {
-	case relayv1alpha1.ArgOpExists:
+	case scrutineerv1alpha1.ArgOpExists:
 		return present
-	case relayv1alpha1.ArgOpNotExists:
+	case scrutineerv1alpha1.ArgOpNotExists:
 		return !present
 	}
 
@@ -99,17 +99,17 @@ func constraintMatches(c relayv1alpha1.ArgumentConstraint, args map[string]any) 
 	}
 
 	switch c.Op {
-	case relayv1alpha1.ArgOpEquals, relayv1alpha1.ArgOpIn:
+	case scrutineerv1alpha1.ArgOpEquals, scrutineerv1alpha1.ArgOpIn:
 		return containsValue(c.Values, value)
-	case relayv1alpha1.ArgOpNotEquals, relayv1alpha1.ArgOpNotIn:
+	case scrutineerv1alpha1.ArgOpNotEquals, scrutineerv1alpha1.ArgOpNotIn:
 		return !containsValue(c.Values, value)
-	case relayv1alpha1.ArgOpHasPrefix:
+	case scrutineerv1alpha1.ArgOpHasPrefix:
 		return anyPrefix(c.Values, value)
-	case relayv1alpha1.ArgOpNotHasPrefix:
+	case scrutineerv1alpha1.ArgOpNotHasPrefix:
 		return !anyPrefix(c.Values, value)
-	case relayv1alpha1.ArgOpMatches:
+	case scrutineerv1alpha1.ArgOpMatches:
 		return anyRegex(c.Values, value)
-	case relayv1alpha1.ArgOpNotMatches:
+	case scrutineerv1alpha1.ArgOpNotMatches:
 		return !anyRegex(c.Values, value)
 	default:
 		return false
@@ -206,10 +206,10 @@ func stringifyArg(v any) (string, bool) {
 	}
 }
 
-func matchFromConstraint(c relayv1alpha1.ArgumentConstraint) *ArgConstraintMatch {
+func matchFromConstraint(c scrutineerv1alpha1.ArgumentConstraint) *ArgConstraintMatch {
 	effect := c.Effect
 	if effect == "" {
-		effect = relayv1alpha1.ConstraintEffectDeny
+		effect = scrutineerv1alpha1.ConstraintEffectDeny
 	}
 	return &ArgConstraintMatch{
 		Arg:          c.Arg,

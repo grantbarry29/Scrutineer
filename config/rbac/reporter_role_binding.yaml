@@ -3,18 +3,18 @@
 # that runs the reporter HTTP server.
 #
 # The reporter is currently compiled into the manager binary and runs in-process
-# under the relay-controller-manager ServiceAccount, so that SA is the subject
+# under the scrutineer-controller-manager ServiceAccount, so that SA is the subject
 # here. Retargeting this binding to a dedicated reporter ServiceAccount (which is
 # what actually reduces the manager SA's runtime privilege) is tracked in #34.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: relay-reporter-rolebinding
+  name: scrutineer-reporter-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: reporter-role
 subjects:
 - kind: ServiceAccount
-  name: relay-controller-manager
-  namespace: relay-system
+  name: scrutineer-controller-manager
+  namespace: scrutineer-system

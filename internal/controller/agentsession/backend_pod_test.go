@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 func podTestScheme(t *testing.T) *runtime.Scheme {
@@ -34,17 +34,17 @@ func podTestScheme(t *testing.T) *runtime.Scheme {
 	if err := clientgoscheme.AddToScheme(s); err != nil {
 		t.Fatalf("add client-go scheme: %v", err)
 	}
-	if err := relayv1alpha1.AddToScheme(s); err != nil {
-		t.Fatalf("add relay scheme: %v", err)
+	if err := scrutineerv1alpha1.AddToScheme(s); err != nil {
+		t.Fatalf("add scrutineer scheme: %v", err)
 	}
 	return s
 }
 
-func podTestSession() *relayv1alpha1.AgentSession {
-	return &relayv1alpha1.AgentSession{
+func podTestSession() *scrutineerv1alpha1.AgentSession {
+	return &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns", UID: "session-uid"},
-		Spec: relayv1alpha1.AgentSessionSpec{
-			Runtime: relayv1alpha1.RuntimeSpec{
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			Runtime: scrutineerv1alpha1.RuntimeSpec{
 				Orchestrator:       OrchestratorKubernetesPod,
 				Image:              "busybox:latest",
 				ServiceAccountName: "default",
@@ -55,14 +55,14 @@ func podTestSession() *relayv1alpha1.AgentSession {
 
 func policyWithDomains(domains ...string) *policy.Resolved {
 	return &policy.Resolved{
-		Mode:  relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{AllowedDomains: domains},
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{AllowedDomains: domains},
 	}
 }
 
 func agentEnvOf(pod *corev1.Pod) map[string]string {
 	for _, c := range pod.Spec.Containers {
-		if c.Name == relayjob.AgentContainerName {
+		if c.Name == scrutineerjob.AgentContainerName {
 			out := make(map[string]string, len(c.Env))
 			for _, e := range c.Env {
 				out[e.Name] = e.Value
@@ -140,7 +140,7 @@ func TestPodBackendEnsureCreatesWhenAbsent(t *testing.T) {
 	}
 
 	var pod corev1.Pod
-	key := client.ObjectKey{Namespace: session.Namespace, Name: relayjob.NameFor(session)}
+	key := client.ObjectKey{Namespace: session.Namespace, Name: scrutineerjob.NameFor(session)}
 	if err := cl.Get(context.Background(), key, &pod); err != nil {
 		t.Fatalf("get created pod: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestPodBackendEnsureOwnershipConflict(t *testing.T) {
 	scheme := podTestScheme(t)
 	session := podTestSession()
 	foreign := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: session.Namespace, Name: relayjob.NameFor(session)},
+		ObjectMeta: metav1.ObjectMeta{Namespace: session.Namespace, Name: scrutineerjob.NameFor(session)},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "x", Image: "busybox"}}},
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build()
@@ -194,11 +194,11 @@ func TestPodBackendEnsureReplacesPendingPodOnPolicyDrift(t *testing.T) {
 	}
 
 	var got corev1.Pod
-	key := client.ObjectKey{Namespace: session.Namespace, Name: relayjob.NameFor(session)}
+	key := client.ObjectKey{Namespace: session.Namespace, Name: scrutineerjob.NameFor(session)}
 	if err := cl.Get(context.Background(), key, &got); err != nil {
 		t.Fatalf("get recreated pod: %v", err)
 	}
-	if dom := agentEnvOf(&got)[relayjob.EnvPolicyAllowedDomains]; dom != "new.example.com" {
+	if dom := agentEnvOf(&got)[scrutineerjob.EnvPolicyAllowedDomains]; dom != "new.example.com" {
 		t.Fatalf("expected recreated pod to carry new policy env, got %q", dom)
 	}
 }
@@ -235,11 +235,11 @@ func TestPodBackendEnsureSurfacesDriftOnRunningPodWithoutReplace(t *testing.T) {
 	}
 
 	var got corev1.Pod
-	key := client.ObjectKey{Namespace: session.Namespace, Name: relayjob.NameFor(session)}
+	key := client.ObjectKey{Namespace: session.Namespace, Name: scrutineerjob.NameFor(session)}
 	if err := cl.Get(context.Background(), key, &got); err != nil {
 		t.Fatalf("get pod: %v", err)
 	}
-	if dom := agentEnvOf(&got)[relayjob.EnvPolicyAllowedDomains]; dom != "old.example.com" {
+	if dom := agentEnvOf(&got)[scrutineerjob.EnvPolicyAllowedDomains]; dom != "old.example.com" {
 		t.Fatalf("expected running pod to keep its original env, got %q", dom)
 	}
 }

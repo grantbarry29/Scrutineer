@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,25 +25,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const (
-	NamePrefix            = "relay-netpol-"
-	LabelEnforcement      = "relay.secureai.dev/enforcement"
+	NamePrefix            = "scrutineer-netpol-"
+	LabelEnforcement      = "scrutineer.sh/enforcement"
 	EnforcementNetworkPol = "networkpolicy"
 )
 
 // HasCIDRRules reports whether policy contains CIDR hints this backend can render.
-func HasCIDRRules(rules relayv1alpha1.PolicyRules) bool {
+func HasCIDRRules(rules scrutineerv1alpha1.PolicyRules) bool {
 	return len(rules.AllowedCIDRs) > 0 || len(rules.DeniedCIDRs) > 0
 }
 
 // Applicable reports whether a restrictive NetworkPolicy should be reconciled.
 func Applicable(ctx enforcement.SessionContext) bool {
-	if ctx.Mode != relayv1alpha1.PolicyModeEnforced {
+	if ctx.Mode != scrutineerv1alpha1.PolicyModeEnforced {
 		return false
 	}
 	return HasCIDRRules(ctx.Policy)
@@ -72,7 +72,7 @@ func Build(ctx enforcement.SessionContext) *networkingv1.NetworkPolicy {
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					relayjob.LabelSessionRef: ctx.SessionName,
+					scrutineerjob.LabelSessionRef: ctx.SessionName,
 				},
 			},
 			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
@@ -83,10 +83,10 @@ func Build(ctx enforcement.SessionContext) *networkingv1.NetworkPolicy {
 
 func labelsFor(sessionName string) map[string]string {
 	return map[string]string{
-		relayjob.LabelAppName:      relayjob.AppNameRelay,
-		relayjob.LabelAppComponent: relayjob.ComponentSession,
-		relayjob.LabelSessionRef:   sessionName,
-		LabelEnforcement:           EnforcementNetworkPol,
+		scrutineerjob.LabelAppName:      scrutineerjob.AppNameScrutineer,
+		scrutineerjob.LabelAppComponent: scrutineerjob.ComponentSession,
+		scrutineerjob.LabelSessionRef:   sessionName,
+		LabelEnforcement:                EnforcementNetworkPol,
 	}
 }
 
@@ -103,7 +103,7 @@ func dnsEgressRule() networkingv1.NetworkPolicyEgressRule {
 	}
 }
 
-func cidrEgressRules(rules relayv1alpha1.PolicyRules) []networkingv1.NetworkPolicyEgressRule {
+func cidrEgressRules(rules scrutineerv1alpha1.PolicyRules) []networkingv1.NetworkPolicyEgressRule {
 	if len(rules.AllowedCIDRs) > 0 {
 		out := make([]networkingv1.NetworkPolicyEgressRule, 0, len(rules.AllowedCIDRs))
 		for _, cidr := range rules.AllowedCIDRs {

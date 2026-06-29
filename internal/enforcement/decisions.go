@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@ You may obtain a copy of the License at
 package enforcement
 
 import (
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // MaxPolicyDecisions is the total cap for status.policyDecisions (merge + runtime).
@@ -21,15 +21,15 @@ const MaxPolicyDecisions = 64
 // AppendRuntimeDecisions appends runtime-phase decisions to existing merge-time decisions
 // without exceeding maxTotal. When truncated, a summary decision is appended if room allows.
 // Merge-time entries are always preserved; incoming runtime entries may be dropped from the tail.
-func AppendRuntimeDecisions(existing, incoming []relayv1alpha1.PolicyDecision, maxTotal int) []relayv1alpha1.PolicyDecision {
+func AppendRuntimeDecisions(existing, incoming []scrutineerv1alpha1.PolicyDecision, maxTotal int) []scrutineerv1alpha1.PolicyDecision {
 	if maxTotal <= 0 || len(incoming) == 0 {
 		return existing
 	}
 
-	out := append([]relayv1alpha1.PolicyDecision(nil), existing...)
+	out := append([]scrutineerv1alpha1.PolicyDecision(nil), existing...)
 	for _, d := range incoming {
-		if d.Phase != relayv1alpha1.PolicyDecisionPhaseRuntime {
-			d.Phase = relayv1alpha1.PolicyDecisionPhaseRuntime
+		if d.Phase != scrutineerv1alpha1.PolicyDecisionPhaseRuntime {
+			d.Phase = scrutineerv1alpha1.PolicyDecisionPhaseRuntime
 		}
 		out = append(out, d)
 	}
@@ -44,12 +44,12 @@ func AppendRuntimeDecisions(existing, incoming []relayv1alpha1.PolicyDecision, m
 	}
 
 	out = out[:maxTotal-1]
-	out = append(out, relayv1alpha1.PolicyDecision{
+	out = append(out, scrutineerv1alpha1.PolicyDecision{
 		Time:    incoming[len(incoming)-1].Time,
-		Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+		Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 		Type:    "summary",
-		Action:  relayv1alpha1.PolicyDecisionAudit,
-		Actor:   "relay-enforcement",
+		Action:  scrutineerv1alpha1.PolicyDecisionAudit,
+		Actor:   "scrutineer-enforcement",
 		Reason:  "DecisionsTruncated",
 		Message: formatTruncationMessage(omitted, maxTotal),
 	})

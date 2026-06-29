@@ -3,17 +3,17 @@
 
 Applies on top of the always-on `component-docs` rule (general README requirement +
 [`docs/templates/component-readme.md`](../docs/templates/component-readme.md)). This
-rule adds the conventions specific to Relay's independently built images.
+rule adds the conventions specific to Scrutineer's independently built images.
 
 Each of these is a separately built/deployed component and keeps a README at its
 `cmd/<binary>/` root (the manager's overview is the root [`README.md`](../README.md)):
 
 | Binary | Entry | Dockerfile | Image | Build / load | Core logic |
 |--------|-------|-----------|-------|--------------|------------|
-| manager (controller + webhook + reporter) | `cmd/main.go` | `Dockerfile` | `ghcr.io/secureai/relay` | `make docker-build` / `kind-load` | `internal/controller/...`, `internal/webhook/...`, `internal/reporter` |
-| dns-proxy sidecar | `cmd/dns-proxy` | `Dockerfile.dns-proxy` | `ghcr.io/secureai/relay-dns-proxy` | `make docker-build-dns-proxy` / `kind-load-dns-proxy` | `internal/enforcement/dnsproxy` |
-| tool-gateway sidecar | `cmd/tool-gateway` | `Dockerfile.tool-gateway` | `ghcr.io/secureai/relay-tool-gateway` | `make docker-build-tool-gateway` / `kind-load-tool-gateway` | `internal/enforcement/toolgateway` |
-| fs-gateway sidecar | `cmd/fs-gateway` | `Dockerfile.fs-gateway` | `ghcr.io/secureai/relay-fs-gateway` | `make docker-build-fs-gateway` / `kind-load-fs-gateway` | `internal/enforcement/workspace` |
+| manager (controller + webhook + reporter) | `cmd/main.go` | `Dockerfile` | `ghcr.io/grantbarry29/scrutineer` | `make docker-build` / `kind-load` | `internal/controller/...`, `internal/webhook/...`, `internal/reporter` |
+| dns-proxy sidecar | `cmd/dns-proxy` | `Dockerfile.dns-proxy` | `ghcr.io/grantbarry29/scrutineer-dns-proxy` | `make docker-build-dns-proxy` / `kind-load-dns-proxy` | `internal/enforcement/dnsproxy` |
+| tool-gateway sidecar | `cmd/tool-gateway` | `Dockerfile.tool-gateway` | `ghcr.io/grantbarry29/scrutineer-tool-gateway` | `make docker-build-tool-gateway` / `kind-load-tool-gateway` | `internal/enforcement/toolgateway` |
+| fs-gateway sidecar | `cmd/fs-gateway` | `Dockerfile.fs-gateway` | `ghcr.io/grantbarry29/scrutineer-fs-gateway` | `make docker-build-fs-gateway` / `kind-load-fs-gateway` | `internal/enforcement/workspace` |
 
 ## Conventions a binary README must capture
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/secureai/relay/internal/tracing"
+	"github.com/grantbarry29/scrutineer/internal/tracing"
 )
 
 // Options configures the runtime reporter HTTP server.
@@ -34,9 +34,9 @@ type Options struct {
 }
 
 // +kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions,verbs=get
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=agentsessions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=relay.secureai.dev,resources=approvalrequests,verbs=get;list;create
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=agentsessions,verbs=get
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=agentsessions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=scrutineer.sh,resources=approvalrequests,verbs=get;list;create
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get
 

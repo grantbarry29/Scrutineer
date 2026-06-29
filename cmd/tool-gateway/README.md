@@ -1,6 +1,6 @@
 # tool-gateway
 
-Relay's tool-call enforcement sidecar. A minimal HTTP endpoint that in-pod agents call
+Scrutineer's tool-call enforcement sidecar. A minimal HTTP endpoint that in-pod agents call
 before invoking a tool, so per-session tool policy (including mid-execution human
 approval) is evaluated and reported at runtime.
 
@@ -54,15 +54,15 @@ Core logic: [`internal/enforcement/toolgateway`](../../internal/enforcement/tool
 
 ## Interfaces & artifacts
 
-- **Endpoint:** `POST /v1/tools/invoke` on `RELAY_TOOL_GATEWAY_LISTEN`
+- **Endpoint:** `POST /v1/tools/invoke` on `SCRUTINEER_TOOL_GATEWAY_LISTEN`
   (default `127.0.0.1:19090`).
-- **Required env:** `RELAY_SESSION_NAMESPACE`, `RELAY_SESSION_NAME`, `RELAY_REPORTER_URL`,
-  `RELAY_REPORTER_TOKEN_PATH`.
+- **Required env:** `SCRUTINEER_SESSION_NAMESPACE`, `SCRUTINEER_SESSION_NAME`, `SCRUTINEER_REPORTER_URL`,
+  `SCRUTINEER_REPORTER_TOKEN_PATH`.
 - **Policy env:** `AGENT_POLICY_MODE` (default `audit-only`),
   `AGENT_POLICY_ALLOWED_TOOLS` / `AGENT_POLICY_DENIED_TOOLS`,
   `AGENT_POLICY_REQUIRE_HUMAN_APPROVAL`, `AGENT_POLICY_MAX_TOOL_CALLS`,
   `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE`, and `AGENT_POLICY_ARGUMENT_RULES` (JSON).
-- **Image:** `ghcr.io/secureai/relay-tool-gateway` (`toolgateway.DefaultToolGatewayImage`),
+- **Image:** `ghcr.io/grantbarry29/scrutineer-tool-gateway` (`toolgateway.DefaultToolGatewayImage`),
   distroless `nonroot` (UID 65532).
 
 ## Invariants & files that must change together

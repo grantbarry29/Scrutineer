@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,19 +13,19 @@ package agentsession
 import (
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/enforcement"
-	"github.com/secureai/relay/internal/enforcement/workspace"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/workspace"
 )
 
 // ApplyFilePolicyRuntimeEvent merges file/workspace runtime evidence into session status.
 // FS gateway sidecars (future) call this after observing file access.
-func ApplyFilePolicyRuntimeEvent(session *relayv1alpha1.AgentSession, profile *relayv1alpha1.RuntimeProfile, req workspace.FileRequest, now time.Time) {
+func ApplyFilePolicyRuntimeEvent(session *scrutineerv1alpha1.AgentSession, profile *scrutineerv1alpha1.RuntimeProfile, req workspace.FileRequest, now time.Time) {
 	if session == nil {
 		return
 	}
-	ctx := enforcement.NewSessionContext(session, profile, relayjob.NameFor(session))
+	ctx := enforcement.NewSessionContext(session, profile, scrutineerjob.NameFor(session))
 	if session.Status.EffectivePolicy != nil {
 		ep := session.Status.EffectivePolicy
 		ctx.Mode = ep.Mode

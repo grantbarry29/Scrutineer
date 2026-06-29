@@ -1,7 +1,7 @@
 //go:build e2e
 
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,37 +25,37 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller/agentsession"
-	relayjob "github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/enforcement/networkpolicy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/networkpolicy"
 )
 
 // agentSessionOption mutates an AgentSession during construction.
-type agentSessionOption func(*relayv1alpha1.AgentSession)
+type agentSessionOption func(*scrutineerv1alpha1.AgentSession)
 
 func withTemperature(t string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) { s.Spec.Model.Temperature = strPtr(t) }
+	return func(s *scrutineerv1alpha1.AgentSession) { s.Spec.Model.Temperature = strPtr(t) }
 }
 
 func withCommand(cmd ...string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) { s.Spec.Runtime.Command = cmd }
+	return func(s *scrutineerv1alpha1.AgentSession) { s.Spec.Runtime.Command = cmd }
 }
 
 func withOrchestrator(orchestrator string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) { s.Spec.Runtime.Orchestrator = orchestrator }
+	return func(s *scrutineerv1alpha1.AgentSession) { s.Spec.Runtime.Orchestrator = orchestrator }
 }
 
 func withoutTask() agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
-		s.Spec.Task = relayv1alpha1.SessionTaskSpec{}
+	return func(s *scrutineerv1alpha1.AgentSession) {
+		s.Spec.Task = scrutineerv1alpha1.SessionTaskSpec{}
 	}
 }
 
 func withPromptConfigMapRef(name, key string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		s.Spec.Task.Prompt = ""
-		s.Spec.Task.PromptConfigMapRef = &relayv1alpha1.PromptConfigMapRef{
+		s.Spec.Task.PromptConfigMapRef = &scrutineerv1alpha1.PromptConfigMapRef{
 			Name: name,
 			Key:  key,
 		}
@@ -63,51 +63,51 @@ func withPromptConfigMapRef(name, key string) agentSessionOption {
 }
 
 func withCancelRequested() agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) { s.Spec.CancelRequested = true }
+	return func(s *scrutineerv1alpha1.AgentSession) { s.Spec.CancelRequested = true }
 }
 
 func withLongRunningCommand() agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		s.Spec.Runtime.Command = []string{"sh", "-c", "echo running; sleep 300"}
 	}
 }
 
 func withRuntimeProfileRef(name string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
-		s.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{Name: name}
+	return func(s *scrutineerv1alpha1.AgentSession) {
+		s.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: name}
 	}
 }
 
 func withPolicyRef(kind, name string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
-		s.Spec.PolicyRefs = append(s.Spec.PolicyRefs, relayv1alpha1.PolicyRef{Kind: kind, Name: name})
+	return func(s *scrutineerv1alpha1.AgentSession) {
+		s.Spec.PolicyRefs = append(s.Spec.PolicyRefs, scrutineerv1alpha1.PolicyRef{Kind: kind, Name: name})
 	}
 }
 
 func withExitCommand(exitCode int) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf("exit %d", exitCode)}
 	}
 }
 
 func withTimeoutSeconds(sec int64) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		s.Spec.Runtime.TimeoutSeconds = &sec
 	}
 }
 
 // withSleepExceedingTimeout runs longer than typical timeoutSeconds used in TimedOut e2e.
 func withSleepExceedingTimeout() agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		s.Spec.Runtime.Command = []string{"sh", "-c", "sleep 120"}
 	}
 }
 
-// withDeniedToolInvokeProbe waits for sidecars then POSTs denied tool invokes to RELAY_TOOL_GATEWAY_URL.
+// withDeniedToolInvokeProbe waits for sidecars then POSTs denied tool invokes to SCRUTINEER_TOOL_GATEWAY_URL.
 func withDeniedToolInvokeProbe(tool string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='{"tool":"%s"}' --header='Content-Type: application/json' "${RELAY_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 2; done; sleep 120`,
+			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='{"tool":"%s"}' --header='Content-Type: application/json' "${SCRUTINEER_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 2; done; sleep 120`,
 			tool,
 		)}
 	}
@@ -117,10 +117,10 @@ func withDeniedToolInvokeProbe(tool string) agentSessionOption {
 // (with arguments) that an argument rule should deny. argsJSON is the raw JSON for the
 // "arguments" object, e.g. `{"path":"/etc/shadow"}`.
 func withArgumentDeniedToolInvokeProbe(tool, argsJSON string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		body := fmt.Sprintf(`{"tool":"%s","arguments":%s}`, tool, argsJSON)
 		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='%s' --header='Content-Type: application/json' "${RELAY_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 2; done; sleep 120`,
+			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='%s' --header='Content-Type: application/json' "${SCRUTINEER_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 2; done; sleep 120`,
 			body,
 		)}
 	}
@@ -132,10 +132,10 @@ func withArgumentDeniedToolInvokeProbe(tool, argsJSON string) agentSessionOption
 // (stable requestId keeps the hold idempotent) until it is allowed/denied. argsJSON is
 // the raw JSON for the "arguments" object, e.g. `{"target":"prod"}`.
 func withApprovalHoldToolInvokeProbe(tool, argsJSON string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		body := fmt.Sprintf(`{"tool":"%s","requestId":"e2e-approval-1","arguments":%s}`, tool, argsJSON)
 		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 90); do wget -q -O /dev/null --post-data='%s' --header='Content-Type: application/json' "${RELAY_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 1; done; sleep 120`,
+			`sleep 15; for i in $(seq 1 90); do wget -q -O /dev/null --post-data='%s' --header='Content-Type: application/json' "${SCRUTINEER_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 1; done; sleep 120`,
 			body,
 		)}
 	}
@@ -143,7 +143,7 @@ func withApprovalHoldToolInvokeProbe(tool, argsJSON string) agentSessionOption {
 
 // withDeniedDomainEgressProbe waits for sidecars then probes a denied domain via HTTP_PROXY.
 func withDeniedDomainEgressProbe(domain string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
 			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null http://%s/ 2>/dev/null || true; sleep 2; done; sleep 120`,
 			domain,
@@ -151,11 +151,11 @@ func withDeniedDomainEgressProbe(domain string) agentSessionOption {
 	}
 }
 
-// withDeniedPathAccessProbe waits for sidecars then POSTs denied file access to RELAY_FS_GATEWAY_URL.
+// withDeniedPathAccessProbe waits for sidecars then POSTs denied file access to SCRUTINEER_FS_GATEWAY_URL.
 func withDeniedPathAccessProbe(path string) agentSessionOption {
-	return func(s *relayv1alpha1.AgentSession) {
+	return func(s *scrutineerv1alpha1.AgentSession) {
 		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='{"path":"%s","operation":"read"}' --header='Content-Type: application/json' "${RELAY_FS_GATEWAY_URL}/v1/files/access" 2>/dev/null || true; sleep 2; done; sleep 120`,
+			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='{"path":"%s","operation":"read"}' --header='Content-Type: application/json' "${SCRUTINEER_FS_GATEWAY_URL}/v1/files/access" 2>/dev/null || true; sleep 2; done; sleep 120`,
 			path,
 		)}
 	}
@@ -178,19 +178,19 @@ func newTestNamespace(prefix string) string {
 }
 
 // newAgentSession builds a valid baseline AgentSession and applies opts.
-func newAgentSession(namespace, name string, opts ...agentSessionOption) *relayv1alpha1.AgentSession {
-	s := &relayv1alpha1.AgentSession{
+func newAgentSession(namespace, name string, opts ...agentSessionOption) *scrutineerv1alpha1.AgentSession {
+	s := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.AgentSessionSpec{
-			Task: relayv1alpha1.SessionTaskSpec{
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			Task: scrutineerv1alpha1.SessionTaskSpec{
 				Description: "e2e test session",
 				Prompt:      "noop",
 			},
-			Model: relayv1alpha1.ModelSpec{
+			Model: scrutineerv1alpha1.ModelSpec{
 				Provider: "openai",
 				Name:     "gpt-4.1",
 			},
-			Runtime: relayv1alpha1.RuntimeSpec{
+			Runtime: scrutineerv1alpha1.RuntimeSpec{
 				Orchestrator: agentsession.OrchestratorKubernetesJob,
 				Image:        "busybox:latest",
 				Command:      []string{"sh", "-c", "echo ok"},
@@ -204,30 +204,30 @@ func newAgentSession(namespace, name string, opts ...agentSessionOption) *relayv
 }
 
 // createAgentSession creates the session in the cluster and returns its object key.
-func createAgentSession(ctx context.Context, session *relayv1alpha1.AgentSession) client.ObjectKey {
+func createAgentSession(ctx context.Context, session *scrutineerv1alpha1.AgentSession) client.ObjectKey {
 	GinkgoHelper()
 	Expect(k8sClient.Create(ctx, session)).To(Succeed())
 	return client.ObjectKeyFromObject(session)
 }
 
 // jobNameForSession returns the deterministic Job name the controller creates.
-func jobNameForSession(session *relayv1alpha1.AgentSession) string {
-	return relayjob.NameFor(session)
+func jobNameForSession(session *scrutineerv1alpha1.AgentSession) string {
+	return scrutineerjob.NameFor(session)
 }
 
 // netpolNameForSession returns the deterministic NetworkPolicy name the controller creates.
-func netpolNameForSession(session *relayv1alpha1.AgentSession) string {
+func netpolNameForSession(session *scrutineerv1alpha1.AgentSession) string {
 	return networkpolicy.NameFor(session.Namespace, session.Name)
 }
 
 // createEnforcedCIDRPolicy creates an AgentPolicy with enforced mode and an allowed CIDR.
 func createEnforcedCIDRPolicy(ctx context.Context, namespace, name, cidr string) {
 	GinkgoHelper()
-	ap := &relayv1alpha1.AgentPolicy{
+	ap := &scrutineerv1alpha1.AgentPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.AgentPolicySpec{
-			Mode: relayv1alpha1.PolicyModeEnforced,
-			PolicyRules: relayv1alpha1.PolicyRules{
+		Spec: scrutineerv1alpha1.AgentPolicySpec{
+			Mode: scrutineerv1alpha1.PolicyModeEnforced,
+			PolicyRules: scrutineerv1alpha1.PolicyRules{
 				AllowedCIDRs: []string{cidr},
 			},
 		},
@@ -241,11 +241,11 @@ func boolPtr(b bool) *bool { return &b }
 
 func createEnforcedDeniedDomainPolicy(ctx context.Context, namespace, name, domain string) {
 	GinkgoHelper()
-	ap := &relayv1alpha1.AgentPolicy{
+	ap := &scrutineerv1alpha1.AgentPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.AgentPolicySpec{
-			Mode: relayv1alpha1.PolicyModeEnforced,
-			PolicyRules: relayv1alpha1.PolicyRules{
+		Spec: scrutineerv1alpha1.AgentPolicySpec{
+			Mode: scrutineerv1alpha1.PolicyModeEnforced,
+			PolicyRules: scrutineerv1alpha1.PolicyRules{
 				DeniedDomains: []string{domain},
 			},
 		},
@@ -255,10 +255,10 @@ func createEnforcedDeniedDomainPolicy(ctx context.Context, namespace, name, doma
 
 func createEnforcedDeniedToolPolicy(ctx context.Context, namespace, name, tool string) {
 	GinkgoHelper()
-	tp := &relayv1alpha1.ToolPolicy{
+	tp := &scrutineerv1alpha1.ToolPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.ToolPolicySpec{
-			Mode:        relayv1alpha1.PolicyModeEnforced,
+		Spec: scrutineerv1alpha1.ToolPolicySpec{
+			Mode:        scrutineerv1alpha1.PolicyModeEnforced,
 			DeniedTools: []string{tool},
 		},
 	}
@@ -269,18 +269,18 @@ func createEnforcedDeniedToolPolicy(ctx context.Context, namespace, name, tool s
 // by name but denies it when arg has the given prefix (an argument-level constraint).
 func createEnforcedArgumentRuleToolPolicy(ctx context.Context, namespace, name, tool, arg, denyPrefix string) {
 	GinkgoHelper()
-	tp := &relayv1alpha1.ToolPolicy{
+	tp := &scrutineerv1alpha1.ToolPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.ToolPolicySpec{
-			Mode:         relayv1alpha1.PolicyModeEnforced,
+		Spec: scrutineerv1alpha1.ToolPolicySpec{
+			Mode:         scrutineerv1alpha1.PolicyModeEnforced,
 			AllowedTools: []string{tool},
-			ArgumentRules: []relayv1alpha1.ToolArgumentRule{{
+			ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
 				Tools: []string{tool},
-				Constraints: []relayv1alpha1.ArgumentConstraint{{
+				Constraints: []scrutineerv1alpha1.ArgumentConstraint{{
 					Arg:    arg,
-					Op:     relayv1alpha1.ArgOpHasPrefix,
+					Op:     scrutineerv1alpha1.ArgOpHasPrefix,
 					Values: []string{denyPrefix},
-					Effect: relayv1alpha1.ConstraintEffectDeny,
+					Effect: scrutineerv1alpha1.ConstraintEffectDeny,
 				}},
 			}},
 		},
@@ -294,11 +294,11 @@ func createEnforcedArgumentRuleToolPolicy(ctx context.Context, namespace, name, 
 // effective tool-gateway mode enforced, so the gateway holds the call.
 func createEnforcedApprovalPolicy(ctx context.Context, namespace, name, tool string) {
 	GinkgoHelper()
-	ap := &relayv1alpha1.AgentPolicy{
+	ap := &scrutineerv1alpha1.AgentPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.AgentPolicySpec{
-			Mode: relayv1alpha1.PolicyModeEnforced,
-			PolicyRules: relayv1alpha1.PolicyRules{
+		Spec: scrutineerv1alpha1.AgentPolicySpec{
+			Mode: scrutineerv1alpha1.PolicyModeEnforced,
+			PolicyRules: scrutineerv1alpha1.PolicyRules{
 				RequireHumanApproval: []string{tool},
 			},
 		},
@@ -312,7 +312,7 @@ func waitForRuntimeApprovalRequest(ctx context.Context, namespace, sessionName s
 	GinkgoHelper()
 	var name string
 	Eventually(func(g Gomega) {
-		var list relayv1alpha1.ApprovalRequestList
+		var list scrutineerv1alpha1.ApprovalRequestList
 		g.Expect(k8sClient.List(ctx, &list, client.InNamespace(namespace))).To(Succeed())
 		for i := range list.Items {
 			req := &list.Items[i]
@@ -331,9 +331,9 @@ func waitForRuntimeApprovalRequest(ctx context.Context, namespace, sessionName s
 func grantRuntimeApproval(ctx context.Context, namespace, name, approver string) {
 	GinkgoHelper()
 	Eventually(func(g Gomega) {
-		var req relayv1alpha1.ApprovalRequest
+		var req scrutineerv1alpha1.ApprovalRequest
 		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &req)).To(Succeed())
-		req.Spec.Decision = relayv1alpha1.ApprovalDecisionGranted
+		req.Spec.Decision = scrutineerv1alpha1.ApprovalDecisionGranted
 		req.Spec.DecidedBy = approver
 		g.Expect(k8sClient.Update(ctx, &req)).To(Succeed())
 	}, 30*time.Second, time.Second).Should(Succeed())
@@ -341,11 +341,11 @@ func grantRuntimeApproval(ctx context.Context, namespace, name, approver string)
 
 func createEnforcedDeniedPathPolicy(ctx context.Context, namespace, name, path string) {
 	GinkgoHelper()
-	ap := &relayv1alpha1.AgentPolicy{
+	ap := &scrutineerv1alpha1.AgentPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.AgentPolicySpec{
-			Mode: relayv1alpha1.PolicyModeEnforced,
-			PolicyRules: relayv1alpha1.PolicyRules{
+		Spec: scrutineerv1alpha1.AgentPolicySpec{
+			Mode: scrutineerv1alpha1.PolicyModeEnforced,
+			PolicyRules: scrutineerv1alpha1.PolicyRules{
 				DeniedPaths: []string{path},
 			},
 		},
@@ -356,20 +356,20 @@ func createEnforcedDeniedPathPolicy(ctx context.Context, namespace, name, path s
 func createRuntimeProfileWithToolGateway(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	enabled := true
-	rp := &relayv1alpha1.RuntimeProfile{
+	rp := &scrutineerv1alpha1.RuntimeProfile{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
 			},
-			Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				AllowPrivilegeEscalation: boolPtr(false),
 			},
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name:    "tools",
-				Type:    relayjob.SidecarTypeToolGateway,
+				Type:    scrutineerjob.SidecarTypeToolGateway,
 				Enabled: &enabled,
 			}},
 		},
@@ -380,20 +380,20 @@ func createRuntimeProfileWithToolGateway(ctx context.Context, namespace, name st
 func createRuntimeProfileWithDNSProxy(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	enabled := true
-	rp := &relayv1alpha1.RuntimeProfile{
+	rp := &scrutineerv1alpha1.RuntimeProfile{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
 			},
-			Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				AllowPrivilegeEscalation: boolPtr(false),
 			},
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name:    "egress",
-				Type:    relayjob.SidecarTypeDNSProxy,
+				Type:    scrutineerjob.SidecarTypeDNSProxy,
 				Enabled: &enabled,
 			}},
 		},
@@ -404,20 +404,20 @@ func createRuntimeProfileWithDNSProxy(ctx context.Context, namespace, name strin
 func createRuntimeProfileWithFSGateway(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	enabled := true
-	rp := &relayv1alpha1.RuntimeProfile{
+	rp := &scrutineerv1alpha1.RuntimeProfile{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
 			},
-			Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				AllowPrivilegeEscalation: boolPtr(false),
 			},
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name:    "files",
-				Type:    relayjob.SidecarTypeFSGateway,
+				Type:    scrutineerjob.SidecarTypeFSGateway,
 				Enabled: &enabled,
 			}},
 		},
@@ -429,15 +429,15 @@ func createRuntimeProfileWithFSGateway(ctx context.Context, namespace, name stri
 // Uses pod seccomp only so busybox samples can still succeed in e2e.
 func createRuntimeProfile(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
-	rp := &relayv1alpha1.RuntimeProfile{
+	rp := &scrutineerv1alpha1.RuntimeProfile{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
 			},
-			Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				AllowPrivilegeEscalation: boolPtr(false),
 			},
 		},

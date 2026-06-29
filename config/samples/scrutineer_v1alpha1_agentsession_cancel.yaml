@@ -1,7 +1,7 @@
 # Cancel-at-create: the controller never starts a Job and the session reaches
 # Phase=Cancelled immediately. Use kubectl patch cancelRequested on a running
 # session to stop an active agent (see README "Cancelling a running session").
-apiVersion: relay.secureai.dev/v1alpha1
+apiVersion: scrutineer.sh/v1alpha1
 kind: AgentSession
 metadata:
   name: cancel-at-create-sample

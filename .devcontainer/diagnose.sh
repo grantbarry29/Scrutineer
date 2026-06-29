@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# .devcontainer/diagnose.sh — runtime diagnostics for the Relay dev container.
+# .devcontainer/diagnose.sh — runtime diagnostics for the Scrutineer dev container.
 #
 # Run this from a second integrated terminal in Cursor *inside* the running
 # devcontainer when the postCreateCommand is hanging. It probes the inner
@@ -10,7 +10,7 @@
 # Safe to run repeatedly. Read-only; never restarts dockerd or kills anything.
 set -u
 
-LOG_PATH="/workspaces/Relay/.cursor/debug-a89927.log"
+LOG_PATH="/workspaces/Scrutineer/.cursor/debug-a89927.log"
 SESSION_ID="a89927"
 RUN_ID="diagnose"
 
@@ -37,7 +37,7 @@ section "0. environment"
 uname -a
 whoami
 id
-echo "RELAY_DEVCONTAINER=${RELAY_DEVCONTAINER:-unset}"
+echo "SCRUTINEER_DEVCONTAINER=${SCRUTINEER_DEVCONTAINER:-unset}"
 emit "ENV" "uname" "{\"uname\":$(uname -a | sanitize),\"user\":$(whoami | sanitize),\"id\":$(id | sanitize)}"
 
 section "1. docker socket"

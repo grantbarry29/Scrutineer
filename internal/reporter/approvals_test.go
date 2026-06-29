@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
-func newApprovalSession(ns, name string) *relayv1alpha1.AgentSession {
-	return &relayv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+func newApprovalSession(ns, name string) *scrutineerv1alpha1.AgentSession {
+	return &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
 }
 
 func postApproval(t *testing.T, h *ApprovalHandler, body ApprovalRegisterRequest) *httptest.ResponseRecorder {
@@ -79,7 +79,7 @@ func TestApprovalHandler_registerCreatesPendingAndIsIdempotent(t *testing.T) {
 		t.Fatalf("first status = %d body=%q", rec.Code, rec.Body.String())
 	}
 	first := decodeApproval(t, rec)
-	if first.State != string(relayv1alpha1.ApprovalStatePending) {
+	if first.State != string(scrutineerv1alpha1.ApprovalStatePending) {
 		t.Fatalf("state = %q, want Pending", first.State)
 	}
 	if first.ApprovalID == "" {
@@ -95,7 +95,7 @@ func TestApprovalHandler_registerCreatesPendingAndIsIdempotent(t *testing.T) {
 		t.Fatalf("idempotency: ids differ %q vs %q", first.ApprovalID, second.ApprovalID)
 	}
 
-	var list relayv1alpha1.ApprovalRequestList
+	var list scrutineerv1alpha1.ApprovalRequestList
 	if err := cl.List(context.Background(), &list, client.InNamespace("ns1")); err != nil {
 		t.Fatal(err)
 	}
@@ -113,15 +113,15 @@ func TestApprovalHandler_registerCreatesPendingAndIsIdempotent(t *testing.T) {
 
 func TestApprovalHandler_lookupReturnsControllerState(t *testing.T) {
 	name := RuntimeApprovalName("sess-a", "call-9")
-	ar := &relayv1alpha1.ApprovalRequest{
+	ar := &scrutineerv1alpha1.ApprovalRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns1"},
-		Spec: relayv1alpha1.ApprovalRequestSpec{
-			SessionRef: relayv1alpha1.ApprovalSessionRef{Name: "sess-a"},
-			Trigger:    relayv1alpha1.ApprovalTriggerRuntime,
+		Spec: scrutineerv1alpha1.ApprovalRequestSpec{
+			SessionRef: scrutineerv1alpha1.ApprovalSessionRef{Name: "sess-a"},
+			Trigger:    scrutineerv1alpha1.ApprovalTriggerRuntime,
 			RequestID:  "call-9",
 			Action:     "deploy",
 		},
-		Status: relayv1alpha1.ApprovalRequestStatus{State: relayv1alpha1.ApprovalStateGranted},
+		Status: scrutineerv1alpha1.ApprovalRequestStatus{State: scrutineerv1alpha1.ApprovalStateGranted},
 	}
 	cl := newFakeClient(newApprovalSession("ns1", "sess-a"), ar)
 	h := &ApprovalHandler{Client: cl, Reader: cl, Verifier: stubVerifier{identity: CallerIdentity{Namespace: "ns1", PodName: "p"}}}
@@ -131,7 +131,7 @@ func TestApprovalHandler_lookupReturnsControllerState(t *testing.T) {
 		t.Fatalf("status = %d body=%q", rec.Code, rec.Body.String())
 	}
 	resp := decodeApproval(t, rec)
-	if resp.State != string(relayv1alpha1.ApprovalStateGranted) {
+	if resp.State != string(scrutineerv1alpha1.ApprovalStateGranted) {
 		t.Fatalf("state = %q, want Granted", resp.State)
 	}
 }
@@ -145,7 +145,7 @@ func TestApprovalHandler_rejectsUnauthorizedRegister(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	var list relayv1alpha1.ApprovalRequestList
+	var list scrutineerv1alpha1.ApprovalRequestList
 	_ = cl.List(context.Background(), &list, client.InNamespace("ns1"))
 	if len(list.Items) != 0 {
 		t.Fatalf("unauthorized register must not create requests, got %d", len(list.Items))
@@ -154,9 +154,9 @@ func TestApprovalHandler_rejectsUnauthorizedRegister(t *testing.T) {
 
 func TestApprovalHandler_rejectsForbiddenCrossSessionLookup(t *testing.T) {
 	name := RuntimeApprovalName("sess-a", "call-x")
-	ar := &relayv1alpha1.ApprovalRequest{
+	ar := &scrutineerv1alpha1.ApprovalRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns1"},
-		Spec:       relayv1alpha1.ApprovalRequestSpec{SessionRef: relayv1alpha1.ApprovalSessionRef{Name: "sess-a"}, Trigger: relayv1alpha1.ApprovalTriggerRuntime, Action: "deploy"},
+		Spec:       scrutineerv1alpha1.ApprovalRequestSpec{SessionRef: scrutineerv1alpha1.ApprovalSessionRef{Name: "sess-a"}, Trigger: scrutineerv1alpha1.ApprovalTriggerRuntime, Action: "deploy"},
 	}
 	cl := newFakeClient(ar)
 	h := &ApprovalHandler{Client: cl, Reader: cl, Verifier: stubVerifier{err: ErrForbidden}}
@@ -277,11 +277,11 @@ func TestApprovalHandler_rateLimitsNewHolds(t *testing.T) {
 
 func grantHold(t *testing.T, cl client.Client, name string) {
 	t.Helper()
-	var ar relayv1alpha1.ApprovalRequest
+	var ar scrutineerv1alpha1.ApprovalRequest
 	if err := cl.Get(context.Background(), client.ObjectKey{Namespace: "ns1", Name: name}, &ar); err != nil {
 		t.Fatal(err)
 	}
-	ar.Status.State = relayv1alpha1.ApprovalStateGranted
+	ar.Status.State = scrutineerv1alpha1.ApprovalStateGranted
 	if err := cl.Status().Update(context.Background(), &ar); err != nil {
 		t.Fatal(err)
 	}

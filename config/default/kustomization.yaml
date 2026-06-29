@@ -1,9 +1,9 @@
-namespace: relay-system
+namespace: scrutineer-system
 
 namePrefix: ""
 
 commonLabels:
-  app.kubernetes.io/name: relay
+  app.kubernetes.io/name: scrutineer
 
 resources:
 - ../crd

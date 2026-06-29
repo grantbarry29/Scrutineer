@@ -1,7 +1,7 @@
 //go:build e2e
 
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,20 +24,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/controller/agentsession"
-	relayjob "github.com/secureai/relay/internal/controller/job"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
 )
 
 var _ = Describe("AgentSession e2e against kind", func() {
 
 	Context("happy path", func() {
 		It("drives a session through Pending -> Running -> Succeeded", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-happy")
+			ns := newTestNamespace("scrutineer-e2e-happy")
 			session := newAgentSession(ns, "happy", withCommand("sh", "-c", "echo running; exit 0"))
 			key := createAgentSession(ctx, session)
 
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseSucceeded)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseSucceeded)
 
 			got := getSession(ctx, key)
 			Expect(got.Status.JobName).To(Equal(jobNameForSession(session)))
@@ -45,7 +45,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 			var pod corev1.Pod
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: ns, Name: got.Status.PodName}, &pod)).To(Succeed())
-			Expect(pod.Labels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+			Expect(pod.Labels[scrutineerjob.LabelSessionRef]).To(Equal(session.Name))
 
 			Expect(got.Status.StartTime).NotTo(BeNil())
 			Expect(got.Status.CompletionTime).NotTo(BeNil())
@@ -64,14 +64,14 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 	Context("timeout path", func() {
 		It("marks Phase=TimedOut when the Job exceeds activeDeadlineSeconds", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-timeout")
+			ns := newTestNamespace("scrutineer-e2e-timeout")
 			session := newAgentSession(ns, "timed-out",
 				withTimeoutSeconds(5),
 				withSleepExceedingTimeout(),
 			)
 			key := createAgentSession(ctx, session)
 
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseTimedOut)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseTimedOut)
 
 			got := getSession(ctx, key)
 			expectTimedOutStatus(&got)
@@ -81,11 +81,11 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 	Context("failure path", func() {
 		It("marks a non-zero exit as Phase=Failed", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-fail")
+			ns := newTestNamespace("scrutineer-e2e-fail")
 			session := newAgentSession(ns, "fails", withExitCommand(1))
 			key := createAgentSession(ctx, session)
 
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseFailed)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseFailed)
 
 			got := getSession(ctx, key)
 			Expect(got.Status.Result.Outcome).To(Equal("failed"))
@@ -96,7 +96,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 	Context("denied path (controller-side validation)", func() {
 		It("rejects a spec with empty task and never creates a Job", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-deny")
+			ns := newTestNamespace("scrutineer-e2e-deny")
 			session := newAgentSession(ns, "denied", withoutTask())
 			key := createAgentSession(ctx, session)
 
@@ -111,7 +111,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 		})
 
 		It("denies when promptConfigMapRef points to a missing ConfigMap", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-deny-cm")
+			ns := newTestNamespace("scrutineer-e2e-deny-cm")
 			session := newAgentSession(ns, "denied-missing-cm",
 				withPromptConfigMapRef("does-not-exist", "instructions"))
 			key := createAgentSession(ctx, session)
@@ -124,7 +124,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 		})
 
 		It("denies when promptConfigMapRef key is missing from the ConfigMap", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-deny-cm-key")
+			ns := newTestNamespace("scrutineer-e2e-deny-cm-key")
 			cm := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: "agent-prompt", Namespace: ns},
 				Data:       map[string]string{"other": "value"},
@@ -145,7 +145,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 	Context("admission-time validation (CRD pattern)", func() {
 		It("rejects an out-of-range temperature at apiserver Create", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-admit")
+			ns := newTestNamespace("scrutineer-e2e-admit")
 			session := newAgentSession(ns, "bad-temp", withTemperature("2.5"))
 
 			err := k8sClient.Create(ctx, session)
@@ -154,7 +154,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 		})
 
 		It("loads the task prompt from a ConfigMap when promptConfigMapRef is set", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-prompt-cm")
+			ns := newTestNamespace("scrutineer-e2e-prompt-cm")
 			cm := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: "agent-prompt", Namespace: ns},
 				Data:       map[string]string{"instructions": "prompt from configmap"},
@@ -167,18 +167,18 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			)
 			key := createAgentSession(ctx, session)
 
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseSucceeded)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseSucceeded)
 
 			job := expectJobForSession(ctx, ns, session)
-			Expect(containerEnvValue(job, relayjob.EnvTaskPrompt)).To(Equal("prompt from configmap"))
+			Expect(containerEnvValue(job, scrutineerjob.EnvTaskPrompt)).To(Equal("prompt from configmap"))
 		})
 
 		It("accepts a valid string-encoded temperature", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-temp-ok")
+			ns := newTestNamespace("scrutineer-e2e-temp-ok")
 			session := newAgentSession(ns, "good-temp", withTemperature("0.7"), withExitCommand(0))
 			key := createAgentSession(ctx, session)
 
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseSucceeded)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseSucceeded)
 
 			got := getSession(ctx, key)
 			Expect(got.Spec.Model.Temperature).NotTo(BeNil())
@@ -188,14 +188,14 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 	Context("cancellation", func() {
 		It("deletes the owned Job and reaches Phase=Cancelled when cancelRequested is set", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-cancel")
+			ns := newTestNamespace("scrutineer-e2e-cancel")
 			session := newAgentSession(ns, "cancelled", withLongRunningCommand())
 			key := createAgentSession(ctx, session)
 
 			expectJobForSession(ctx, ns, session)
 			requestCancellation(ctx, key)
 
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 			expectJobGoneForSession(ctx, ns, session)
 
 			got := getSession(ctx, key)
@@ -203,11 +203,11 @@ var _ = Describe("AgentSession e2e against kind", func() {
 		})
 
 		It("reaches Phase=Cancelled immediately when created with cancelRequested", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-cancel-at-create")
+			ns := newTestNamespace("scrutineer-e2e-cancel-at-create")
 			session := newAgentSession(ns, "cancel-at-create", withCancelRequested())
 			key := createAgentSession(ctx, session)
 
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 			expectNoJobForSession(ctx, ns, session)
 
 			got := getSession(ctx, key)
@@ -217,7 +217,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 	Context("network policy enforcement", func() {
 		It("creates an owned NetworkPolicy for an enforced CIDR policy and removes it on terminal", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-netpol")
+			ns := newTestNamespace("scrutineer-e2e-netpol")
 			createEnforcedCIDRPolicy(ctx, ns, "egress-allow", "203.0.113.0/24")
 
 			session := newAgentSession(ns, "netpol",
@@ -236,14 +236,14 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			}, 30*time.Second, 500*time.Millisecond).Should(Succeed(), "NetworkPolicy never appeared")
 
 			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
-			Expect(np.Spec.PodSelector.MatchLabels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+			Expect(np.Spec.PodSelector.MatchLabels[scrutineerjob.LabelSessionRef]).To(Equal(session.Name))
 			owner := metav1.GetControllerOf(&np)
 			Expect(owner).NotTo(BeNil())
 			Expect(owner.Kind).To(Equal("AgentSession"))
 
 			By("cancelling the session removes the NetworkPolicy at terminal phase")
 			requestCancellation(ctx, key)
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, npKey, &networkingv1.NetworkPolicy{})
@@ -252,12 +252,12 @@ var _ = Describe("AgentSession e2e against kind", func() {
 		})
 
 		It("does not create a NetworkPolicy for an audit-only policy", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-netpol-audit")
-			ap := &relayv1alpha1.AgentPolicy{
+			ns := newTestNamespace("scrutineer-e2e-netpol-audit")
+			ap := &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "egress-audit", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					Mode:        relayv1alpha1.PolicyModeAuditOnly,
-					PolicyRules: relayv1alpha1.PolicyRules{AllowedCIDRs: []string{"203.0.113.0/24"}},
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					Mode:        scrutineerv1alpha1.PolicyModeAuditOnly,
+					PolicyRules: scrutineerv1alpha1.PolicyRules{AllowedCIDRs: []string{"203.0.113.0/24"}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, ap)).To(Succeed())
@@ -280,7 +280,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 	Context("runtime profile", func() {
 		It("applies a referenced RuntimeProfile to the Job pod template", func(ctx SpecContext) {
-			ns := newTestNamespace("relay-e2e-runtimeprofile")
+			ns := newTestNamespace("scrutineer-e2e-runtimeprofile")
 			const profileName = "e2e-hardened"
 			createRuntimeProfile(ctx, ns, profileName)
 
@@ -290,7 +290,7 @@ var _ = Describe("AgentSession e2e against kind", func() {
 			)
 			key := createAgentSession(ctx, session)
 
-			waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseSucceeded)
+			waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseSucceeded)
 
 			got := getSession(ctx, key)
 			Expect(got.Status.MatchedRuntimeProfile).NotTo(BeNil())

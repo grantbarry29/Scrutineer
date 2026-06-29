@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestGateway_deniesAndReportsEnforcedTool(t *testing.T) {
@@ -49,8 +49,8 @@ func TestGateway_deniesAndReportsEnforcedTool(t *testing.T) {
 		SessionName:      "sess-a",
 		ReporterURL:      reporterSrv.URL,
 		ReporterToken:    tokenPath,
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedTools: []string{"kubectl"},
 		},
 	}
@@ -81,7 +81,7 @@ func TestGateway_deniesAndReportsEnforcedTool(t *testing.T) {
 		if report.Decisions[0].Type != "tool" {
 			t.Fatalf("type = %q", report.Decisions[0].Type)
 		}
-		if report.Decisions[0].Action != relayv1alpha1.PolicyDecisionDeny {
+		if report.Decisions[0].Action != scrutineerv1alpha1.PolicyDecisionDeny {
 			t.Fatalf("action = %q", report.Decisions[0].Action)
 		}
 		if len(report.Violations) != 1 {
@@ -104,8 +104,8 @@ func TestGateway_allowsPermittedTool(t *testing.T) {
 		SessionName:      "sess-a",
 		ReporterURL:      "http://unused",
 		ReporterToken:    writeTempToken(t, "x"),
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedTools: []string{"read_file"},
 		},
 	}
@@ -168,8 +168,8 @@ func newApprovalGateway(t *testing.T, registerState, pollState string, hold, pol
 		SessionName:      "sess-a",
 		ReporterURL:      srv.URL,
 		ReporterToken:    writeTempToken(t, "tok"),
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy:           relayv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy:           scrutineerv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
 	}
 	gw := httptest.NewServer(&Gateway{
 		Env:                  env,
@@ -211,7 +211,7 @@ func TestGateway_approvalGrantedAllowsAndReportsRedacted(t *testing.T) {
 			t.Fatalf("decisions = %d", len(report.Decisions))
 		}
 		d := report.Decisions[0]
-		if d.Type != "approval" || d.Action != relayv1alpha1.PolicyDecisionAllow || d.Reason != ReasonApprovalGranted {
+		if d.Type != "approval" || d.Action != scrutineerv1alpha1.PolicyDecisionAllow || d.Reason != ReasonApprovalGranted {
 			t.Fatalf("decision = %+v", d)
 		}
 		if d.Rule != "requireHumanApproval" {
@@ -241,7 +241,7 @@ func TestGateway_approvalDeniedForbids(t *testing.T) {
 	select {
 	case report := <-stub.reports:
 		d := report.Decisions[0]
-		if d.Action != relayv1alpha1.PolicyDecisionDeny || d.Reason != ReasonApprovalDenied {
+		if d.Action != scrutineerv1alpha1.PolicyDecisionDeny || d.Reason != ReasonApprovalDenied {
 			t.Fatalf("decision = %+v", d)
 		}
 		if len(report.Violations) != 1 {
@@ -277,8 +277,8 @@ func TestGateway_approvalNoChannelFailsClosed(t *testing.T) {
 	env := RuntimeEnv{
 		SessionNamespace: "ns1",
 		SessionName:      "sess-a",
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy:           relayv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy:           scrutineerv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
 	}
 	gw := httptest.NewServer(&Gateway{Env: env})
 	defer gw.Close()

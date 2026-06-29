@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,14 +13,14 @@ package workspace
 import (
 	"testing"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 func TestEvaluateFile_deniedPathEnforced(t *testing.T) {
 	ctx := enforcement.SessionContext{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedPaths: []string{"/etc/**"},
 		},
 	}
@@ -35,8 +35,8 @@ func TestEvaluateFile_deniedPathEnforced(t *testing.T) {
 
 func TestEvaluateFile_notInAllowedPaths(t *testing.T) {
 	ctx := enforcement.SessionContext{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedPaths: []string{"/workspace/**"},
 		},
 	}
@@ -51,8 +51,8 @@ func TestEvaluateFile_notInAllowedPaths(t *testing.T) {
 
 func TestEvaluateFile_allowedUnderWorkspaceGlob(t *testing.T) {
 	ctx := enforcement.SessionContext{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedPaths: []string{"/workspace/**"},
 		},
 	}
@@ -64,13 +64,13 @@ func TestEvaluateFile_allowedUnderWorkspaceGlob(t *testing.T) {
 
 func TestEvaluateFile_dryRunAllowsWithViolationAction(t *testing.T) {
 	ctx := enforcement.SessionContext{
-		Mode: relayv1alpha1.PolicyModeDryRun,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeDryRun,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedPaths: []string{"/root/.ssh/**"},
 		},
 	}
 	auth := EvaluateFile(ctx, FileRequest{Path: "/root/.ssh/id_rsa"})
-	if !auth.Allowed || auth.Action != relayv1alpha1.PolicyDecisionDryRun {
+	if !auth.Allowed || auth.Action != scrutineerv1alpha1.PolicyDecisionDryRun {
 		t.Fatalf("auth = %+v", auth)
 	}
 }
@@ -78,7 +78,7 @@ func TestEvaluateFile_dryRunAllowsWithViolationAction(t *testing.T) {
 func TestHasEnabledSidecar(t *testing.T) {
 	disabled := false
 	ctx := enforcement.SessionContext{
-		Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+		Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
 			{Type: SidecarType, Enabled: &disabled},
 		},
 	}
@@ -113,8 +113,8 @@ func TestPathMatches_globPatterns(t *testing.T) {
 
 func TestMergeEnvKeys_matchJobBuilder(t *testing.T) {
 	cfg := BuildConfig(enforcement.SessionContext{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedPaths: []string{"/workspace/**"},
 			DeniedPaths:  []string{"/etc/**"},
 		},

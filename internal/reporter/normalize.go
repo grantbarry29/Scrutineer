@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,14 +17,14 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const maxFutureSkew = 2 * time.Minute
 
 // ValidateAndNormalizeReport validates the wire payload and returns a RuntimeReport.
-func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effectiveMode relayv1alpha1.PolicyMode) (enforcement.RuntimeReport, error) {
+func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effectiveMode scrutineerv1alpha1.PolicyMode) (enforcement.RuntimeReport, error) {
 	if strings.TrimSpace(req.Session.Namespace) == "" || strings.TrimSpace(req.Session.Name) == "" {
 		return enforcement.RuntimeReport{}, fmt.Errorf("%w: session namespace and name are required", ErrBadRequest)
 	}
@@ -52,12 +52,12 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 	// idempotent dedup in AppendRuntime* helpers.
 	now := metav1.NewTime(receivedAt).Rfc3339Copy()
 	maxFuture := receivedAt.Add(maxFutureSkew)
-	decisions := make([]relayv1alpha1.PolicyDecision, 0, len(req.Decisions))
+	decisions := make([]scrutineerv1alpha1.PolicyDecision, 0, len(req.Decisions))
 	for i, d := range req.Decisions {
-		if d.Phase != "" && d.Phase != relayv1alpha1.PolicyDecisionPhaseRuntime {
+		if d.Phase != "" && d.Phase != scrutineerv1alpha1.PolicyDecisionPhaseRuntime {
 			return enforcement.RuntimeReport{}, fmt.Errorf("%w: decisions[%d].phase must be runtime", ErrBadRequest, i)
 		}
-		d.Phase = relayv1alpha1.PolicyDecisionPhaseRuntime
+		d.Phase = scrutineerv1alpha1.PolicyDecisionPhaseRuntime
 		if d.Time.IsZero() || d.Time.Time.After(maxFuture) {
 			d.Time = now
 		} else {
@@ -73,21 +73,21 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		// the sidecar shares a pod/ServiceAccount with the agent, so a client must
 		// not be able to self-attest a higher assurance level. Override any value
 		// the caller supplied.
-		d.AssuranceLevel = relayv1alpha1.EvidenceSelfReported
+		d.AssuranceLevel = scrutineerv1alpha1.EvidenceSelfReported
 		decisions = append(decisions, d)
 	}
 
-	violations := append([]relayv1alpha1.PolicyViolation(nil), req.Violations...)
+	violations := append([]scrutineerv1alpha1.PolicyViolation(nil), req.Violations...)
 	for i := range violations {
 		if violations[i].Time.IsZero() || violations[i].Time.Time.After(maxFuture) {
 			violations[i].Time = now
 		} else {
 			violations[i].Time = violations[i].Time.Rfc3339Copy()
 		}
-		violations[i].AssuranceLevel = relayv1alpha1.EvidenceSelfReported
+		violations[i].AssuranceLevel = scrutineerv1alpha1.EvidenceSelfReported
 	}
 
-	events := make([]relayv1alpha1.SessionEvent, 0, len(req.Events))
+	events := make([]scrutineerv1alpha1.SessionEvent, 0, len(req.Events))
 	for _, e := range req.Events {
 		if strings.TrimSpace(string(e.Type)) == "" {
 			return enforcement.RuntimeReport{}, fmt.Errorf("%w: event type is required", ErrBadRequest)
@@ -103,7 +103,7 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		events = append(events, e)
 	}
 
-	var usage *relayv1alpha1.SessionUsage
+	var usage *scrutineerv1alpha1.SessionUsage
 	if req.Usage != nil {
 		cp := *req.Usage
 		usage = &cp
@@ -117,7 +117,7 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 	}, nil
 }
 
-func validateUsageDelta(u *relayv1alpha1.SessionUsage) error {
+func validateUsageDelta(u *scrutineerv1alpha1.SessionUsage) error {
 	if u == nil {
 		return nil
 	}

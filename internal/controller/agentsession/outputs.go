@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
 )
 
 const (
@@ -44,7 +44,7 @@ const (
 // collectSessionOutputs retains pod logs and workspace files when spec.outputs requests it.
 // Collection runs once per artifact name; results are stored in owned ConfigMaps/Secrets
 // and referenced from status.artifacts.
-func (r *AgentSessionReconciler) collectSessionOutputs(ctx context.Context, session *relayv1alpha1.AgentSession) error {
+func (r *AgentSessionReconciler) collectSessionOutputs(ctx context.Context, session *scrutineerv1alpha1.AgentSession) error {
 	if session == nil || !isTerminal(session.Status.Phase) {
 		return nil
 	}
@@ -62,7 +62,7 @@ func (r *AgentSessionReconciler) collectSessionOutputs(ctx context.Context, sess
 		return err
 	}
 
-	var collected []relayv1alpha1.ArtifactRef
+	var collected []scrutineerv1alpha1.ArtifactRef
 	if outs.CollectLogs && !hasArtifactNamed(session.Status.Artifacts, artifactNameAgentLogs) {
 		ref, err := r.collectAgentLogs(ctx, clientset, session, podName)
 		if err != nil {
@@ -86,10 +86,10 @@ func (r *AgentSessionReconciler) collectSessionOutputs(ctx context.Context, sess
 		return nil
 	}
 	session.Status.Artifacts = appendUniqueArtifacts(session.Status.Artifacts, collected)
-	AppendSessionEvents(session, []relayv1alpha1.SessionEvent{{
+	AppendSessionEvents(session, []scrutineerv1alpha1.SessionEvent{{
 		Time:    metav1.Now(),
-		Type:    relayv1alpha1.SessionEventTypeLifecycle,
-		Source:  "relay-controller",
+		Type:    scrutineerv1alpha1.SessionEventTypeLifecycle,
+		Source:  "scrutineer-controller",
 		Action:  "outputs-collected",
 		Message: fmt.Sprintf("collected %d output artifact(s)", len(collected)),
 	}})
@@ -97,10 +97,10 @@ func (r *AgentSessionReconciler) collectSessionOutputs(ctx context.Context, sess
 	return nil
 }
 
-func (r *AgentSessionReconciler) collectAgentLogs(ctx context.Context, clientset kubernetes.Interface, session *relayv1alpha1.AgentSession, podName string) (*relayv1alpha1.ArtifactRef, error) {
+func (r *AgentSessionReconciler) collectAgentLogs(ctx context.Context, clientset kubernetes.Interface, session *scrutineerv1alpha1.AgentSession, podName string) (*scrutineerv1alpha1.ArtifactRef, error) {
 	limit := int64(maxCollectedLogBytes)
 	req := clientset.CoreV1().Pods(session.Namespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container:  relayjob.AgentContainerName,
+		Container:  scrutineerjob.AgentContainerName,
 		LimitBytes: &limit,
 	})
 	stream, err := req.Stream(ctx)
@@ -120,7 +120,7 @@ func (r *AgentSessionReconciler) collectAgentLogs(ctx context.Context, clientset
 		body = body[:maxCollectedLogBytes]
 	}
 
-	name := outputResourceName("relay-logs-", session.Name)
+	name := outputResourceName("scrutineer-logs-", session.Name)
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -139,7 +139,7 @@ func (r *AgentSessionReconciler) collectAgentLogs(ctx context.Context, clientset
 	return &ref, nil
 }
 
-func (r *AgentSessionReconciler) collectWorkspaceArtifacts(ctx context.Context, clientset kubernetes.Interface, session *relayv1alpha1.AgentSession, podName string) (*relayv1alpha1.ArtifactRef, error) {
+func (r *AgentSessionReconciler) collectWorkspaceArtifacts(ctx context.Context, clientset kubernetes.Interface, session *scrutineerv1alpha1.AgentSession, podName string) (*scrutineerv1alpha1.ArtifactRef, error) {
 	path, err := resolveArtifactPath(session)
 	if err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ func (r *AgentSessionReconciler) collectWorkspaceArtifacts(ctx context.Context, 
 		data = data[:maxCollectedArtifactBytes]
 	}
 
-	name := outputResourceName("relay-artifacts-", session.Name)
+	name := outputResourceName("scrutineer-artifacts-", session.Name)
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -190,7 +190,7 @@ func (r *AgentSessionReconciler) execInAgentContainer(ctx context.Context, clien
 		Name(podName).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
-			Container: relayjob.AgentContainerName,
+			Container: scrutineerjob.AgentContainerName,
 			Command:   cmd,
 			Stdout:    true,
 			Stderr:    true,
@@ -255,10 +255,10 @@ func (r *AgentSessionReconciler) kubernetesClient() (kubernetes.Interface, error
 	return cs, nil
 }
 
-func resolveArtifactPath(session *relayv1alpha1.AgentSession) (string, error) {
+func resolveArtifactPath(session *scrutineerv1alpha1.AgentSession) (string, error) {
 	path := strings.TrimSpace(session.Spec.Outputs.ArtifactPath)
 	if path == "" {
-		mount := relayjob.DefaultWorkspaceMountPath
+		mount := scrutineerjob.DefaultWorkspaceMountPath
 		if strings.TrimSpace(session.Spec.Workspace.MountPath) != "" {
 			mount = filepath.Clean(session.Spec.Workspace.MountPath)
 		}
@@ -293,19 +293,19 @@ func outputResourceName(prefix, sessionName string) string {
 	return strings.TrimRight(name, "-.")
 }
 
-func outputLabels(session *relayv1alpha1.AgentSession) map[string]string {
+func outputLabels(session *scrutineerv1alpha1.AgentSession) map[string]string {
 	return map[string]string{
-		relayjob.LabelAppName:      relayjob.AppNameRelay,
-		relayjob.LabelAppComponent: relayjob.ComponentSession,
-		relayjob.LabelSessionRef:   session.Name,
+		scrutineerjob.LabelAppName:      scrutineerjob.AppNameScrutineer,
+		scrutineerjob.LabelAppComponent: scrutineerjob.ComponentSession,
+		scrutineerjob.LabelSessionRef:   session.Name,
 	}
 }
 
-func artifactRef(name, uri, mediaType string) relayv1alpha1.ArtifactRef {
-	return relayv1alpha1.ArtifactRef{Name: name, URI: uri, MediaType: mediaType}
+func artifactRef(name, uri, mediaType string) scrutineerv1alpha1.ArtifactRef {
+	return scrutineerv1alpha1.ArtifactRef{Name: name, URI: uri, MediaType: mediaType}
 }
 
-func hasArtifactNamed(artifacts []relayv1alpha1.ArtifactRef, name string) bool {
+func hasArtifactNamed(artifacts []scrutineerv1alpha1.ArtifactRef, name string) bool {
 	for _, a := range artifacts {
 		if a.Name == name {
 			return true
@@ -314,7 +314,7 @@ func hasArtifactNamed(artifacts []relayv1alpha1.ArtifactRef, name string) bool {
 	return false
 }
 
-func appendUniqueArtifacts(dst []relayv1alpha1.ArtifactRef, incoming []relayv1alpha1.ArtifactRef) []relayv1alpha1.ArtifactRef {
+func appendUniqueArtifacts(dst []scrutineerv1alpha1.ArtifactRef, incoming []scrutineerv1alpha1.ArtifactRef) []scrutineerv1alpha1.ArtifactRef {
 	if len(incoming) == 0 {
 		return dst
 	}
@@ -332,7 +332,7 @@ func appendUniqueArtifacts(dst []relayv1alpha1.ArtifactRef, incoming []relayv1al
 	return dst
 }
 
-func mergeArtifactsInPlace(dst *[]relayv1alpha1.ArtifactRef, preserve []relayv1alpha1.ArtifactRef) {
+func mergeArtifactsInPlace(dst *[]scrutineerv1alpha1.ArtifactRef, preserve []scrutineerv1alpha1.ArtifactRef) {
 	if dst == nil || len(preserve) == 0 {
 		return
 	}

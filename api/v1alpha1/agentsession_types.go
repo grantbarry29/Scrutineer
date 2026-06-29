@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -94,7 +94,7 @@ type ModelSpec struct {
 	// BaseURL optionally overrides the provider API endpoint. Use it for
 	// OpenAI-compatible aggregators or gateways (e.g. OpenRouter
 	// "https://openrouter.ai/api/v1", LiteLLM, vLLM, Together, Azure). It is
-	// propagated to the agent as AGENT_MODEL_BASE_URL. Relay never calls the
+	// propagated to the agent as AGENT_MODEL_BASE_URL. Scrutineer never calls the
 	// model itself, so the value is opaque and provider-agnostic; it only tells
 	// the agent runtime where to point its client. Must be an http(s) URL.
 	// +kubebuilder:validation:Pattern=`^https?://.+`
@@ -137,7 +137,7 @@ type RuntimeSpec struct {
 	TimeoutSeconds *int64 `json:"timeoutSeconds,omitempty"`
 
 	// Env are extra environment variables to inject into the agent container,
-	// in addition to the Relay-managed RELAY_*/AGENT_* variables.
+	// in addition to the Scrutineer-managed SCRUTINEER_*/AGENT_* variables.
 	// +optional
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
@@ -175,7 +175,7 @@ type WorkspaceSpec struct {
 	MountPath string `json:"mountPath,omitempty"`
 }
 
-// OutputSpec controls what artifacts/logs Relay collects from a session.
+// OutputSpec controls what artifacts/logs Scrutineer collects from a session.
 type OutputSpec struct {
 	// CollectLogs, when true, indicates that pod logs should be retained.
 	// +optional
@@ -224,7 +224,7 @@ type AgentSessionSpec struct {
 	// +optional
 	Outputs OutputSpec `json:"outputs,omitempty"`
 
-	// CancelRequested asks Relay to stop this session. When true, the controller
+	// CancelRequested asks Scrutineer to stop this session. When true, the controller
 	// (in a later reconciliation step) deletes the owned runtime Job and moves
 	// the session to Phase=Cancelled. Setting this field is the MVP cancellation
 	// request mechanism; it does not by itself stop the Job until the controller

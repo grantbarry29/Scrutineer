@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,11 +15,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
-func baseCtx(mode relayv1alpha1.PolicyMode, rules relayv1alpha1.PolicyRules) enforcement.SessionContext {
+func baseCtx(mode scrutineerv1alpha1.PolicyMode, rules scrutineerv1alpha1.PolicyRules) enforcement.SessionContext {
 	return enforcement.SessionContext{
 		SessionNamespace: "team-a",
 		SessionName:      "demo",
@@ -29,46 +29,46 @@ func baseCtx(mode relayv1alpha1.PolicyMode, rules relayv1alpha1.PolicyRules) enf
 }
 
 func TestEvaluateTool_enforcedDeniedTool(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		DeniedTools: []string{"kubectl"},
 	})
 	auth := EvaluateTool(ctx, ToolRequest{Tool: "kubectl"})
 	if auth.Allowed || !auth.Blocked {
 		t.Fatalf("got %+v", auth)
 	}
-	if auth.Action != relayv1alpha1.PolicyDecisionDeny || auth.Reason != ReasonDeniedTools {
+	if auth.Action != scrutineerv1alpha1.PolicyDecisionDeny || auth.Reason != ReasonDeniedTools {
 		t.Fatalf("action=%q reason=%q", auth.Action, auth.Reason)
 	}
 }
 
 func TestEvaluateTool_dryRunDeniedTool(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeDryRun, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeDryRun, scrutineerv1alpha1.PolicyRules{
 		DeniedTools: []string{"kubectl"},
 	})
 	auth := EvaluateTool(ctx, ToolRequest{Tool: "kubectl"})
 	if !auth.Allowed || auth.Blocked || !auth.WouldDeny {
 		t.Fatalf("got %+v", auth)
 	}
-	if auth.Action != relayv1alpha1.PolicyDecisionDryRun {
+	if auth.Action != scrutineerv1alpha1.PolicyDecisionDryRun {
 		t.Fatalf("action=%q", auth.Action)
 	}
 }
 
 func TestEvaluateTool_auditOnlyDeniedTool(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeAuditOnly, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeAuditOnly, scrutineerv1alpha1.PolicyRules{
 		DeniedTools: []string{"kubectl"},
 	})
 	auth := EvaluateTool(ctx, ToolRequest{Tool: "kubectl"})
 	if !auth.Allowed || auth.Blocked {
 		t.Fatalf("got %+v", auth)
 	}
-	if auth.Action != relayv1alpha1.PolicyDecisionAudit {
+	if auth.Action != scrutineerv1alpha1.PolicyDecisionAudit {
 		t.Fatalf("action=%q", auth.Action)
 	}
 }
 
 func TestEvaluateTool_allowlistBlocksUnknown(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		AllowedTools: []string{"shell"},
 	})
 	auth := EvaluateTool(ctx, ToolRequest{Tool: "deploy"})
@@ -78,7 +78,7 @@ func TestEvaluateTool_allowlistBlocksUnknown(t *testing.T) {
 }
 
 func TestEvaluateTool_allowed(t *testing.T) {
-	ctx := baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		AllowedTools: []string{"shell"},
 		DeniedTools:  []string{"kubectl"},
 	})
@@ -90,7 +90,7 @@ func TestEvaluateTool_allowed(t *testing.T) {
 
 func TestBuildConfig_fromToolPolicy(t *testing.T) {
 	max := int32(10)
-	cfg := BuildConfig(baseCtx(relayv1alpha1.PolicyModeDryRun, relayv1alpha1.PolicyRules{
+	cfg := BuildConfig(baseCtx(scrutineerv1alpha1.PolicyModeDryRun, scrutineerv1alpha1.PolicyRules{
 		AllowedTools:      []string{"shell"},
 		MaxCallsPerMinute: &max,
 	}))
@@ -115,7 +115,7 @@ func TestBackend_metadata(t *testing.T) {
 func TestHasEnabledSidecar(t *testing.T) {
 	disabled := false
 	ctx := enforcement.SessionContext{
-		Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+		Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
 			{Type: SidecarType, Enabled: &disabled},
 		},
 	}
@@ -126,7 +126,7 @@ func TestHasEnabledSidecar(t *testing.T) {
 
 func TestEnvForConfig(t *testing.T) {
 	max := int32(5)
-	cfg := BuildConfig(baseCtx(relayv1alpha1.PolicyModeDryRun, relayv1alpha1.PolicyRules{
+	cfg := BuildConfig(baseCtx(scrutineerv1alpha1.PolicyModeDryRun, scrutineerv1alpha1.PolicyRules{
 		AllowedTools:         []string{"shell"},
 		DeniedTools:          []string{"kubectl"},
 		RequireHumanApproval: []string{"deploy"},

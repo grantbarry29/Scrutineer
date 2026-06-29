@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,9 +25,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	relayjob "github.com/secureai/relay/internal/controller/job"
-	"github.com/secureai/relay/internal/enforcement/dnsproxy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/dnsproxy"
 )
 
 func testReconciler() *AgentSessionReconciler {
@@ -35,7 +35,7 @@ func testReconciler() *AgentSessionReconciler {
 		Client:    k8sClient,
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor("relay-test"),
+		Recorder:  mgr.GetEventRecorderFor("scrutineer-test"),
 	}
 }
 
@@ -45,14 +45,14 @@ var _ = Describe("AgentSession reconciler", func() {
 		It("denies a session with an empty task and does not create a Job", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "denied-empty-task")
-			session.Spec.Task = relayv1alpha1.SessionTaskSpec{}
+			session.Spec.Task = scrutineerv1alpha1.SessionTaskSpec{}
 
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
 
-			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForPhase(key, scrutineerv1alpha1.PhaseDenied)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			validated := getCondition(&got, ConditionValidated)
 			Expect(validated).NotTo(BeNil())
@@ -67,8 +67,8 @@ var _ = Describe("AgentSession reconciler", func() {
 		It("denies when promptConfigMapRef points to a missing ConfigMap", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "denied-missing-cm")
-			session.Spec.Task = relayv1alpha1.SessionTaskSpec{
-				PromptConfigMapRef: &relayv1alpha1.PromptConfigMapRef{
+			session.Spec.Task = scrutineerv1alpha1.SessionTaskSpec{
+				PromptConfigMapRef: &scrutineerv1alpha1.PromptConfigMapRef{
 					Name: "does-not-exist",
 					Key:  "prompt",
 				},
@@ -77,9 +77,9 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
 
-			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForPhase(key, scrutineerv1alpha1.PhaseDenied)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			validated := getCondition(&got, ConditionValidated)
 			Expect(validated).NotTo(BeNil())
@@ -93,23 +93,23 @@ var _ = Describe("AgentSession reconciler", func() {
 			session.Spec.Model.Provider = "   "
 
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
-			waitForPhase(client.ObjectKeyFromObject(session), relayv1alpha1.PhaseDenied)
+			waitForPhase(client.ObjectKeyFromObject(session), scrutineerv1alpha1.PhaseDenied)
 			expectJobAbsent(ns, session)
 		})
 
 		It("denies when policyRefs points to a missing AgentPolicy", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "denied-missing-policy")
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{
 				Kind: "AgentPolicy",
 				Name: "does-not-exist",
 			}}
 
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
-			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForPhase(key, scrutineerv1alpha1.PhaseDenied)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			validated := getCondition(&got, ConditionValidated)
 			Expect(validated).NotTo(BeNil())
@@ -120,15 +120,15 @@ var _ = Describe("AgentSession reconciler", func() {
 		It("denies when runtimeProfileRef points to a missing RuntimeProfile", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "denied-missing-runtimeprofile")
-			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{
+			session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{
 				Name: "does-not-exist",
 			}
 
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
-			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForPhase(key, scrutineerv1alpha1.PhaseDenied)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			validated := getCondition(&got, ConditionValidated)
 			Expect(validated).NotTo(BeNil())
@@ -140,13 +140,13 @@ var _ = Describe("AgentSession reconciler", func() {
 		It("denies when spec.workspace.size is invalid", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "denied-bad-workspace-size")
-			session.Spec.Workspace = relayv1alpha1.WorkspaceSpec{
+			session.Spec.Workspace = scrutineerv1alpha1.WorkspaceSpec{
 				Ephemeral: true,
 				Size:      "not-a-quantity",
 			}
 
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
-			waitForPhase(client.ObjectKeyFromObject(session), relayv1alpha1.PhaseDenied)
+			waitForPhase(client.ObjectKeyFromObject(session), scrutineerv1alpha1.PhaseDenied)
 			expectJobAbsent(ns, session)
 		})
 	})
@@ -155,15 +155,15 @@ var _ = Describe("AgentSession reconciler", func() {
 		It("applies RuntimeProfile fields to the Job pod template and status", func() {
 			ns := newTestNamespace()
 			runtimeClass := "gvisor"
-			rp := &relayv1alpha1.RuntimeProfile{
+			rp := &scrutineerv1alpha1.RuntimeProfile{
 				ObjectMeta: metav1.ObjectMeta{Name: "hardened", Namespace: ns},
-				Spec: relayv1alpha1.RuntimeProfileSpec{
-					Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+				Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+					Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 						RunAsNonRoot:             boolPtr(true),
 						ReadOnlyRootFilesystem:   boolPtr(true),
 						AllowPrivilegeEscalation: boolPtr(false),
 					},
-					Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+					Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
 						RuntimeClassName: runtimeClass,
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
@@ -174,7 +174,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, rp)).To(Succeed())
 
 			session := minimalAgentSession(ns, "runtimeprofile-ref")
-			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{
+			session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{
 				Name: "hardened",
 			}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
@@ -182,7 +182,7 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			waitForJob(ns, session)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			Expect(got.Status.MatchedRuntimeProfile).NotTo(BeNil())
 			Expect(got.Status.MatchedRuntimeProfile.Name).To(Equal("hardened"))
@@ -213,13 +213,13 @@ var _ = Describe("AgentSession reconciler", func() {
 			ns := newTestNamespace()
 			enabled := true
 			disabled := false
-			rp := &relayv1alpha1.RuntimeProfile{
+			rp := &scrutineerv1alpha1.RuntimeProfile{
 				ObjectMeta: metav1.ObjectMeta{Name: "with-sidecars", Namespace: ns},
-				Spec: relayv1alpha1.RuntimeProfileSpec{
-					Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
-						{Name: "egress-dns", Type: relayjob.SidecarTypeDNSProxy, Enabled: &enabled},
-						{Name: "tool-gw", Type: relayjob.SidecarTypeToolGateway, Enabled: &enabled},
-						{Name: "envoy-off", Type: relayjob.SidecarTypeEnvoy, Enabled: &disabled},
+				Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+					Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
+						{Name: "egress-dns", Type: scrutineerjob.SidecarTypeDNSProxy, Enabled: &enabled},
+						{Name: "tool-gw", Type: scrutineerjob.SidecarTypeToolGateway, Enabled: &enabled},
+						{Name: "envoy-off", Type: scrutineerjob.SidecarTypeEnvoy, Enabled: &disabled},
 						{Name: "custom", Type: "unknown-sidecar", Enabled: &enabled},
 					},
 				},
@@ -227,7 +227,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, rp)).To(Succeed())
 
 			session := minimalAgentSession(ns, "sidecar-inject")
-			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{Name: "with-sidecars"}
+			session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "with-sidecars"}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 
 			waitForJob(ns, session)
@@ -240,40 +240,40 @@ var _ = Describe("AgentSession reconciler", func() {
 			for _, c := range job.Spec.Template.Spec.Containers {
 				byName[c.Name] = c
 			}
-			Expect(byName).To(HaveKey(relayjob.AgentContainerName))
+			Expect(byName).To(HaveKey(scrutineerjob.AgentContainerName))
 			Expect(byName).To(HaveKey("egress-dns"))
 			Expect(byName).To(HaveKey("tool-gw"))
 			Expect(byName).NotTo(HaveKey("envoy-off"))
 			Expect(byName).NotTo(HaveKey("custom"))
 
-			agentEnv := envMap(byName[relayjob.AgentContainerName].Env)
-			Expect(agentEnv[relayjob.EnvRelayToolGatewayURL]).To(Equal("http://127.0.0.1:19090"))
+			agentEnv := envMap(byName[scrutineerjob.AgentContainerName].Env)
+			Expect(agentEnv[scrutineerjob.EnvScrutineerToolGatewayURL]).To(Equal("http://127.0.0.1:19090"))
 		})
 
 		It("propagates egress policy env to dns-proxy sidecars", func() {
 			ns := newTestNamespace()
 			enabled := true
-			Expect(k8sClient.Create(testCtx, &relayv1alpha1.AgentPolicy{
+			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "egress-policy", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					Mode: relayv1alpha1.PolicyModeEnforced,
-					PolicyRules: relayv1alpha1.PolicyRules{
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					Mode: scrutineerv1alpha1.PolicyModeEnforced,
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
 						DeniedDomains: []string{"evil.example"},
 					},
 				},
 			})).To(Succeed())
-			Expect(k8sClient.Create(testCtx, &relayv1alpha1.RuntimeProfile{
+			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.RuntimeProfile{
 				ObjectMeta: metav1.ObjectMeta{Name: "egress-profile", Namespace: ns},
-				Spec: relayv1alpha1.RuntimeProfileSpec{
-					Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
-						Name: "egress-dns", Type: relayjob.SidecarTypeDNSProxy, Enabled: &enabled,
+				Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+					Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+						Name: "egress-dns", Type: scrutineerjob.SidecarTypeDNSProxy, Enabled: &enabled,
 					}},
 				},
 			})).To(Succeed())
 
 			session := minimalAgentSession(ns, "dns-proxy-env")
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "egress-policy"}}
-			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{Name: "egress-profile"}
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "egress-policy"}}
+			session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "egress-profile"}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 
 			waitForJob(ns, session)
@@ -289,8 +289,8 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(proxyEnv[dnsproxy.EnvPolicyDeniedDomains]).To(Equal("evil.example"))
 			Expect(proxyEnv[dnsproxy.EnvPolicyMode]).To(Equal("enforced"))
 
-			agentEnv := envMap(byName[relayjob.AgentContainerName].Env)
-			Expect(agentEnv[relayjob.EnvHTTPProxy]).To(Equal(dnsproxy.DefaultHTTPProxyURL))
+			agentEnv := envMap(byName[scrutineerjob.AgentContainerName].Env)
+			Expect(agentEnv[scrutineerjob.EnvHTTPProxy]).To(Equal(dnsproxy.DefaultHTTPProxyURL))
 		})
 
 		It("keeps baseline Job security when no runtimeProfileRef is set", func() {
@@ -308,10 +308,10 @@ var _ = Describe("AgentSession reconciler", func() {
 
 		It("reconciles when a referenced RuntimeProfile is updated and replaces a pending Job", func() {
 			ns := newTestNamespace()
-			rp := &relayv1alpha1.RuntimeProfile{
+			rp := &scrutineerv1alpha1.RuntimeProfile{
 				ObjectMeta: metav1.ObjectMeta{Name: "rolling-profile", Namespace: ns},
-				Spec: relayv1alpha1.RuntimeProfileSpec{
-					Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+				Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+					Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 						AllowPrivilegeEscalation: boolPtr(false),
 					},
 				},
@@ -320,7 +320,7 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			session := minimalAgentSession(ns, "runtimeprofile-watch")
 			session.Spec.Runtime.Command = []string{"sleep", "300"}
-			session.Spec.RuntimeProfileRef = &relayv1alpha1.RuntimeProfileRef{
+			session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{
 				Name: "rolling-profile",
 			}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
@@ -346,7 +346,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				g.Expect(*agent.SecurityContext.RunAsNonRoot).To(BeTrue())
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			Expect(got.Status.MatchedRuntimeProfile).NotTo(BeNil())
 			Expect(got.Status.MatchedRuntimeProfile.Name).To(Equal("rolling-profile"))
@@ -356,11 +356,11 @@ var _ = Describe("AgentSession reconciler", func() {
 	Context("policy resolution", func() {
 		It("merges AgentPolicy refs with inline overrides into effective policy and Job env", func() {
 			ns := newTestNamespace()
-			ap := &relayv1alpha1.AgentPolicy{
+			ap := &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "baseline", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					Mode: relayv1alpha1.PolicyModeDryRun,
-					PolicyRules: relayv1alpha1.PolicyRules{
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					Mode: scrutineerv1alpha1.PolicyModeDryRun,
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
 						DeniedDomains: []string{"dropbox.com"},
 						DeniedTools:   []string{"kubectl-prod"},
 						AllowedTools:  []string{"shell"},
@@ -370,12 +370,12 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
 
 			session := minimalAgentSession(ns, "policy-ref-merge")
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{
 				Kind: "AgentPolicy",
 				Name: "baseline",
 			}}
-			session.Spec.Policy = relayv1alpha1.InlinePolicySpec{
-				PolicyRules: relayv1alpha1.PolicyRules{
+			session.Spec.Policy = scrutineerv1alpha1.InlinePolicySpec{
+				PolicyRules: scrutineerv1alpha1.PolicyRules{
 					AllowedDomains: []string{"github.com"},
 					DeniedTools:    []string{"deploy"},
 				},
@@ -385,10 +385,10 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			waitForJob(ns, session)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			Expect(got.Status.EffectivePolicy).NotTo(BeNil())
-			Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeDryRun))
+			Expect(got.Status.EffectivePolicy.Mode).To(Equal(scrutineerv1alpha1.PolicyModeDryRun))
 			Expect(got.Status.EffectivePolicy.AllowedDomains).To(ContainElements("github.com"))
 			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElements("dropbox.com"))
 			Expect(got.Status.EffectivePolicy.DeniedTools).To(ContainElements("kubectl-prod", "deploy"))
@@ -396,7 +396,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(got.Status.MatchedPolicies[0].Name).To(Equal("baseline"))
 
 			Expect(got.Status.PolicyDecisions).NotTo(BeEmpty())
-			var matchedDecision, deniedTool *relayv1alpha1.PolicyDecision
+			var matchedDecision, deniedTool *scrutineerv1alpha1.PolicyDecision
 			for i := range got.Status.PolicyDecisions {
 				d := &got.Status.PolicyDecisions[i]
 				if d.Reason == "PolicyMatched" {
@@ -407,11 +407,11 @@ var _ = Describe("AgentSession reconciler", func() {
 				}
 			}
 			Expect(matchedDecision).NotTo(BeNil())
-			Expect(matchedDecision.Phase).To(Equal(relayv1alpha1.PolicyDecisionPhaseMerge))
+			Expect(matchedDecision.Phase).To(Equal(scrutineerv1alpha1.PolicyDecisionPhaseMerge))
 			Expect(matchedDecision.PolicyRef).NotTo(BeNil())
 			Expect(matchedDecision.PolicyRef.Name).To(Equal("baseline"))
 			Expect(deniedTool).NotTo(BeNil())
-			Expect(deniedTool.Action).To(Equal(relayv1alpha1.PolicyDecisionDryRun))
+			Expect(deniedTool.Action).To(Equal(scrutineerv1alpha1.PolicyDecisionDryRun))
 			Expect(deniedTool.Rule).To(Equal("deniedTools"))
 
 			policyResolved := getCondition(&got, ConditionPolicyResolved)
@@ -421,20 +421,20 @@ var _ = Describe("AgentSession reconciler", func() {
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[relayjob.EnvPolicyMode]).To(Equal("dry-run"))
-			Expect(env[relayjob.EnvPolicyDeniedDomains]).To(Equal("dropbox.com"))
-			Expect(env[relayjob.EnvPolicyAllowedDomains]).To(Equal("github.com"))
-			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl-prod"))
-			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("deploy"))
+			Expect(env[scrutineerjob.EnvPolicyMode]).To(Equal("dry-run"))
+			Expect(env[scrutineerjob.EnvPolicyDeniedDomains]).To(Equal("dropbox.com"))
+			Expect(env[scrutineerjob.EnvPolicyAllowedDomains]).To(Equal("github.com"))
+			Expect(env[scrutineerjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl-prod"))
+			Expect(env[scrutineerjob.EnvPolicyDeniedTools]).To(ContainSubstring("deploy"))
 		})
 
 		It("creates a NetworkPolicy when enforced CIDR policy is present", func() {
 			ns := newTestNamespace()
-			ap := &relayv1alpha1.AgentPolicy{
+			ap := &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "cidr-enforced", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					Mode: relayv1alpha1.PolicyModeEnforced,
-					PolicyRules: relayv1alpha1.PolicyRules{
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					Mode: scrutineerv1alpha1.PolicyModeEnforced,
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
 						AllowedCIDRs: []string{"203.0.113.0/24"},
 					},
 				},
@@ -442,7 +442,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
 
 			session := minimalAgentSession(ns, "netpol-cidr")
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{
 				Kind: "AgentPolicy",
 				Name: "cidr-enforced",
 			}}
@@ -456,11 +456,11 @@ var _ = Describe("AgentSession reconciler", func() {
 				g.Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: netpolNameFor(session)}, &np)).To(Succeed())
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
-			Expect(np.Spec.PodSelector.MatchLabels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+			Expect(np.Spec.PodSelector.MatchLabels[scrutineerjob.LabelSessionRef]).To(Equal(session.Name))
 			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
 			Expect(len(np.Spec.Egress)).To(BeNumerically(">=", 2))
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			owner := metav1.GetControllerOf(&np)
 			Expect(owner).NotTo(BeNil())
@@ -470,11 +470,11 @@ var _ = Describe("AgentSession reconciler", func() {
 
 		It("does not create a NetworkPolicy for audit-only CIDR policy", func() {
 			ns := newTestNamespace()
-			ap := &relayv1alpha1.AgentPolicy{
+			ap := &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "cidr-audit", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					Mode: relayv1alpha1.PolicyModeAuditOnly,
-					PolicyRules: relayv1alpha1.PolicyRules{
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					Mode: scrutineerv1alpha1.PolicyModeAuditOnly,
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
 						AllowedCIDRs: []string{"203.0.113.0/24"},
 					},
 				},
@@ -482,7 +482,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
 
 			session := minimalAgentSession(ns, "netpol-audit")
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{
 				Kind: "AgentPolicy",
 				Name: "cidr-audit",
 			}}
@@ -499,11 +499,11 @@ var _ = Describe("AgentSession reconciler", func() {
 
 		It("preserves runtime policy decisions across policy re-resolve", func() {
 			ns := newTestNamespace()
-			ap := &relayv1alpha1.AgentPolicy{
+			ap := &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "runtime-preserve", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					Mode: relayv1alpha1.PolicyModeAuditOnly,
-					PolicyRules: relayv1alpha1.PolicyRules{
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					Mode: scrutineerv1alpha1.PolicyModeAuditOnly,
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
 						DeniedDomains: []string{"dropbox.com"},
 					},
 				},
@@ -511,7 +511,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
 
 			session := minimalAgentSession(ns, "runtime-decisions")
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{
 				Kind: "AgentPolicy",
 				Name: "runtime-preserve",
 			}}
@@ -519,19 +519,19 @@ var _ = Describe("AgentSession reconciler", func() {
 			key := client.ObjectKeyFromObject(session)
 
 			Eventually(func(g Gomega) {
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 				g.Expect(got.Status.EffectivePolicy).NotTo(BeNil())
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
-			var withRuntime relayv1alpha1.AgentSession
+			var withRuntime scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &withRuntime)).To(Succeed())
 			runtimeTS := metav1.Now()
-			AppendRuntimePolicyDecisions(&withRuntime, []relayv1alpha1.PolicyDecision{{
+			AppendRuntimePolicyDecisions(&withRuntime, []scrutineerv1alpha1.PolicyDecision{{
 				Time:    runtimeTS,
 				Type:    "network",
-				Action:  relayv1alpha1.PolicyDecisionDeny,
-				Actor:   "relay-enforcement",
+				Action:  scrutineerv1alpha1.PolicyDecisionDeny,
+				Actor:   "scrutineer-enforcement",
 				Reason:  "DeniedDomains",
 				Target:  "evil.example",
 				Message: "would deny egress to evil.example",
@@ -539,18 +539,18 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Status().Update(testCtx, &withRuntime)).To(Succeed())
 
 			Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(ap), ap)).To(Succeed())
-			ap.Spec.Mode = relayv1alpha1.PolicyModeEnforced
+			ap.Spec.Mode = scrutineerv1alpha1.PolicyModeEnforced
 			Expect(k8sClient.Update(testCtx, ap)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
-				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeEnforced))
+				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(scrutineerv1alpha1.PolicyModeEnforced))
 
-				var runtimeDecision *relayv1alpha1.PolicyDecision
+				var runtimeDecision *scrutineerv1alpha1.PolicyDecision
 				for i := range got.Status.PolicyDecisions {
 					d := &got.Status.PolicyDecisions[i]
-					if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == "evil.example" {
+					if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == "evil.example" {
 						runtimeDecision = d
 					}
 				}
@@ -561,11 +561,11 @@ var _ = Describe("AgentSession reconciler", func() {
 
 		It("reconciles when a referenced AgentPolicy is updated", func() {
 			ns := newTestNamespace()
-			ap := &relayv1alpha1.AgentPolicy{
+			ap := &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "rolling-baseline", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					Mode: relayv1alpha1.PolicyModeAuditOnly,
-					PolicyRules: relayv1alpha1.PolicyRules{
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					Mode: scrutineerv1alpha1.PolicyModeAuditOnly,
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
 						DeniedDomains: []string{"dropbox.com"},
 					},
 				},
@@ -573,7 +573,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
 
 			session := minimalAgentSession(ns, "policy-watch")
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{
 				Kind: "AgentPolicy",
 				Name: "rolling-baseline",
 			}}
@@ -581,39 +581,39 @@ var _ = Describe("AgentSession reconciler", func() {
 			key := client.ObjectKeyFromObject(session)
 
 			Eventually(func(g Gomega) {
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 				g.Expect(got.Status.EffectivePolicy).NotTo(BeNil())
-				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeAuditOnly))
+				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(scrutineerv1alpha1.PolicyModeAuditOnly))
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
 			Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(ap), ap)).To(Succeed())
-			ap.Spec.Mode = relayv1alpha1.PolicyModeEnforced
+			ap.Spec.Mode = scrutineerv1alpha1.PolicyModeEnforced
 			ap.Spec.DeniedDomains = []string{"dropbox.com", "evil.example"}
 			Expect(k8sClient.Update(testCtx, ap)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 				g.Expect(got.Status.EffectivePolicy).NotTo(BeNil())
-				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(relayv1alpha1.PolicyModeEnforced))
+				g.Expect(got.Status.EffectivePolicy.Mode).To(Equal(scrutineerv1alpha1.PolicyModeEnforced))
 				g.Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElement("evil.example"))
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 		})
 
 		It("merges ToolPolicy refs with AgentPolicy and inline overrides", func() {
 			ns := newTestNamespace()
-			Expect(k8sClient.Create(testCtx, &relayv1alpha1.AgentPolicy{
+			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "net-base", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					PolicyRules: relayv1alpha1.PolicyRules{DeniedDomains: []string{"dropbox.com"}},
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					PolicyRules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"dropbox.com"}},
 				},
 			})).To(Succeed())
 			maxTools := int32(20)
 			maxPerMin := int32(10)
-			Expect(k8sClient.Create(testCtx, &relayv1alpha1.ToolPolicy{
+			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.ToolPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "tool-base", Namespace: ns},
-				Spec: relayv1alpha1.ToolPolicySpec{
+				Spec: scrutineerv1alpha1.ToolPolicySpec{
 					AllowedTools:      []string{"shell"},
 					DeniedTools:       []string{"kubectl"},
 					MaxToolCalls:      &maxTools,
@@ -623,18 +623,18 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			session := minimalAgentSession(ns, "toolpolicy-merge")
 			session.Spec.Runtime.Command = []string{"sleep", "300"}
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{
 				{Kind: "AgentPolicy", Name: "net-base"},
 				{Kind: "ToolPolicy", Name: "tool-base"},
 			}
-			session.Spec.Policy = relayv1alpha1.InlinePolicySpec{
-				PolicyRules: relayv1alpha1.PolicyRules{DeniedTools: []string{"deploy"}},
+			session.Spec.Policy = scrutineerv1alpha1.InlinePolicySpec{
+				PolicyRules: scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"deploy"}},
 			}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
 			waitForJob(ns, session)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElement("dropbox.com"))
 			Expect(got.Status.EffectivePolicy.DeniedTools).To(ContainElements("kubectl", "deploy"))
@@ -647,24 +647,24 @@ var _ = Describe("AgentSession reconciler", func() {
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[relayjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl"))
-			Expect(env[relayjob.EnvPolicyMaxToolCalls]).To(Equal("20"))
-			Expect(env[relayjob.EnvPolicyMaxToolCallsPerMinute]).To(Equal("10"))
+			Expect(env[scrutineerjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl"))
+			Expect(env[scrutineerjob.EnvPolicyMaxToolCalls]).To(Equal("20"))
+			Expect(env[scrutineerjob.EnvPolicyMaxToolCallsPerMinute]).To(Equal("10"))
 		})
 
 		It("replaces a pending Job when policy env changes", func() {
 			ns := newTestNamespace()
-			ap := &relayv1alpha1.AgentPolicy{
+			ap := &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "env-sync", Namespace: ns},
-				Spec: relayv1alpha1.AgentPolicySpec{
-					Mode: relayv1alpha1.PolicyModeAuditOnly,
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					Mode: scrutineerv1alpha1.PolicyModeAuditOnly,
 				},
 			}
 			Expect(k8sClient.Create(testCtx, ap)).To(Succeed())
 
 			session := minimalAgentSession(ns, "policy-env-sync")
 			session.Spec.Runtime.Command = []string{"sleep", "300"}
-			session.Spec.PolicyRefs = []relayv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "env-sync"}}
+			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "env-sync"}}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
 			waitForJob(ns, session)
@@ -676,7 +676,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
 			Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(ap), ap)).To(Succeed())
-			ap.Spec.Mode = relayv1alpha1.PolicyModeEnforced
+			ap.Spec.Mode = scrutineerv1alpha1.PolicyModeEnforced
 			ap.Spec.DeniedTools = []string{"blocked-tool"}
 			Expect(k8sClient.Update(testCtx, ap)).To(Succeed())
 
@@ -684,11 +684,11 @@ var _ = Describe("AgentSession reconciler", func() {
 				var job batchv1.Job
 				g.Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 				env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-				g.Expect(env[relayjob.EnvPolicyMode]).To(Equal("enforced"))
-				g.Expect(env[relayjob.EnvPolicyDeniedTools]).To(Equal("blocked-tool"))
+				g.Expect(env[scrutineerjob.EnvPolicyMode]).To(Equal("enforced"))
+				g.Expect(env[scrutineerjob.EnvPolicyDeniedTools]).To(Equal("blocked-tool"))
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			propagated := getCondition(&got, ConditionPolicyPropagated)
 			Expect(propagated).NotTo(BeNil())
@@ -722,9 +722,9 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
-			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForPhase(key, scrutineerv1alpha1.PhaseDenied)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			validated := getCondition(&got, ConditionValidated)
 			Expect(validated).NotTo(BeNil())
@@ -735,7 +735,7 @@ var _ = Describe("AgentSession reconciler", func() {
 	Context("syncStatusFromJob", func() {
 		It("maps FailureTarget DeadlineExceeded to TimedOut before Failed count increments", func() {
 			session := minimalAgentSession("default", "sync-timedout")
-			session.Status.Phase = relayv1alpha1.PhaseStarting
+			session.Status.Phase = scrutineerv1alpha1.PhaseStarting
 			job := &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{Name: jobNameFor(session)},
 				Status: batchv1.JobStatus{
@@ -747,7 +747,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				},
 			}
 			testReconciler().applyRuntimePhase(session, jobRuntimePhase(job))
-			Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseTimedOut))
+			Expect(session.Status.Phase).To(Equal(scrutineerv1alpha1.PhaseTimedOut))
 			completed := getCondition(session, ConditionCompleted)
 			Expect(completed).NotTo(BeNil())
 			Expect(completed.Reason).To(Equal("JobTimedOut"))
@@ -755,7 +755,7 @@ var _ = Describe("AgentSession reconciler", func() {
 	})
 
 	Context("Job reconciliation", func() {
-		It("creates an owned Job with relay labels and env vars", func() {
+		It("creates an owned Job with scrutineer labels and env vars", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "creates-job")
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
@@ -765,14 +765,14 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
-			Expect(job.Labels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+			Expect(job.Labels[scrutineerjob.LabelSessionRef]).To(Equal(session.Name))
 			Expect(job.OwnerReferences[0].Kind).To(Equal("AgentSession"))
 
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[relayjob.EnvTaskPrompt]).To(Equal("run the task"))
-			Expect(env[relayjob.EnvRelaySessionName]).To(Equal(session.Name))
+			Expect(env[scrutineerjob.EnvTaskPrompt]).To(Equal("run the task"))
+			Expect(env[scrutineerjob.EnvScrutineerSessionName]).To(Equal(session.Name))
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			runtimeCreated := getCondition(&got, ConditionRuntimeCreated)
 			Expect(runtimeCreated.Status).To(Equal(metav1.ConditionTrue))
@@ -802,15 +802,15 @@ var _ = Describe("AgentSession reconciler", func() {
 			// A pod-backed session must not also create a Job.
 			expectJobAbsent(ns, session)
 
-			Expect(pod.Labels[relayjob.LabelSessionRef]).To(Equal(session.Name))
+			Expect(pod.Labels[scrutineerjob.LabelSessionRef]).To(Equal(session.Name))
 			Expect(pod.OwnerReferences[0].Kind).To(Equal("AgentSession"))
 			Expect(pod.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
 			// The shared pod template supplies the agent container + automount-off.
-			Expect(pod.Spec.Containers[0].Name).To(Equal(relayjob.AgentContainerName))
+			Expect(pod.Spec.Containers[0].Name).To(Equal(scrutineerjob.AgentContainerName))
 			Expect(pod.Spec.AutomountServiceAccountToken).NotTo(BeNil())
 			Expect(*pod.Spec.AutomountServiceAccountToken).To(BeFalse())
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			Expect(got.Status.RuntimeRef).NotTo(BeNil())
 			Expect(got.Status.RuntimeRef.Kind).To(Equal("Pod"))
@@ -834,12 +834,12 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			pod.Status.Phase = corev1.PodRunning
 			Expect(k8sClient.Status().Update(testCtx, &pod)).To(Succeed())
-			waitForPhase(key, relayv1alpha1.PhaseRunning)
+			waitForPhase(key, scrutineerv1alpha1.PhaseRunning)
 
 			Expect(k8sClient.Get(testCtx, podKey, &pod)).To(Succeed())
 			pod.Status.Phase = corev1.PodSucceeded
 			Expect(k8sClient.Status().Update(testCtx, &pod)).To(Succeed())
-			waitForPhase(key, relayv1alpha1.PhaseSucceeded)
+			waitForPhase(key, scrutineerv1alpha1.PhaseSucceeded)
 		})
 
 		It("reaches Failed via the Pod watch and keeps a GC-safe owner ref (kubernetes-pod)", func() {
@@ -866,7 +866,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			// A Pod completion (no manual Reconcile) must drive the session terminal via the watch.
 			pod.Status.Phase = corev1.PodFailed
 			Expect(k8sClient.Status().Update(testCtx, &pod)).To(Succeed())
-			waitForPhase(key, relayv1alpha1.PhaseFailed)
+			waitForPhase(key, scrutineerv1alpha1.PhaseFailed)
 		})
 
 		It("marks Ready=true when the underlying Job has active pods", func() {
@@ -888,9 +888,9 @@ var _ = Describe("AgentSession reconciler", func() {
 				_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
 				g.Expect(err).NotTo(HaveOccurred())
 
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
-				g.Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseRunning))
+				g.Expect(got.Status.Phase).To(Equal(scrutineerv1alpha1.PhaseRunning))
 
 				ready := getCondition(&got, ConditionReady)
 				g.Expect(ready).NotTo(BeNil())
@@ -910,9 +910,9 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			setJobSucceeded(&job)
 
-			waitForPhase(key, relayv1alpha1.PhaseSucceeded)
+			waitForPhase(key, scrutineerv1alpha1.PhaseSucceeded)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			Expect(got.Status.Result.Outcome).To(Equal("completed"))
 			runtimeCond := getCondition(&got, ConditionRuntimeCreated)
@@ -938,15 +938,15 @@ var _ = Describe("AgentSession reconciler", func() {
 				Name:       job.Name,
 				UID:        job.UID,
 			}
-			podLabels := map[string]string{relayjob.LabelSessionRef: session.Name}
+			podLabels := map[string]string{scrutineerjob.LabelSessionRef: session.Name}
 
 			podFirst := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "relay-session-pod-name-aaa", Namespace: ns,
+					Name: "scrutineer-session-pod-name-aaa", Namespace: ns,
 					Labels: podLabels, OwnerReferences: []metav1.OwnerReference{ownerRef},
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: relayjob.AgentContainerName, Image: "busybox:latest"}},
+					Containers: []corev1.Container{{Name: scrutineerjob.AgentContainerName, Image: "busybox:latest"}},
 				},
 			}
 			Expect(k8sClient.Create(testCtx, podFirst)).To(Succeed())
@@ -955,11 +955,11 @@ var _ = Describe("AgentSession reconciler", func() {
 			podChosen := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					// Name sorts after podFirst when apiserver CreationTimestamps tie.
-					Name: "relay-session-pod-name-zzz", Namespace: ns,
+					Name: "scrutineer-session-pod-name-zzz", Namespace: ns,
 					Labels: podLabels, OwnerReferences: []metav1.OwnerReference{ownerRef},
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: relayjob.AgentContainerName, Image: "busybox:latest"}},
+					Containers: []corev1.Container{{Name: scrutineerjob.AgentContainerName, Image: "busybox:latest"}},
 				},
 			}
 			Expect(k8sClient.Create(testCtx, podChosen)).To(Succeed())
@@ -968,7 +968,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
 				g.Expect(err).NotTo(HaveOccurred())
 
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 				// Prefer podChosen: later CreationTimestamp when distinct, else lexicographic max.
 				g.Expect(got.Status.PodName).To(Equal(podChosen.Name))
@@ -986,12 +986,12 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			waitForJob(ns, session)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
-			got.Status.Phase = relayv1alpha1.PhaseSucceeded
+			got.Status.Phase = scrutineerv1alpha1.PhaseSucceeded
 			now := metav1.Now()
 			got.Status.CompletionTime = &now
-			got.Status.Result = &relayv1alpha1.SessionResult{Outcome: "completed", Summary: "test terminal"}
+			got.Status.Result = &scrutineerv1alpha1.SessionResult{Outcome: "completed", Summary: "test terminal"}
 			Expect(k8sClient.Status().Update(testCtx, &got)).To(Succeed())
 
 			var job batchv1.Job
@@ -1006,13 +1006,13 @@ var _ = Describe("AgentSession reconciler", func() {
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
-				g.Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
+				g.Expect(got.Status.Phase).To(Equal(scrutineerv1alpha1.PhaseSucceeded))
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 		})
 
 		It("syncStatusFromJob does not overwrite a terminal phase", func() {
 			session := minimalAgentSession("default", "sync-terminal")
-			session.Status.Phase = relayv1alpha1.PhaseSucceeded
+			session.Status.Phase = scrutineerv1alpha1.PhaseSucceeded
 			now := metav1.Now()
 			session.Status.CompletionTime = &now
 
@@ -1024,7 +1024,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			}
 
 			testReconciler().applyRuntimePhase(session, jobRuntimePhase(job))
-			Expect(session.Status.Phase).To(Equal(relayv1alpha1.PhaseSucceeded))
+			Expect(session.Status.Phase).To(Equal(scrutineerv1alpha1.PhaseSucceeded))
 		})
 	})
 
@@ -1039,7 +1039,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			waitForJob(ns, session)
 
 			Eventually(func(g Gomega) {
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 				got.Spec.CancelRequested = true
 				g.Expect(k8sClient.Update(testCtx, &got)).To(Succeed())
@@ -1053,9 +1053,9 @@ var _ = Describe("AgentSession reconciler", func() {
 				err = k8sClient.Get(testCtx, jobKey, &job)
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
-				g.Expect(got.Status.Phase).To(Equal(relayv1alpha1.PhaseCancelled))
+				g.Expect(got.Status.Phase).To(Equal(scrutineerv1alpha1.PhaseCancelled))
 				g.Expect(got.Status.Result.Outcome).To(Equal("cancelled"))
 				completed := getCondition(&got, ConditionCompleted)
 				g.Expect(completed.Reason).To(Equal("SessionCancelled"))
@@ -1081,7 +1081,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			key := client.ObjectKeyFromObject(session)
 
 			Eventually(func(g Gomega) {
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 				expectCancelledG(g, &got)
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
@@ -1091,7 +1091,7 @@ var _ = Describe("AgentSession reconciler", func() {
 	})
 
 	Context("finalizer and deletion", func() {
-		It("adds the Relay finalizer on reconcile", func() {
+		It("adds the Scrutineer finalizer on reconcile", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "finalizer-attached")
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
@@ -1099,7 +1099,7 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			waitForFinalizer(key)
 
-			var got relayv1alpha1.AgentSession
+			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
 			Expect(got.Finalizers).To(ContainElement(AgentSessionFinalizer))
 		})
@@ -1115,7 +1115,7 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			Expect(k8sClient.Delete(testCtx, session)).To(Succeed())
 
-			var terminating relayv1alpha1.AgentSession
+			var terminating scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &terminating)).To(Succeed())
 			Expect(terminating.DeletionTimestamp).NotTo(BeZero())
 			Expect(terminating.Finalizers).To(ContainElement(AgentSessionFinalizer))
@@ -1125,7 +1125,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				_, err := testReconciler().Reconcile(testCtx, reconcile.Request{NamespacedName: key})
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(jobAbsent(ns, session)).To(BeTrue())
-				var got relayv1alpha1.AgentSession
+				var got scrutineerv1alpha1.AgentSession
 				err = k8sClient.Get(testCtx, key, &got)
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
@@ -1134,11 +1134,11 @@ var _ = Describe("AgentSession reconciler", func() {
 		It("removes a denied session without a Job when deleted", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "delete-denied")
-			session.Spec.Task = relayv1alpha1.SessionTaskSpec{}
+			session.Spec.Task = scrutineerv1alpha1.SessionTaskSpec{}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
 
-			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForPhase(key, scrutineerv1alpha1.PhaseDenied)
 			waitForFinalizer(key)
 			expectJobAbsent(ns, session)
 
@@ -1149,11 +1149,11 @@ var _ = Describe("AgentSession reconciler", func() {
 		It("removes the finalizer when the Job is already absent", func() {
 			ns := newTestNamespace()
 			session := minimalAgentSession(ns, "delete-no-job")
-			session.Spec.Task = relayv1alpha1.SessionTaskSpec{}
+			session.Spec.Task = scrutineerv1alpha1.SessionTaskSpec{}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
 
-			waitForPhase(key, relayv1alpha1.PhaseDenied)
+			waitForPhase(key, scrutineerv1alpha1.PhaseDenied)
 			waitForFinalizer(key)
 			expectJobAbsent(ns, session)
 
@@ -1173,9 +1173,9 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, cm)).To(Succeed())
 
 			session := minimalAgentSession(ns, "prompt-from-cm")
-			session.Spec.Task = relayv1alpha1.SessionTaskSpec{
+			session.Spec.Task = scrutineerv1alpha1.SessionTaskSpec{
 				Description: "uses external prompt",
-				PromptConfigMapRef: &relayv1alpha1.PromptConfigMapRef{
+				PromptConfigMapRef: &scrutineerv1alpha1.PromptConfigMapRef{
 					Name: "agent-prompt",
 					Key:  "instructions",
 				},
@@ -1187,7 +1187,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[relayjob.EnvTaskPrompt]).To(Equal("prompt loaded from configmap"))
+			Expect(env[scrutineerjob.EnvTaskPrompt]).To(Equal("prompt loaded from configmap"))
 		})
 
 		It("denies when the ConfigMap key is missing", func() {
@@ -1200,15 +1200,15 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, cm)).To(Succeed())
 
 			session := minimalAgentSession(ns, "prompt-missing-key")
-			session.Spec.Task = relayv1alpha1.SessionTaskSpec{
-				PromptConfigMapRef: &relayv1alpha1.PromptConfigMapRef{
+			session.Spec.Task = scrutineerv1alpha1.SessionTaskSpec{
+				PromptConfigMapRef: &scrutineerv1alpha1.PromptConfigMapRef{
 					Name: "agent-prompt",
 					Key:  "instructions",
 				},
 			}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 
-			waitForPhase(client.ObjectKeyFromObject(session), relayv1alpha1.PhaseDenied)
+			waitForPhase(client.ObjectKeyFromObject(session), scrutineerv1alpha1.PhaseDenied)
 		})
 	})
 })

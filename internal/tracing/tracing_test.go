@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -60,7 +60,7 @@ func TestStartReconcileSpan_recordsAttributes(t *testing.T) {
 	if got.Name() != "agentsession.reconcile" {
 		t.Fatalf("name = %q", got.Name())
 	}
-	if v, ok := spanAttribute(got, "relay.session.namespace"); !ok || v.AsString() != "ns1" {
+	if v, ok := spanAttribute(got, "scrutineer.session.namespace"); !ok || v.AsString() != "ns1" {
 		t.Fatalf("namespace attr missing or wrong: %+v", got.Attributes())
 	}
 }

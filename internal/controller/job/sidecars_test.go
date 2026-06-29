@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,22 +18,22 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement/dnsproxy"
-	"github.com/secureai/relay/internal/enforcement/toolgateway"
-	"github.com/secureai/relay/internal/enforcement/workspace"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/dnsproxy"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/workspace"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 func TestInjectSidecars_enabledKnownTypes(t *testing.T) {
 	enabled := true
 	disabled := false
-	session := &relayv1alpha1.AgentSession{
+	session := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: objectMeta("team-a", "demo"),
 	}
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
 				{Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled},
 				{Name: "tools", Type: SidecarTypeToolGateway, Enabled: &enabled},
 				{Name: "envoy-off", Type: SidecarTypeEnvoy, Enabled: &disabled},
@@ -44,7 +44,7 @@ func TestInjectSidecars_enabledKnownTypes(t *testing.T) {
 	spec := &corev1.PodSpec{
 		Containers: []corev1.Container{{Name: AgentContainerName, Image: "agent:latest"}},
 	}
-	injectSidecars(spec, session, &policy.Resolved{Mode: relayv1alpha1.PolicyModeEnforced}, profile)
+	injectSidecars(spec, session, &policy.Resolved{Mode: scrutineerv1alpha1.PolicyModeEnforced}, profile)
 
 	if len(spec.Containers) != 3 {
 		t.Fatalf("containers = %d, want agent + 2 sidecars", len(spec.Containers))
@@ -66,16 +66,16 @@ func TestInjectSidecars_enabledKnownTypes(t *testing.T) {
 func TestBuild_agentDNSProxyEnv(t *testing.T) {
 	enabled := true
 	session := minimalSession()
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
 			}},
 		},
 	}
 	pol := &policy.Resolved{
-		Mode:  relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
 	}
 	job := Build(session, &Task{}, pol, profile)
 
@@ -113,14 +113,14 @@ func TestBuild_agentDNSProxyEnv(t *testing.T) {
 func TestBuild_agentEnvRoutesGoAndBusyBoxClients(t *testing.T) {
 	enabled := true
 	session := minimalSession()
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
 			}},
 		},
 	}
-	pol := &policy.Resolved{Mode: relayv1alpha1.PolicyModeEnforced}
+	pol := &policy.Resolved{Mode: scrutineerv1alpha1.PolicyModeEnforced}
 	job := Build(session, &Task{}, pol, profile)
 
 	var agentEnv map[string]string
@@ -167,9 +167,9 @@ func TestBuild_agentEnvRoutesGoAndBusyBoxClients(t *testing.T) {
 func TestBuild_reporterWiringForSidecars(t *testing.T) {
 	enabled := true
 	session := minimalSession()
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
 			}},
 		},
@@ -200,7 +200,7 @@ func TestBuild_reporterWiringForSidecars(t *testing.T) {
 	if len(agent.VolumeMounts) != 0 {
 		t.Fatalf("agent should not mount reporter token, got %+v", agent.VolumeMounts)
 	}
-	for _, key := range []string{EnvRelayReporterURL, EnvRelayReporterTokenPath} {
+	for _, key := range []string{EnvScrutineerReporterURL, EnvScrutineerReporterTokenPath} {
 		if envVarsToMap(agent.Env)[key] != "" {
 			t.Fatalf("agent should not have %s", key)
 		}
@@ -208,12 +208,12 @@ func TestBuild_reporterWiringForSidecars(t *testing.T) {
 
 	sidecar := byName["egress"]
 	sidecarEnv := envVarsToMap(sidecar.Env)
-	if sidecarEnv[EnvRelayReporterURL] != DefaultReporterURL {
-		t.Fatalf("RELAY_REPORTER_URL = %q", sidecarEnv[EnvRelayReporterURL])
+	if sidecarEnv[EnvScrutineerReporterURL] != DefaultReporterURL {
+		t.Fatalf("SCRUTINEER_REPORTER_URL = %q", sidecarEnv[EnvScrutineerReporterURL])
 	}
 	wantToken := ReporterTokenMountPath + "/" + ReporterTokenFileName
-	if sidecarEnv[EnvRelayReporterTokenPath] != wantToken {
-		t.Fatalf("RELAY_REPORTER_TOKEN_PATH = %q", sidecarEnv[EnvRelayReporterTokenPath])
+	if sidecarEnv[EnvScrutineerReporterTokenPath] != wantToken {
+		t.Fatalf("SCRUTINEER_REPORTER_TOKEN_PATH = %q", sidecarEnv[EnvScrutineerReporterTokenPath])
 	}
 	if len(sidecar.VolumeMounts) != 1 || sidecar.VolumeMounts[0].Name != ReporterTokenVolumeName {
 		t.Fatalf("sidecar volume mounts = %+v", sidecar.VolumeMounts)
@@ -232,16 +232,16 @@ func TestBuild_noReporterWiringWithoutSidecars(t *testing.T) {
 func TestBuild_agentToolGatewayEnv(t *testing.T) {
 	enabled := true
 	session := minimalSession()
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name: "tools", Type: SidecarTypeToolGateway, Enabled: &enabled,
 			}},
 		},
 	}
 	pol := &policy.Resolved{
-		Mode:  relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
 	}
 	job := Build(session, &Task{}, pol, profile)
 
@@ -250,15 +250,15 @@ func TestBuild_agentToolGatewayEnv(t *testing.T) {
 		byName[c.Name] = c
 	}
 	agentEnv := envVarsToMap(byName[AgentContainerName].Env)
-	if agentEnv[EnvRelayToolGatewayURL] != toolgateway.DefaultListenAddr {
-		t.Fatalf("agent env = %v", agentEnv[EnvRelayToolGatewayURL])
+	if agentEnv[EnvScrutineerToolGatewayURL] != toolgateway.DefaultListenAddr {
+		t.Fatalf("agent env = %v", agentEnv[EnvScrutineerToolGatewayURL])
 	}
 
 	gwEnv := envVarsToMap(byName["tools"].Env)
 	if gwEnv[toolgateway.EnvPolicyDeniedTools] != "kubectl" {
 		t.Fatalf("sidecar denied tools = %q", gwEnv[toolgateway.EnvPolicyDeniedTools])
 	}
-	if gwEnv[toolgateway.EnvPolicyMode] != string(relayv1alpha1.PolicyModeEnforced) {
+	if gwEnv[toolgateway.EnvPolicyMode] != string(scrutineerv1alpha1.PolicyModeEnforced) {
 		t.Fatalf("sidecar mode = %q", gwEnv[toolgateway.EnvPolicyMode])
 	}
 }
@@ -266,9 +266,9 @@ func TestBuild_agentToolGatewayEnv(t *testing.T) {
 func TestBuild_reporterWiringForToolGateway(t *testing.T) {
 	enabled := true
 	session := minimalSession()
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name: "tools", Type: SidecarTypeToolGateway, Enabled: &enabled,
 			}},
 		},
@@ -281,12 +281,12 @@ func TestBuild_reporterWiringForToolGateway(t *testing.T) {
 	}
 	sidecar := byName["tools"]
 	sidecarEnv := envVarsToMap(sidecar.Env)
-	if sidecarEnv[EnvRelayReporterURL] != DefaultReporterURL {
-		t.Fatalf("RELAY_REPORTER_URL = %q", sidecarEnv[EnvRelayReporterURL])
+	if sidecarEnv[EnvScrutineerReporterURL] != DefaultReporterURL {
+		t.Fatalf("SCRUTINEER_REPORTER_URL = %q", sidecarEnv[EnvScrutineerReporterURL])
 	}
 	wantToken := ReporterTokenMountPath + "/" + ReporterTokenFileName
-	if sidecarEnv[EnvRelayReporterTokenPath] != wantToken {
-		t.Fatalf("RELAY_REPORTER_TOKEN_PATH = %q", sidecarEnv[EnvRelayReporterTokenPath])
+	if sidecarEnv[EnvScrutineerReporterTokenPath] != wantToken {
+		t.Fatalf("SCRUTINEER_REPORTER_TOKEN_PATH = %q", sidecarEnv[EnvScrutineerReporterTokenPath])
 	}
 	if len(sidecar.VolumeMounts) != 1 || sidecar.VolumeMounts[0].Name != ReporterTokenVolumeName {
 		t.Fatalf("sidecar volume mounts = %+v", sidecar.VolumeMounts)
@@ -296,9 +296,9 @@ func TestBuild_reporterWiringForToolGateway(t *testing.T) {
 func TestInjectSidecars_placeholderEnvoy(t *testing.T) {
 	enabled := true
 	session := minimalSession()
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name: "envoy", Type: SidecarTypeEnvoy, Enabled: &enabled,
 			}},
 		},
@@ -322,16 +322,16 @@ func TestInjectSidecars_placeholderEnvoy(t *testing.T) {
 func TestBuild_agentFSGatewayEnv(t *testing.T) {
 	enabled := true
 	session := minimalSession()
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name: "files", Type: SidecarTypeFSGateway, Enabled: &enabled,
 			}},
 		},
 	}
 	pol := &policy.Resolved{
-		Mode:  relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{DeniedPaths: []string{"/etc/**"}},
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedPaths: []string{"/etc/**"}},
 	}
 	job := Build(session, &Task{}, pol, profile)
 
@@ -340,16 +340,16 @@ func TestBuild_agentFSGatewayEnv(t *testing.T) {
 		byName[c.Name] = c
 	}
 	agentEnv := envVarsToMap(byName[AgentContainerName].Env)
-	if agentEnv[EnvRelayFSGatewayURL] != workspace.DefaultListenAddr {
-		t.Fatalf("agent env = %v", agentEnv[EnvRelayFSGatewayURL])
+	if agentEnv[EnvScrutineerFSGatewayURL] != workspace.DefaultListenAddr {
+		t.Fatalf("agent env = %v", agentEnv[EnvScrutineerFSGatewayURL])
 	}
 
 	fsEnv := envVarsToMap(byName["files"].Env)
 	if fsEnv[workspace.EnvPolicyDeniedPaths] != "/etc/**" {
 		t.Fatalf("denied paths = %q", fsEnv[workspace.EnvPolicyDeniedPaths])
 	}
-	if fsEnv[EnvRelayReporterURL] != DefaultReporterURL {
-		t.Fatalf("reporter url = %q", fsEnv[EnvRelayReporterURL])
+	if fsEnv[EnvScrutineerReporterURL] != DefaultReporterURL {
+		t.Fatalf("reporter url = %q", fsEnv[EnvScrutineerReporterURL])
 	}
 	if byName["files"].Image != workspace.DefaultFSGatewayImage {
 		t.Fatalf("image = %q", byName["files"].Image)
@@ -368,20 +368,20 @@ func objectMeta(ns, name string) metav1.ObjectMeta {
 	return metav1.ObjectMeta{Namespace: ns, Name: name}
 }
 
-func minimalSession() *relayv1alpha1.AgentSession {
-	return &relayv1alpha1.AgentSession{
+func minimalSession() *scrutineerv1alpha1.AgentSession {
+	return &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: objectMeta("default", "demo"),
-		Spec: relayv1alpha1.AgentSessionSpec{
-			Runtime: relayv1alpha1.RuntimeSpec{Image: "busybox:latest", Command: []string{"true"}},
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			Runtime: scrutineerv1alpha1.RuntimeSpec{Image: "busybox:latest", Command: []string{"true"}},
 		},
 	}
 }
 
-func profileWithSidecar(sidecarType string) *relayv1alpha1.RuntimeProfile {
+func profileWithSidecar(sidecarType string) *scrutineerv1alpha1.RuntimeProfile {
 	enabled := true
-	return &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{{
+	return &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name: sidecarType, Type: sidecarType, Enabled: &enabled,
 			}},
 		},

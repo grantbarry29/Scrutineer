@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,26 +17,26 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 func TestBuildPodTemplateSpec(t *testing.T) {
 	enabled := true
-	session := &relayv1alpha1.AgentSession{
+	session := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "sess", Namespace: "ns"},
-		Spec: relayv1alpha1.AgentSessionSpec{
-			Runtime: relayv1alpha1.RuntimeSpec{
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			Runtime: scrutineerv1alpha1.RuntimeSpec{
 				Orchestrator:       "kubernetes-job",
 				Image:              "busybox:latest",
 				ServiceAccountName: "default",
 			},
-			Workspace: relayv1alpha1.WorkspaceSpec{Ephemeral: true, MountPath: "/workspace"},
+			Workspace: scrutineerv1alpha1.WorkspaceSpec{Ephemeral: true, MountPath: "/workspace"},
 		},
 	}
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Sidecars: []relayv1alpha1.RuntimeProfileSidecar{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
 				{Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled},
 			},
 		},
@@ -72,9 +72,9 @@ func TestBuildPodTemplateSpec(t *testing.T) {
 func TestMergeContainerSecurityContext(t *testing.T) {
 	base := defaultContainerSecurityContext()
 	runAsNonRoot := true
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Container: &relayv1alpha1.RuntimeProfileContainerSpec{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				RunAsNonRoot: &runAsNonRoot,
 			},
 		},
@@ -95,9 +95,9 @@ func TestMergeContainerSecurityContext(t *testing.T) {
 
 func TestApplyRuntimeProfileToPodSpec(t *testing.T) {
 	spec := &corev1.PodSpec{}
-	profile := &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Pod: &relayv1alpha1.RuntimeProfilePodSpec{
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
 				RuntimeClassName: "gvisor",
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
@@ -117,7 +117,7 @@ func TestApplyRuntimeProfileToPodSpec(t *testing.T) {
 
 func TestBuild_ephemeralWorkspace(t *testing.T) {
 	session := minimalSession()
-	session.Spec.Workspace = relayv1alpha1.WorkspaceSpec{
+	session.Spec.Workspace = scrutineerv1alpha1.WorkspaceSpec{
 		Ephemeral: true,
 		Size:      "1Gi",
 		MountPath: "/data",
@@ -180,8 +180,8 @@ func TestBuild_policyCapEnv(t *testing.T) {
 	maxPerMin := int32(5)
 	maxBytes := int64(1_000_000)
 	pol := &policy.Resolved{
-		Mode: relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{
 			MaxNetworkRequests: &maxNet,
 			MaxToolCalls:       &maxTool,
 			MaxCallsPerMinute:  &maxPerMin,

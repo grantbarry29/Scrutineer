@@ -1,6 +1,6 @@
 # Phase 3 File / Workspace Policy Design
 
-Relay Phase 3 slice 8 defines how **file and workspace access** should be governed for AgentSession runtimes. **API fields, merge semantics, env propagation, evaluate/report helpers, and the first-party fs-gateway sidecar** ship in `internal/enforcement/workspace/`.
+Scrutineer Phase 3 slice 8 defines how **file and workspace access** should be governed for AgentSession runtimes. **API fields, merge semantics, env propagation, evaluate/report helpers, and the first-party fs-gateway sidecar** ship in `internal/enforcement/workspace/`.
 
 ## Current state (MVP)
 
@@ -8,7 +8,7 @@ Relay Phase 3 slice 8 defines how **file and workspace access** should be govern
 |-----------|-------------------|
 | `spec.workspace` | Optional ephemeral `emptyDir` at `/workspace` (size-validated) |
 | `RuntimeProfile` container | `readOnlyRootFilesystem`, dropped capabilities, optional seccomp |
-| `RuntimeProfile` pod | `runtimeClassName` (schema only; sandbox not enforced by Relay) |
+| `RuntimeProfile` pod | `runtimeClassName` (schema only; sandbox not enforced by Scrutineer) |
 | `PolicyRules` | `allowedPaths`, `deniedPaths`, `maxWorkspaceBytes` + network/tool fields |
 
 Agents can still write anywhere the container filesystem allows outside the workspace mount. There is no path-level allow/deny policy in CRDs today.
@@ -54,7 +54,7 @@ File policy must be **auditable**, **mode-aware** (`audit-only` / `dry-run` / `e
 **How:** `RuntimeProfile.spec.pod.runtimeClassName` + syscall profiles; optional eBPF process monitoring later.
 
 **Pros:** Strong isolation for hostile agents.  
-**Cons:** Not path-specific; cluster dependency; ops overhead; Relay does not own the sandbox runtime.
+**Cons:** Not path-specific; cluster dependency; ops overhead; Scrutineer does not own the sandbox runtime.
 
 **Fit:** Complements file policy but **does not replace** path governance. Already schema-supported; enforcement is cluster/platform concern.
 
@@ -93,7 +93,7 @@ Merge semantics: union allow/deny lists; min `maxWorkspaceBytes` — same spirit
 
 1. **Mount enforcement** — controller rejects unsafe volume mounts; document required RuntimeProfile defaults for production.
 2. **FUSE / syscall hardening** — optional future path for transparent interception (MVP uses explicit HTTP gateway).
-3. **Sandbox profile** — platform team sets `runtimeClassName`; Relay records matched profile only.
+3. **Sandbox profile** — platform team sets `runtimeClassName`; Scrutineer records matched profile only.
 
 ## Reporting contract
 

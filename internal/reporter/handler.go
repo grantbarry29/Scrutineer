@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/audit"
-	"github.com/secureai/relay/internal/controller/agentsession"
-	"github.com/secureai/relay/internal/metrics"
-	"github.com/secureai/relay/internal/tracing"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/audit"
+	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
+	"github.com/grantbarry29/scrutineer/internal/metrics"
+	"github.com/grantbarry29/scrutineer/internal/tracing"
 )
 
 const reportPath = "/v1/report"
@@ -115,7 +115,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var session relayv1alpha1.AgentSession
+	var session scrutineerv1alpha1.AgentSession
 	if err := h.Reader.Get(r.Context(), sessionKey, &session); err != nil {
 		if apierrors.IsNotFound(err) {
 			result = "not_found"
@@ -127,7 +127,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var effectiveMode relayv1alpha1.PolicyMode
+	var effectiveMode scrutineerv1alpha1.PolicyMode
 	if session.Status.EffectivePolicy != nil {
 		effectiveMode = session.Status.EffectivePolicy.Mode
 	}
@@ -178,7 +178,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// already accumulated. One event per violating report.
 	if h.Recorder != nil {
 		for _, d := range report.Decisions {
-			if d.Action == relayv1alpha1.PolicyDecisionDeny || d.Action == relayv1alpha1.PolicyDecisionDryRun {
+			if d.Action == scrutineerv1alpha1.PolicyDecisionDeny || d.Action == scrutineerv1alpha1.PolicyDecisionDryRun {
 				h.Recorder.Event(&session, "Warning", "RuntimeViolation", d.Message)
 				break
 			}
@@ -188,7 +188,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	result = "accepted"
 	// Runtime reports come from cooperative data-plane sidecars: self-reported assurance.
 	audit.Emit(ctx, audit.RuntimeReport(sessionNamespace, sessionName, backend, len(report.Decisions),
-		string(relayv1alpha1.EvidenceSelfReported), receivedAt))
+		string(scrutineerv1alpha1.EvidenceSelfReported), receivedAt))
 	w.WriteHeader(http.StatusAccepted)
 }
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 // BuildPodTemplateSpec renders the agent Pod template (agent container + env +
@@ -27,7 +27,7 @@ import (
 // bare Pod) can reuse it verbatim so the data-plane wiring is identical. The
 // returned template carries the session labels and never auto-mounts the
 // namespace-default ServiceAccount token (see below).
-func BuildPodTemplateSpec(session *relayv1alpha1.AgentSession, task *Task, pol *policy.Resolved, profile *relayv1alpha1.RuntimeProfile) corev1.PodTemplateSpec {
+func BuildPodTemplateSpec(session *scrutineerv1alpha1.AgentSession, task *Task, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) corev1.PodTemplateSpec {
 	labels := labelsFor(session)
 	rt := session.Spec.Runtime
 
@@ -49,7 +49,7 @@ func BuildPodTemplateSpec(session *relayv1alpha1.AgentSession, task *Task, pol *
 	// into the agent pod. A compromised/prompt-injected agent must not get an
 	// apiserver-audience token for free. Enforcement sidecars that legitimately
 	// report evidence carry their own narrowly-scoped projected reporter token
-	// (audience relay-reporter), which is unaffected by this setting.
+	// (audience scrutineer-reporter), which is unaffected by this setting.
 	automountSAToken := false
 	podSpec := corev1.PodSpec{
 		RestartPolicy:                corev1.RestartPolicyNever,

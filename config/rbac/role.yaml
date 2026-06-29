@@ -72,7 +72,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - relay.secureai.dev
+  - scrutineer.sh
   resources:
   - agentpolicies
   - approvalpolicies
@@ -83,7 +83,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - relay.secureai.dev
+  - scrutineer.sh
   resources:
   - agentsessions
   verbs:
@@ -93,13 +93,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - relay.secureai.dev
+  - scrutineer.sh
   resources:
   - agentsessions/finalizers
   verbs:
   - update
 - apiGroups:
-  - relay.secureai.dev
+  - scrutineer.sh
   resources:
   - agentsessions/status
   - approvalrequests/status
@@ -108,7 +108,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - relay.secureai.dev
+  - scrutineer.sh
   resources:
   - approvalrequests
   verbs:

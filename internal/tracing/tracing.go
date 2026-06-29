@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package tracing configures OpenTelemetry trace export for the Relay control plane.
+// Package tracing configures OpenTelemetry trace export for the Scrutineer control plane.
 package tracing
 
 import (
@@ -27,7 +27,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-const instrumentationScope = "github.com/secureai/relay"
+const instrumentationScope = "github.com/grantbarry29/scrutineer"
 
 // Config controls OTLP trace export. An empty Endpoint disables export (noop provider).
 type Config struct {
@@ -40,7 +40,7 @@ type Config struct {
 func Setup(ctx context.Context, cfg Config) (func(context.Context) error, error) {
 	serviceName := cfg.ServiceName
 	if serviceName == "" {
-		serviceName = "relay-controller"
+		serviceName = "scrutineer-controller"
 	}
 
 	endpoint := strings.TrimSpace(cfg.Endpoint)
@@ -109,8 +109,8 @@ func ReporterTracer() trace.Tracer {
 func StartReconcileSpan(ctx context.Context, namespace, name string) (context.Context, trace.Span) {
 	return ReconcileTracer().Start(ctx, "agentsession.reconcile",
 		trace.WithAttributes(
-			attribute.String("relay.session.namespace", namespace),
-			attribute.String("relay.session.name", name),
+			attribute.String("scrutineer.session.namespace", namespace),
+			attribute.String("scrutineer.session.name", name),
 		),
 	)
 }
@@ -122,10 +122,10 @@ func SetReconcileSpanResult(ctx context.Context, phase string, requeueAfterSec f
 		return
 	}
 	if phase != "" {
-		span.SetAttributes(attribute.String("relay.session.phase", phase))
+		span.SetAttributes(attribute.String("scrutineer.session.phase", phase))
 	}
 	if requeueAfterSec > 0 {
-		span.SetAttributes(attribute.Float64("relay.reconcile.requeue_after_seconds", requeueAfterSec))
+		span.SetAttributes(attribute.Float64("scrutineer.reconcile.requeue_after_seconds", requeueAfterSec))
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -140,15 +140,15 @@ func SetReportSpanAttributes(ctx context.Context, namespace, name, backend, resu
 		return
 	}
 	attrs := []attribute.KeyValue{
-		attribute.String("relay.session.namespace", namespace),
-		attribute.String("relay.session.name", name),
-		attribute.String("relay.report.result", result),
+		attribute.String("scrutineer.session.namespace", namespace),
+		attribute.String("scrutineer.session.name", name),
+		attribute.String("scrutineer.report.result", result),
 	}
 	if backend != "" {
-		attrs = append(attrs, attribute.String("relay.report.backend", backend))
+		attrs = append(attrs, attribute.String("scrutineer.report.backend", backend))
 	}
 	if decisionCount >= 0 {
-		attrs = append(attrs, attribute.Int("relay.report.decisions", decisionCount))
+		attrs = append(attrs, attribute.Int("scrutineer.report.decisions", decisionCount))
 	}
 	span.SetAttributes(attrs...)
 }

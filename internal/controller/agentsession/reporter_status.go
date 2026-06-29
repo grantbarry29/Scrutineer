@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const maxStatusPatchRetries = 5
@@ -66,7 +66,7 @@ func patchRuntimePolicyReportOnce(
 	sessionKey client.ObjectKey,
 	report enforcement.RuntimeReport,
 ) (conflict bool, err error) {
-	var live relayv1alpha1.AgentSession
+	var live scrutineerv1alpha1.AgentSession
 	if err := reader.Get(ctx, sessionKey, &live); err != nil {
 		if apierrors.IsNotFound(err) {
 			return false, err
@@ -85,7 +85,7 @@ func patchRuntimePolicyReportOnce(
 	mergeEventsInPlace(&desired.Events, original.Status.Events)
 	mergeUsageInPlace(&desired.Usage, original.Status.Usage)
 
-	var liveAgain relayv1alpha1.AgentSession
+	var liveAgain scrutineerv1alpha1.AgentSession
 	if err := reader.Get(ctx, sessionKey, &liveAgain); err != nil {
 		return false, fmt.Errorf("re-read AgentSession: %w", err)
 	}

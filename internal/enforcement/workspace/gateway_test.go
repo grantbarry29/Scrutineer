@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestGateway_deniesAndReportsEnforcedPath(t *testing.T) {
@@ -47,8 +47,8 @@ func TestGateway_deniesAndReportsEnforcedPath(t *testing.T) {
 		SessionName:      "sess-a",
 		ReporterURL:      reporterSrv.URL,
 		ReporterToken:    tokenPath,
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedPaths: []string{"/etc/**"},
 		},
 	}
@@ -79,7 +79,7 @@ func TestGateway_deniesAndReportsEnforcedPath(t *testing.T) {
 		if report.Decisions[0].Type != "file" {
 			t.Fatalf("type = %q", report.Decisions[0].Type)
 		}
-		if report.Decisions[0].Action != relayv1alpha1.PolicyDecisionDeny {
+		if report.Decisions[0].Action != scrutineerv1alpha1.PolicyDecisionDeny {
 			t.Fatalf("action = %q", report.Decisions[0].Action)
 		}
 		if len(report.Violations) != 1 {
@@ -99,8 +99,8 @@ func TestGateway_allowsPermittedPath(t *testing.T) {
 		SessionName:      "sess-a",
 		ReporterURL:      "http://unused",
 		ReporterToken:    writeTempToken(t, "x"),
-		Mode:             relayv1alpha1.PolicyModeEnforced,
-		Policy: relayv1alpha1.PolicyRules{
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedPaths: []string{"/workspace/**"},
 		},
 	}

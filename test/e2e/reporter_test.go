@@ -1,7 +1,7 @@
 //go:build e2e
 
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/reporter"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/reporter"
 )
 
 // stubVerifier bypasses TokenReview/pod-ownership auth so the e2e spec can drive
@@ -40,7 +40,7 @@ func (stubVerifier) Verify(_ context.Context, _ *http.Request, s reporter.Sessio
 
 var _ = Describe("Runtime reporter e2e against kind", func() {
 	It("ingests a runtime report and populates status decisions, violations, and events", func(ctx SpecContext) {
-		ns := newTestNamespace("relay-e2e-reporter")
+		ns := newTestNamespace("scrutineer-e2e-reporter")
 		session := newAgentSession(ns, "reporter", withLongRunningCommand())
 		key := createAgentSession(ctx, session)
 
@@ -62,18 +62,18 @@ var _ = Describe("Runtime reporter e2e against kind", func() {
 		report := reporter.ReportRequest{
 			Session: reporter.SessionRef{Namespace: ns, Name: session.Name},
 			Backend: "egress-proxy",
-			Decisions: []relayv1alpha1.PolicyDecision{{
+			Decisions: []scrutineerv1alpha1.PolicyDecision{{
 				Time:    obsTime,
-				Phase:   relayv1alpha1.PolicyDecisionPhaseRuntime,
+				Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 				Type:    "network",
-				Action:  relayv1alpha1.PolicyDecisionDeny,
+				Action:  scrutineerv1alpha1.PolicyDecisionDeny,
 				Reason:  "DeniedDomain",
 				Target:  "evil.example.com",
 				Message: "egress to evil.example.com blocked",
 			}},
-			Events: []relayv1alpha1.SessionEvent{{
+			Events: []scrutineerv1alpha1.SessionEvent{{
 				Time:    obsTime,
-				Type:    relayv1alpha1.SessionEventTypeNetwork,
+				Type:    scrutineerv1alpha1.SessionEventTypeNetwork,
 				Source:  "egress-proxy",
 				Action:  "deny",
 				Target:  "evil.example.com",
@@ -90,9 +90,9 @@ var _ = Describe("Runtime reporter e2e against kind", func() {
 			got := getSession(ctx, key)
 			// The reconciler may also record merge-time decisions; assert on the
 			// runtime-phase evidence specifically rather than total counts.
-			var runtimeDecisions []relayv1alpha1.PolicyDecision
+			var runtimeDecisions []scrutineerv1alpha1.PolicyDecision
 			for _, d := range got.Status.PolicyDecisions {
-				if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == "evil.example.com" {
+				if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == "evil.example.com" {
 					runtimeDecisions = append(runtimeDecisions, d)
 				}
 			}
@@ -104,11 +104,11 @@ var _ = Describe("Runtime reporter e2e against kind", func() {
 
 		// Cancel to free the long-running Job.
 		requestCancellation(ctx, key)
-		waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+		waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 	})
 
 	It("rejects a report for a non-existent session with 404", func(ctx SpecContext) {
-		ns := newTestNamespace("relay-e2e-reporter-404")
+		ns := newTestNamespace("scrutineer-e2e-reporter-404")
 		h := &reporter.Handler{Writer: k8sClient.Status(), Reader: k8sClient, Verifier: stubVerifier{}}
 		srv := httptest.NewServer(h)
 		DeferCleanup(srv.Close)
@@ -116,9 +116,9 @@ var _ = Describe("Runtime reporter e2e against kind", func() {
 		body, err := json.Marshal(reporter.ReportRequest{
 			Session: reporter.SessionRef{Namespace: ns, Name: "missing"},
 			Backend: "egress-proxy",
-			Decisions: []relayv1alpha1.PolicyDecision{{
-				Phase: relayv1alpha1.PolicyDecisionPhaseRuntime, Type: "network",
-				Action: relayv1alpha1.PolicyDecisionDeny, Reason: "x",
+			Decisions: []scrutineerv1alpha1.PolicyDecision{{
+				Phase: scrutineerv1alpha1.PolicyDecisionPhaseRuntime, Type: "network",
+				Action: scrutineerv1alpha1.PolicyDecisionDeny, Reason: "x",
 			}},
 		})
 		Expect(err).NotTo(HaveOccurred())

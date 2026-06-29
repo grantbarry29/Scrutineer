@@ -1,5 +1,5 @@
 {
-  "name": "Relay",
+  "name": "Scrutineer",
 
   "build": {
     "dockerfile": "Dockerfile",
@@ -26,8 +26,8 @@
   "runArgs": ["--init"],
 
   "containerEnv": {
-    "KIND_CLUSTER_NAME": "relay-dev",
-    "RELAY_DEVCONTAINER": "1"
+    "KIND_CLUSTER_NAME": "scrutineer-dev",
+    "SCRUTINEER_DEVCONTAINER": "1"
   },
 
   "remoteEnv": {

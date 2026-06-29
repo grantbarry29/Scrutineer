@@ -1,7 +1,7 @@
 
-# Relay Design Docs — When To Read
+# Scrutineer Design Docs — When To Read
 
-Relay keeps canonical architecture/design docs in [`docs/design/`](../docs/design/). They are the source of truth for **intent and invariants**. They are intentionally **not** always loaded — read the specific doc that matches the task, during planning and before non-trivial changes.
+Scrutineer keeps canonical architecture/design docs in [`docs/design/`](../docs/design/). They are the source of truth for **intent and invariants**. They are intentionally **not** always loaded — read the specific doc that matches the task, during planning and before non-trivial changes.
 
 ## How to use
 
@@ -28,4 +28,4 @@ Relay keeps canonical architecture/design docs in [`docs/design/`](../docs/desig
 | Observability export (Prometheus / OTel traces / OTLP audit logs) | [`docs/design/phase-4-observability-export.md`](../docs/design/phase-4-observability-export.md) |
 | Orchestrator decoupling / `RuntimeBackend` interface / orchestrator adapters (Tekton/Argo/Temporal) | [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md) |
 
-The folder index is [`docs/design/README.md`](../docs/design/README.md). For task state and roadmap use **GitHub Issues** (see `dev-agent-rules/task-management.md`); for durable technical context use these design docs / component READMEs / code comments; for how to implement use `dev-agent-rules/relay-cursor-workflow.md`.
+The folder index is [`docs/design/README.md`](../docs/design/README.md). For task state and roadmap use **GitHub Issues** (see `dev-agent-rules/task-management.md`); for durable technical context use these design docs / component READMEs / code comments; for how to implement use `dev-agent-rules/scrutineer-cursor-workflow.md`.

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ package dnsproxy
 import (
 	"testing"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 func TestBackend_metadata(t *testing.T) {
@@ -37,7 +37,7 @@ func TestBackendDesiredState(t *testing.T) {
 		t.Fatalf("got %v err=%v", empty, err)
 	}
 
-	raw, err := (Backend{}).DesiredState(baseCtx(relayv1alpha1.PolicyModeEnforced, relayv1alpha1.PolicyRules{
+	raw, err := (Backend{}).DesiredState(baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		DeniedDomains: []string{"evil.example"},
 	}))
 	if err != nil {

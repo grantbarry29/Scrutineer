@@ -1,13 +1,13 @@
 # Opt-in overlay that isolates the runtime evidence reporter from the manager.
 #
 # On top of config/default it:
-#   - adds a relay-reporter ServiceAccount + a --reporter-only Deployment,
+#   - adds a scrutineer-reporter ServiceAccount + a --reporter-only Deployment,
 #   - disables the in-process reporter in the manager (--enable-reporter=false),
-#   - retargets the reporter-role binding to the relay-reporter ServiceAccount,
+#   - retargets the reporter-role binding to the scrutineer-reporter ServiceAccount,
 #   - points the reporter Service at the reporter Deployment's pods.
 #
 # Result: the manager ServiceAccount keeps only manager-role, and the reporter's
-# RBAC lives solely with the dedicated relay-reporter identity. See issue #34.
+# RBAC lives solely with the dedicated scrutineer-reporter identity. See issue #34.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -17,14 +17,14 @@ resources:
 
 images:
 - name: controller
-  newName: ghcr.io/secureai/relay
+  newName: ghcr.io/grantbarry29/scrutineer
   newTag: latest
 
 patches:
 # Disable the in-process reporter in the manager.
 - target:
     kind: Deployment
-    name: relay-controller-manager
+    name: scrutineer-controller-manager
   patch: |-
     - op: add
       path: /spec/template/spec/containers/0/args/-
@@ -32,15 +32,15 @@ patches:
 # Bind reporter-role to the dedicated reporter ServiceAccount instead of the manager's.
 - target:
     kind: ClusterRoleBinding
-    name: relay-reporter-rolebinding
+    name: scrutineer-reporter-rolebinding
   patch: |-
     - op: replace
       path: /subjects/0/name
-      value: relay-reporter
+      value: scrutineer-reporter
 # Route the reporter Service to the reporter Deployment's pods.
 - target:
     kind: Service
-    name: relay-controller-reporter
+    name: scrutineer-controller-reporter
   patch: |-
     - op: replace
       path: /spec/selector/app.kubernetes.io~1component

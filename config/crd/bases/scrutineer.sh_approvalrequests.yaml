@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
-  name: approvalrequests.relay.secureai.dev
+  name: approvalrequests.scrutineer.sh
 spec:
-  group: relay.secureai.dev
+  group: scrutineer.sh
   names:
     kind: ApprovalRequest
     listKind: ApprovalRequestList

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,13 +17,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 // Env keys propagated to tool-gateway sidecars (AGENT_POLICY_* reuse job builder names).
 const (
-	EnvListenAddr                  = "RELAY_TOOL_GATEWAY_LISTEN"
+	EnvListenAddr                  = "SCRUTINEER_TOOL_GATEWAY_LISTEN"
 	EnvPolicyAllowedTools          = "AGENT_POLICY_ALLOWED_TOOLS"
 	EnvPolicyDeniedTools           = "AGENT_POLICY_DENIED_TOOLS"
 	EnvPolicyRequireApproval       = "AGENT_POLICY_REQUIRE_HUMAN_APPROVAL"
@@ -49,7 +49,7 @@ func BuildConfig(ctx enforcement.SessionContext) *GatewayConfig {
 		RequireApproval:   append([]string(nil), ctx.Policy.RequireHumanApproval...),
 		MaxToolCalls:      ctx.Policy.MaxToolCalls,
 		MaxCallsPerMinute: ctx.Policy.MaxCallsPerMinute,
-		ArgumentRules:     append([]relayv1alpha1.ToolArgumentRule(nil), ctx.Policy.ArgumentRules...),
+		ArgumentRules:     append([]scrutineerv1alpha1.ToolArgumentRule(nil), ctx.Policy.ArgumentRules...),
 		ListenHost:        DefaultListenHost,
 		ListenAddr:        DefaultListenAddr,
 	}

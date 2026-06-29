@@ -1,13 +1,13 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: relay-leader-election-rolebinding
-  namespace: relay-system
+  name: scrutineer-leader-election-rolebinding
+  namespace: scrutineer-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: relay-leader-election-role
+  name: scrutineer-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: relay-controller-manager
-  namespace: relay-system
+  name: scrutineer-controller-manager
+  namespace: scrutineer-system

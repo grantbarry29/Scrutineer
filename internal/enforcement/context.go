@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -11,13 +11,13 @@ You may obtain a copy of the License at
 package enforcement
 
 import (
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 // NewSessionContext builds normalized enforcement input from a reconciled AgentSession.
-// jobName is the deterministic runtime Job name (relay-session-<session>).
+// jobName is the deterministic runtime Job name (scrutineer-session-<session>).
 // profile may be nil when no runtimeProfileRef is set.
-func NewSessionContext(session *relayv1alpha1.AgentSession, profile *relayv1alpha1.RuntimeProfile, jobName string) SessionContext {
+func NewSessionContext(session *scrutineerv1alpha1.AgentSession, profile *scrutineerv1alpha1.RuntimeProfile, jobName string) SessionContext {
 	ctx := SessionContext{JobName: jobName}
 	if session == nil {
 		return ctx
@@ -34,7 +34,7 @@ func NewSessionContext(session *relayv1alpha1.AgentSession, profile *relayv1alph
 	}
 
 	if profile != nil && len(profile.Spec.Sidecars) > 0 {
-		ctx.Sidecars = append([]relayv1alpha1.RuntimeProfileSidecar(nil), profile.Spec.Sidecars...)
+		ctx.Sidecars = append([]scrutineerv1alpha1.RuntimeProfileSidecar(nil), profile.Spec.Sidecars...)
 	}
 
 	return ctx

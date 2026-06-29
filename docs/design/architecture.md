@@ -1,23 +1,23 @@
-# Relay Architecture & Design
+# Scrutineer Architecture & Design
 
-> **Canonical architecture reference for Relay.** Read this before implementing anything non-trivial.
-> **Companion docs:** product vision (`.cursor/rules/relay-product-vision.mdc`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/Relay/issues)), workflow rules (`.cursor/relay-cursor-workflow.md`), and the phase-specific design docs in this folder.
+> **Canonical architecture reference for Scrutineer.** Read this before implementing anything non-trivial.
+> **Companion docs:** product vision (`.cursor/rules/scrutineer-product-vision.mdc`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)), workflow rules (`.cursor/scrutineer-cursor-workflow.md`), and the phase-specific design docs in this folder.
 
-This document describes **what Relay is, how it is structured, and the invariants every change must preserve.** It is written to be precise enough that an implementer (human or model) can make a correct change without re-deriving the architecture.
+This document describes **what Scrutineer is, how it is structured, and the invariants every change must preserve.** It is written to be precise enough that an implementer (human or model) can make a correct change without re-deriving the architecture.
 
 ---
 
-## 1. What Relay is (and is not)
+## 1. What Scrutineer is (and is not)
 
-Relay is a **Kubernetes-native governance and runtime control plane for autonomous AI agents.** It governs *how* agents run — policy, identity, runtime control, observability, audit — and delegates the *running itself* to an execution backend (today: Kubernetes Jobs).
+Scrutineer is a **Kubernetes-native governance and runtime control plane for autonomous AI agents.** It governs *how* agents run — policy, identity, runtime control, observability, audit — and delegates the *running itself* to an execution backend (today: Kubernetes Jobs).
 
-**Relay is NOT:**
+**Scrutineer is NOT:**
 
 - a workflow engine, task runner, or scheduler (it governs those, it does not replace them);
 - a generic agent framework, prompt wrapper, or model SDK;
 - a chatbot or conversational product.
 
-**The central question Relay answers** for every agent run: *who authorized it, what it could access, what it actually did, what was blocked, what changed, and how to reproduce/audit the decision.*
+**The central question Scrutineer answers** for every agent run: *who authorized it, what it could access, what it actually did, what was blocked, what changed, and how to reproduce/audit the decision.*
 
 ### 1.1 Control plane vs. data plane (the most important distinction)
 
@@ -59,9 +59,9 @@ flowchart TB
     user --> kubectl
 
     subgraph k8s["Kubernetes cluster"]
-        subgraph cp["Relay control plane"]
+        subgraph cp["Scrutineer control plane"]
             crds["CRDs: AgentSession, AgentPolicy,\nToolPolicy, RuntimeProfile"]
-            ctrl["Relay controller manager\n(reconcilers + reporter endpoint)"]
+            ctrl["Scrutineer controller manager\n(reconcilers + reporter endpoint)"]
         end
 
         subgraph exec["Execution backend (governed)"]
@@ -90,7 +90,7 @@ Today everything in `cp` and `exec` is in this repo except the agent container i
 
 ## 3. API / CRD model
 
-Relay's API group is `relay.secureai.dev`, version `v1alpha1` (`api/v1alpha1/`).
+Scrutineer's API group is `scrutineer.sh`, version `v1alpha1` (`api/v1alpha1/`).
 
 ```mermaid
 classDiagram
@@ -326,7 +326,7 @@ Detailed per-backend designs: [`phase-3-enforcement-architecture.md`](phase-3-en
 
 ## 10. Roadmap orientation
 
-Phases (tracked as GitHub Issues / epics — see <https://github.com/grantbarry29/Relay/issues>):
+Phases (tracked as GitHub Issues / epics — see <https://github.com/grantbarry29/scrutineer/issues>):
 
 - **0–2 (done):** MVP foundation, MVP hardening, reusable policy model + RuntimeProfile.
 - **3 (contracts done):** data-plane enforcement contracts, NetworkPolicy baseline, sidecar injection, gateway/proxy/file design.

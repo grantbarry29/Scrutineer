@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,38 +20,38 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
 func TestAgentSessionCollector_updatesGauges(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
-	utilruntime.Must(relayv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(scrutineerv1alpha1.AddToScheme(scheme))
 
-	session := relayv1alpha1.AgentSession{
+	session := scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: "team-a"},
-		Status: relayv1alpha1.AgentSessionStatus{
-			Phase: relayv1alpha1.PhaseRunning,
-			Violations: []relayv1alpha1.PolicyViolation{{
+		Status: scrutineerv1alpha1.AgentSessionStatus{
+			Phase: scrutineerv1alpha1.PhaseRunning,
+			Violations: []scrutineerv1alpha1.PolicyViolation{{
 				Type: "network", Target: "evil.example",
 			}},
 		},
 	}
 	// One pending ApprovalRequest counts toward the queue; a granted one does not.
-	pending := relayv1alpha1.ApprovalRequest{
+	pending := scrutineerv1alpha1.ApprovalRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: "team-a"},
-		Status:     relayv1alpha1.ApprovalRequestStatus{State: relayv1alpha1.ApprovalStatePending},
+		Status:     scrutineerv1alpha1.ApprovalRequestStatus{State: scrutineerv1alpha1.ApprovalStatePending},
 	}
-	granted := relayv1alpha1.ApprovalRequest{
+	granted := scrutineerv1alpha1.ApprovalRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "s2", Namespace: "team-a"},
-		Status:     relayv1alpha1.ApprovalRequestStatus{State: relayv1alpha1.ApprovalStateGranted},
+		Status:     scrutineerv1alpha1.ApprovalRequestStatus{State: scrutineerv1alpha1.ApprovalStateGranted},
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).
-		WithStatusSubresource(&relayv1alpha1.AgentSession{}, &relayv1alpha1.ApprovalRequest{}).
+		WithStatusSubresource(&scrutineerv1alpha1.AgentSession{}, &scrutineerv1alpha1.ApprovalRequest{}).
 		WithLists(
-			&relayv1alpha1.AgentSessionList{Items: []relayv1alpha1.AgentSession{session}},
-			&relayv1alpha1.ApprovalRequestList{Items: []relayv1alpha1.ApprovalRequest{pending, granted}},
+			&scrutineerv1alpha1.AgentSessionList{Items: []scrutineerv1alpha1.AgentSession{session}},
+			&scrutineerv1alpha1.ApprovalRequestList{Items: []scrutineerv1alpha1.ApprovalRequest{pending, granted}},
 		).
 		Build()
 
@@ -63,28 +63,28 @@ func TestAgentSessionCollector_updatesGauges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := gaugeValue(families, "relay_agentsessions", map[string]string{"namespace": "team-a", "phase": "Running"}); got != 1 {
+	if got := gaugeValue(families, "scrutineer_agentsessions", map[string]string{"namespace": "team-a", "phase": "Running"}); got != 1 {
 		t.Fatalf("running sessions = %v, want 1", got)
 	}
-	if got := gaugeValue(families, "relay_agentsession_violations", map[string]string{"namespace": "team-a"}); got != 1 {
+	if got := gaugeValue(families, "scrutineer_agentsession_violations", map[string]string{"namespace": "team-a"}); got != 1 {
 		t.Fatalf("violations = %v, want 1", got)
 	}
-	if got := gaugeValue(families, "relay_approval_queue_depth", nil); got != 1 {
+	if got := gaugeValue(families, "scrutineer_approval_queue_depth", nil); got != 1 {
 		t.Fatalf("approval queue = %v, want 1", got)
 	}
 }
 
 func TestIsPendingApproval(t *testing.T) {
 	t.Parallel()
-	for _, s := range []relayv1alpha1.ApprovalState{relayv1alpha1.ApprovalStatePending, ""} {
+	for _, s := range []scrutineerv1alpha1.ApprovalState{scrutineerv1alpha1.ApprovalStatePending, ""} {
 		if !isPendingApproval(s) {
 			t.Fatalf("state %q should be pending", s)
 		}
 	}
-	for _, s := range []relayv1alpha1.ApprovalState{
-		relayv1alpha1.ApprovalStateGranted,
-		relayv1alpha1.ApprovalStateDenied,
-		relayv1alpha1.ApprovalStateExpired,
+	for _, s := range []scrutineerv1alpha1.ApprovalState{
+		scrutineerv1alpha1.ApprovalStateGranted,
+		scrutineerv1alpha1.ApprovalStateDenied,
+		scrutineerv1alpha1.ApprovalStateExpired,
 	} {
 		if isPendingApproval(s) {
 			t.Fatalf("state %q should not be pending", s)

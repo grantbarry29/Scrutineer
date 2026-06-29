@@ -1,7 +1,7 @@
 //go:build e2e
 
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,8 +23,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/enforcement/toolgateway"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
 )
 
 var _ = Describe("Live tool violation population", func() {
@@ -35,7 +35,7 @@ var _ = Describe("Live tool violation population", func() {
 
 	It("populates status.violations when tool-gateway denies an enforced tool in a running pod", func(ctx SpecContext) {
 		const deniedTool = "kubectl"
-		ns := newTestNamespace("relay-e2e-tool-violation")
+		ns := newTestNamespace("scrutineer-e2e-tool-violation")
 		const profileName = "tool-gateway-enforced"
 		createRuntimeProfileWithToolGateway(ctx, ns, profileName)
 		createEnforcedDeniedToolPolicy(ctx, ns, "deny-kubectl", deniedTool)
@@ -48,11 +48,11 @@ var _ = Describe("Live tool violation population", func() {
 		key := createAgentSession(ctx, session)
 
 		expectJobForSession(ctx, ns, session)
-		waitForPhase(ctx, key, []relayv1alpha1.AgentSessionPhase{relayv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
+		waitForPhase(ctx, key, []scrutineerv1alpha1.AgentSessionPhase{scrutineerv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
 
 		Eventually(func(g Gomega) {
 			got := getSession(ctx, key)
-			var runtimeViolations []relayv1alpha1.PolicyViolation
+			var runtimeViolations []scrutineerv1alpha1.PolicyViolation
 			for _, v := range got.Status.Violations {
 				if v.Target == deniedTool || strings.Contains(v.Message, deniedTool) {
 					runtimeViolations = append(runtimeViolations, v)
@@ -60,14 +60,14 @@ var _ = Describe("Live tool violation population", func() {
 			}
 			g.Expect(runtimeViolations).NotTo(BeEmpty(), "expected violation for denied tool %q; violations=%+v", deniedTool, got.Status.Violations)
 
-			var runtimeDecisions []relayv1alpha1.PolicyDecision
+			var runtimeDecisions []scrutineerv1alpha1.PolicyDecision
 			for _, d := range got.Status.PolicyDecisions {
-				if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Target == deniedTool {
+				if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == deniedTool {
 					runtimeDecisions = append(runtimeDecisions, d)
 				}
 			}
 			g.Expect(runtimeDecisions).NotTo(BeEmpty())
-			g.Expect(runtimeDecisions[0].Action).To(Equal(relayv1alpha1.PolicyDecisionDeny))
+			g.Expect(runtimeDecisions[0].Action).To(Equal(scrutineerv1alpha1.PolicyDecisionDeny))
 			g.Expect(runtimeDecisions[0].Type).To(Equal("tool"))
 
 			g.Expect(got.Status.Usage).NotTo(BeNil(), "expected status.usage after runtime tool decision")
@@ -84,7 +84,7 @@ var _ = Describe("Live tool violation population", func() {
 		Expect(names).To(ContainElements("agent", "tools"))
 
 		requestCancellation(ctx, key)
-		waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+		waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 	})
 
 	It("populates a redacted argument violation when tool-gateway denies a tool by argument rule", func(ctx SpecContext) {
@@ -92,7 +92,7 @@ var _ = Describe("Live tool violation population", func() {
 		// SECRETTOKEN is the request value that must never appear in evidence; "/etc/" is
 		// the policy operand that may.
 		const secretValue = "/etc/shadow-SECRETTOKEN"
-		ns := newTestNamespace("relay-e2e-arg-violation")
+		ns := newTestNamespace("scrutineer-e2e-arg-violation")
 		const profileName = "tool-gateway-enforced"
 		createRuntimeProfileWithToolGateway(ctx, ns, profileName)
 		createEnforcedArgumentRuleToolPolicy(ctx, ns, "deny-etc-read", tool, "path", "/etc/")
@@ -105,19 +105,19 @@ var _ = Describe("Live tool violation population", func() {
 		key := createAgentSession(ctx, session)
 
 		expectJobForSession(ctx, ns, session)
-		waitForPhase(ctx, key, []relayv1alpha1.AgentSessionPhase{relayv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
+		waitForPhase(ctx, key, []scrutineerv1alpha1.AgentSessionPhase{scrutineerv1alpha1.PhaseRunning}, 60*time.Second, time.Second)
 
 		Eventually(func(g Gomega) {
 			got := getSession(ctx, key)
 
-			var argDecisions []relayv1alpha1.PolicyDecision
+			var argDecisions []scrutineerv1alpha1.PolicyDecision
 			for _, d := range got.Status.PolicyDecisions {
-				if d.Phase == relayv1alpha1.PolicyDecisionPhaseRuntime && d.Reason == toolgateway.ReasonArgumentDenied {
+				if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Reason == toolgateway.ReasonArgumentDenied {
 					argDecisions = append(argDecisions, d)
 				}
 			}
 			g.Expect(argDecisions).NotTo(BeEmpty(), "expected ArgumentDenied runtime decision; decisions=%+v", got.Status.PolicyDecisions)
-			g.Expect(argDecisions[0].Action).To(Equal(relayv1alpha1.PolicyDecisionDeny))
+			g.Expect(argDecisions[0].Action).To(Equal(scrutineerv1alpha1.PolicyDecisionDeny))
 			g.Expect(argDecisions[0].Type).To(Equal("tool"))
 			g.Expect(argDecisions[0].Rule).To(Equal("argumentRules"))
 			g.Expect(argDecisions[0].Target).To(Equal(tool))
@@ -127,7 +127,7 @@ var _ = Describe("Live tool violation population", func() {
 				g.Expect(d.Message).NotTo(ContainSubstring("SECRETTOKEN"), "decision leaks request arg value: %q", d.Message)
 			}
 
-			var argViolations []relayv1alpha1.PolicyViolation
+			var argViolations []scrutineerv1alpha1.PolicyViolation
 			for _, v := range got.Status.Violations {
 				if v.Type == "tool" && strings.Contains(v.Message, "argument") {
 					argViolations = append(argViolations, v)
@@ -140,6 +140,6 @@ var _ = Describe("Live tool violation population", func() {
 		}, 90*time.Second, 2*time.Second).Should(Succeed())
 
 		requestCancellation(ctx, key)
-		waitForTerminalPhase(ctx, key, relayv1alpha1.PhaseCancelled)
+		waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 	})
 })

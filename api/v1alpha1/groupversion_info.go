@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -8,9 +8,9 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package v1alpha1 contains API Schema definitions for the relay v1alpha1 API group.
+// Package v1alpha1 contains API Schema definitions for the scrutineer v1alpha1 API group.
 // +kubebuilder:object:generate=true
-// +groupName=relay.secureai.dev
+// +groupName=scrutineer.sh
 package v1alpha1
 
 import (
@@ -20,7 +20,7 @@ import (
 
 var (
 	// GroupVersion is group version used to register these objects.
-	GroupVersion = schema.GroupVersion{Group: "relay.secureai.dev", Version: "v1alpha1"}
+	GroupVersion = schema.GroupVersion{Group: "scrutineer.sh", Version: "v1alpha1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}

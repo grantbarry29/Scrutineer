@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Relay Authors.
+Copyright 2026 The Scrutineer Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,20 +16,20 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	relayv1alpha1 "github.com/secureai/relay/api/v1alpha1"
-	"github.com/secureai/relay/internal/policy"
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
 func TestPolicyEnvDrift(t *testing.T) {
-	session := &relayv1alpha1.AgentSession{
+	session := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "s1"},
-		Spec: relayv1alpha1.AgentSessionSpec{
-			Model:   relayv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
-			Runtime: relayv1alpha1.RuntimeSpec{Image: "busybox"},
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			Model:   scrutineerv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+			Runtime: scrutineerv1alpha1.RuntimeSpec{Image: "busybox"},
 		},
 	}
 	task := &Task{Description: "d", Prompt: "p"}
-	pol := &policy.Resolved{Mode: relayv1alpha1.PolicyModeAuditOnly}
+	pol := &policy.Resolved{Mode: scrutineerv1alpha1.PolicyModeAuditOnly}
 
 	a := Build(session, task, pol, nil)
 	b := Build(session, task, pol, nil)
@@ -38,8 +38,8 @@ func TestPolicyEnvDrift(t *testing.T) {
 	}
 
 	pol2 := &policy.Resolved{
-		Mode:  relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{DeniedTools: []string{"x"}},
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"x"}},
 	}
 	c := Build(session, task, pol2, nil)
 	if !PolicyEnvDrift(a, c) {
@@ -70,9 +70,9 @@ func TestPolicyEnvDriftMessage(t *testing.T) {
 func TestRuntimeProfileDrift_runtimeClassAndSecurity(t *testing.T) {
 	base := Build(minimalSession(), &Task{}, nil, nil)
 	gvisor := "gvisor"
-	withClass := Build(minimalSession(), &Task{}, nil, &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Pod: &relayv1alpha1.RuntimeProfilePodSpec{RuntimeClassName: gvisor},
+	withClass := Build(minimalSession(), &Task{}, nil, &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{RuntimeClassName: gvisor},
 		},
 	})
 	if !RuntimeProfileDrift(base, withClass) {
@@ -80,9 +80,9 @@ func TestRuntimeProfileDrift_runtimeClassAndSecurity(t *testing.T) {
 	}
 
 	runAsNonRoot := true
-	withSec := Build(minimalSession(), &Task{}, nil, &relayv1alpha1.RuntimeProfile{
-		Spec: relayv1alpha1.RuntimeProfileSpec{
-			Container: &relayv1alpha1.RuntimeProfileContainerSpec{RunAsNonRoot: &runAsNonRoot},
+	withSec := Build(minimalSession(), &Task{}, nil, &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{RunAsNonRoot: &runAsNonRoot},
 		},
 	})
 	if !RuntimeProfileDrift(base, withSec) {
@@ -92,12 +92,12 @@ func TestRuntimeProfileDrift_runtimeClassAndSecurity(t *testing.T) {
 
 func TestRuntimeProfileDrift_sidecarEnv(t *testing.T) {
 	dns := Build(minimalSession(), &Task{}, &policy.Resolved{
-		Mode:  relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
 	}, profileWithSidecar(SidecarTypeDNSProxy))
 	dns2 := Build(minimalSession(), &Task{}, &policy.Resolved{
-		Mode:  relayv1alpha1.PolicyModeEnforced,
-		Rules: relayv1alpha1.PolicyRules{DeniedDomains: []string{"other.example"}},
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"other.example"}},
 	}, profileWithSidecar(SidecarTypeDNSProxy))
 	if !RuntimeProfileDrift(dns, dns2) {
 		t.Fatal("expected drift when sidecar policy env differs")

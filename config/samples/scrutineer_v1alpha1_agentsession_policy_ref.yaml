@@ -1,12 +1,12 @@
-apiVersion: relay.secureai.dev/v1alpha1
+apiVersion: scrutineer.sh/v1alpha1
 kind: AgentSession
 metadata:
-  name: session-with-toolpolicy
+  name: session-with-policy-ref
   namespace: default
 spec:
   task:
-    description: "Run with AgentPolicy + ToolPolicy refs"
-    prompt: "Echo effective tool policy."
+    description: "Run with a referenced baseline policy"
+    prompt: "Echo effective policy env vars."
   model:
     provider: openai
     name: gpt-4.1
@@ -17,14 +17,15 @@ spec:
     - sh
     - -c
     - |
+      echo "Mode: $AGENT_POLICY_MODE"
       echo "Denied tools: $AGENT_POLICY_DENIED_TOOLS"
-      echo "Max tool calls: $AGENT_POLICY_MAX_TOOL_CALLS"
+      echo "Allowed domains: $AGENT_POLICY_ALLOWED_DOMAINS"
       sleep 3
   policyRefs:
   - kind: AgentPolicy
     name: prod-agents-baseline
-  - kind: ToolPolicy
-    name: mcp-tools-baseline
   policy:
+    allowedDomains:
+    - github.com
     deniedTools:
     - deploy_production

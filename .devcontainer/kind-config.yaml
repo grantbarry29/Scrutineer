@@ -1,6 +1,6 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: relay-dev
+name: scrutineer-dev
 # Pin a stable kindest/node image. The default that ships with kind v0.31.0
 # (v1.35.0) has been unreliable on arm64 / Docker Desktop linuxkit. v1.31.4
 # matches our ENVTEST_K8S_VERSION so the CRD is exercised against the same
