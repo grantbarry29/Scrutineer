@@ -13,6 +13,8 @@ package agentsession
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -129,7 +131,9 @@ func (r *AgentSessionReconciler) resolveEgressProxyEndpoint(ctx context.Context,
 		return fmt.Errorf("get egress proxy Service %s: %w", key, err)
 	}
 	if ip := svc.Spec.ClusterIP; ip != "" && ip != corev1.ClusterIPNone {
-		session.Status.EgressProxyEndpoint = fmt.Sprintf("http://%s:%d", ip, envoy.ProxyPort)
+		// net.JoinHostPort brackets IPv6 literals (dual-stack clusters); "1.2.3.4" and
+		// "fd00::1" both render into a valid proxy URL.
+		session.Status.EgressProxyEndpoint = "http://" + net.JoinHostPort(ip, strconv.Itoa(envoy.ProxyPort))
 	}
 	return nil
 }
