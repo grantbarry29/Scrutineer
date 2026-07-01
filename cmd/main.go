@@ -15,6 +15,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -41,6 +42,17 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+// splitCSV parses a comma-separated flag value into a trimmed, non-empty slice (nil if empty).
+func splitCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(scrutineerv1alpha1.AddToScheme(scheme))
@@ -61,6 +73,7 @@ func main() {
 		reporterEnabled      bool
 		approvalWebhookURL   string
 		enableWebhooks       bool
+		egressBackstopCIDRs  string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "Address the metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "Address the probe endpoint binds to.")
@@ -86,6 +99,8 @@ func main() {
 		"Webhook URL notified (HTTP POST JSON) when a session opens a human-approval gate. Empty disables notifications.")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", false,
 		"Serve admission webhooks (requires TLS certs mounted at the webhook server cert dir). Enables the ApprovalRequest identity-stamping webhook that captures the authenticated approver identity.")
+	flag.StringVar(&egressBackstopCIDRs, "egress-backstop-cidrs", "",
+		"Comma-separated CIDRs hard-denied to per-session Envoy egress-proxy pods (defense in depth even if Envoy is compromised). Empty uses the safe default (cloud metadata 169.254.0.0/16); add cluster/service/API CIDRs for your environment.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -148,11 +163,12 @@ func main() {
 			setupLog.Info("approval notifications enabled", "webhook", approvalWebhookURL)
 		}
 		if err := (&agentsession.AgentSessionReconciler{
-			Client:    mgr.GetClient(),
-			APIReader: mgr.GetAPIReader(),
-			Scheme:    mgr.GetScheme(),
-			Recorder:  mgr.GetEventRecorderFor("agentsession-controller"),
-			Notifier:  notifier,
+			Client:              mgr.GetClient(),
+			APIReader:           mgr.GetAPIReader(),
+			Scheme:              mgr.GetScheme(),
+			Recorder:            mgr.GetEventRecorderFor("agentsession-controller"),
+			Notifier:            notifier,
+			EgressBackstopCIDRs: splitCSV(egressBackstopCIDRs),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "AgentSession")
 			os.Exit(1)

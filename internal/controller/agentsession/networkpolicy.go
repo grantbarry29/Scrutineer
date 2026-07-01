@@ -47,30 +47,50 @@ func (r *AgentSessionReconciler) patchStatusWithEnforcement(ctx context.Context,
 	return r.patchStatus(ctx, original, session)
 }
 
+// ensureNetworkPolicy reconciles both per-session egress policies: the agent-pod routing
+// lock (allow only Envoy) and, when the egress proxy is enabled, the Envoy-pod backstop
+// (deny cloud metadata + operator CIDRs even though Envoy egresses freely). Both are torn
+// down on terminal or when no longer applicable.
 func (r *AgentSessionReconciler) ensureNetworkPolicy(ctx context.Context, session *scrutineerv1alpha1.AgentSession, profile *scrutineerv1alpha1.RuntimeProfile) error {
 	if session == nil {
 		return nil
 	}
-
 	enfCtx := enforcement.NewSessionContext(session, profile, scrutineerjob.NameFor(session))
+	terminal := isTerminal(session.Status.Phase)
+
+	// Agent-pod routing lock.
 	var backend networkpolicy.Backend
 	desired, err := backend.DesiredState(enfCtx)
 	if err != nil {
 		return err
 	}
-
-	key := client.ObjectKey{
-		Namespace: session.Namespace,
-		Name:      networkpolicy.NameFor(session.Namespace, session.Name),
+	var lock *networkingv1.NetworkPolicy
+	if !terminal && desired != nil {
+		np, ok := desired.(*networkingv1.NetworkPolicy)
+		if !ok {
+			return fmt.Errorf("networkpolicy backend returned %T", desired)
+		}
+		lock = np
+	}
+	lockKey := client.ObjectKey{Namespace: session.Namespace, Name: networkpolicy.NameFor(session.Namespace, session.Name)}
+	if err := r.reconcileOwnedNetworkPolicy(ctx, session, lockKey, lock); err != nil {
+		return err
 	}
 
-	if desired == nil || isTerminal(session.Status.Phase) {
+	// Envoy-pod egress backstop (only while the egress proxy is enabled).
+	var backstop *networkingv1.NetworkPolicy
+	if !terminal && profileEnablesEnvoy(profile) {
+		backstop = networkpolicy.BuildEgressProxyBackstop(enfCtx, r.egressBackstopCIDRs())
+	}
+	backstopKey := client.ObjectKey{Namespace: session.Namespace, Name: networkpolicy.BackstopNameFor(session.Namespace, session.Name)}
+	return r.reconcileOwnedNetworkPolicy(ctx, session, backstopKey, backstop)
+}
+
+// reconcileOwnedNetworkPolicy converges one owned NetworkPolicy to desired (nil ⇒ delete).
+// Idempotent; an existing policy of the same name not owned by the session is a conflict.
+func (r *AgentSessionReconciler) reconcileOwnedNetworkPolicy(ctx context.Context, session *scrutineerv1alpha1.AgentSession, key client.ObjectKey, desired *networkingv1.NetworkPolicy) error {
+	if desired == nil {
 		return r.deleteNetworkPolicyIfExists(ctx, key)
-	}
-
-	np, ok := desired.(*networkingv1.NetworkPolicy)
-	if !ok {
-		return fmt.Errorf("networkpolicy backend returned %T", desired)
 	}
 
 	var existing networkingv1.NetworkPolicy
@@ -78,11 +98,11 @@ func (r *AgentSessionReconciler) ensureNetworkPolicy(ctx context.Context, sessio
 		if !metav1.IsControlledBy(&existing, session) {
 			return fmt.Errorf("NetworkPolicy %q is not owned by AgentSession %q", key.Name, session.Name)
 		}
-		if networkPolicySpecEqual(&existing, np) {
+		if networkPolicySpecEqual(&existing, desired) {
 			return nil
 		}
-		existing.Labels = np.Labels
-		existing.Spec = np.Spec
+		existing.Labels = desired.Labels
+		existing.Spec = desired.Spec
 		if updateErr := r.Update(ctx, &existing); updateErr != nil {
 			return fmt.Errorf("update NetworkPolicy %s: %w", key, updateErr)
 		}
@@ -92,11 +112,11 @@ func (r *AgentSessionReconciler) ensureNetworkPolicy(ctx context.Context, sessio
 		return fmt.Errorf("get NetworkPolicy %s: %w", key, getErr)
 	}
 
-	if err := controllerutil.SetControllerReference(session, np, r.Scheme); err != nil {
+	if err := controllerutil.SetControllerReference(session, desired, r.Scheme); err != nil {
 		return fmt.Errorf("set owner reference on NetworkPolicy: %w", err)
 	}
-	setBlockOwnerDeletion(np, false)
-	if err := r.Create(ctx, np); err != nil {
+	setBlockOwnerDeletion(desired, false)
+	if err := r.Create(ctx, desired); err != nil {
 		return fmt.Errorf("create NetworkPolicy %s: %w", key, err)
 	}
 	r.recordNormal(session, EventReasonNetworkPolicySynced, fmt.Sprintf("Created NetworkPolicy %q", key.Name))

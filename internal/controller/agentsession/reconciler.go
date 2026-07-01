@@ -36,6 +36,7 @@ import (
 	"github.com/grantbarry29/scrutineer/internal/approval"
 	"github.com/grantbarry29/scrutineer/internal/audit"
 	"github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/networkpolicy"
 	"github.com/grantbarry29/scrutineer/internal/tracing"
 )
 
@@ -59,6 +60,18 @@ type AgentSessionReconciler struct {
 	// Lazily defaulted to the explicit-proxy backend (the node interceptor, #64, plugs
 	// in here later). See egress_envoy.go.
 	egress egressBackend
+	// EgressBackstopCIDRs are egress ranges hard-denied to the Envoy proxy pod (defense in
+	// depth even if Envoy is compromised). Empty ⇒ networkpolicy.DefaultBackstopCIDRs (cloud
+	// metadata). Operators extend it with cluster/service/API CIDRs via the manager flag.
+	EgressBackstopCIDRs []string
+}
+
+// egressBackstopCIDRs returns the configured Envoy-pod egress backstops, or the safe default.
+func (r *AgentSessionReconciler) egressBackstopCIDRs() []string {
+	if len(r.EgressBackstopCIDRs) > 0 {
+		return r.EgressBackstopCIDRs
+	}
+	return networkpolicy.DefaultBackstopCIDRs
 }
 
 // ensureBackends lazily builds the runtime backend registry from the reconciler's deps.

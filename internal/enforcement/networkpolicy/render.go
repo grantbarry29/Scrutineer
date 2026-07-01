@@ -33,9 +33,17 @@ import (
 
 const (
 	NamePrefix            = "scrutineer-netpol-"
+	BackstopNamePrefix    = "scrutineer-egress-backstop-"
 	LabelEnforcement      = "scrutineer.sh/enforcement"
 	EnforcementNetworkPol = "networkpolicy"
 )
+
+// DefaultBackstopCIDRs are the egress ranges denied to the Envoy proxy pod even though it
+// otherwise egresses freely — a defense in depth that holds if Envoy is compromised. The
+// default is the link-local block, which covers the cloud metadata endpoint (169.254.169.254)
+// on AWS/GCP/Azure. Cluster/service/API CIDRs are environment-specific (see
+// docs/design/evidence-integrity.md §8) and are added by operators via configuration.
+var DefaultBackstopCIDRs = []string{"169.254.0.0/16"}
 
 // HasCIDRRules reports whether policy contains CIDR hints this backend can render.
 func HasCIDRRules(rules scrutineerv1alpha1.PolicyRules) bool {
@@ -53,6 +61,48 @@ func Applicable(ctx enforcement.SessionContext) bool {
 // NameFor returns the deterministic NetworkPolicy name for a session.
 func NameFor(sessionNamespace, sessionName string) string {
 	return NamePrefix + sessionName
+}
+
+// BackstopNameFor returns the deterministic name of the Envoy-pod egress backstop policy.
+func BackstopNameFor(sessionNamespace, sessionName string) string {
+	return BackstopNamePrefix + sessionName
+}
+
+// BuildEgressProxyBackstop renders the egress policy for a session's Envoy proxy pod: it may
+// resolve DNS and reach the internet, but the backstopCIDRs (cloud metadata by default, plus
+// any operator-added cluster/service/API ranges) are denied — even a compromised Envoy can't
+// reach the metadata endpoint or pivot into those ranges. Returns nil when there is nothing
+// to deny (no backstops), leaving the proxy pod's egress unrestricted. IPv4 today; an IPv6
+// companion (::/0 minus fe80::/10) can be added when dual-stack egress is exercised.
+func BuildEgressProxyBackstop(ctx enforcement.SessionContext, backstopCIDRs []string) *networkingv1.NetworkPolicy {
+	cidrs := make([]string, 0, len(backstopCIDRs))
+	for _, c := range backstopCIDRs {
+		if c = strings.TrimSpace(c); c != "" {
+			cidrs = append(cidrs, normalizeCIDR(c))
+		}
+	}
+	if len(cidrs) == 0 {
+		return nil
+	}
+	return &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      BackstopNameFor(ctx.SessionNamespace, ctx.SessionName),
+			Namespace: ctx.SessionNamespace,
+			Labels:    labelsFor(ctx.SessionName),
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: envoy.Labels(ctx.SessionName)},
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
+			Egress: []networkingv1.NetworkPolicyEgressRule{
+				// Keep DNS reachable even if cluster ranges are backstopped, so Envoy can
+				// still resolve upstreams.
+				dnsEgressRule(),
+				{To: []networkingv1.NetworkPolicyPeer{{
+					IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: cidrs},
+				}}},
+			},
+		},
+	}
 }
 
 // Build renders the desired NetworkPolicy for a session context, or nil when not applicable.

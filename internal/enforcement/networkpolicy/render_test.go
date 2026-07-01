@@ -77,6 +77,87 @@ func TestBuild_egressLockWhenEnvoyEnabled(t *testing.T) {
 	}
 }
 
+// The Envoy pod gets a backstop egress policy: it may reach the internet + DNS, but NOT the
+// hard-denied CIDRs (cloud metadata, and any operator-added cluster ranges) — a defense in
+// depth that holds even if Envoy itself is compromised (Slice B, #61 B3).
+func TestBuildEgressProxyBackstop(t *testing.T) {
+	ctx := enforcement.SessionContext{SessionNamespace: "team-a", SessionName: "demo"}
+	np := BuildEgressProxyBackstop(ctx, []string{"169.254.0.0/16", "10.0.0.0/8"})
+	if np == nil {
+		t.Fatal("expected a backstop NetworkPolicy")
+	}
+	if np.Name != BackstopNameFor("team-a", "demo") {
+		t.Fatalf("name = %q", np.Name)
+	}
+	// It must select the session's Envoy pod, not the agent pod.
+	for k, v := range envoy.Labels("demo") {
+		if np.Spec.PodSelector.MatchLabels[k] != v {
+			t.Fatalf("backstop must select the Envoy pod; missing %s=%s: %#v", k, v, np.Spec.PodSelector.MatchLabels)
+		}
+	}
+	if np.Spec.PodSelector.MatchLabels[scrutineerjob.LabelSessionRef] == "demo" {
+		t.Fatal("backstop must select the Envoy pod, not the agent (LabelSessionRef)")
+	}
+	if len(np.Spec.PolicyTypes) != 1 || np.Spec.PolicyTypes[0] != networkingv1.PolicyTypeEgress {
+		t.Fatalf("policyTypes = %#v", np.Spec.PolicyTypes)
+	}
+
+	// Find the allow-all-except rule and assert every backstop CIDR is excepted.
+	var ipRule *networkingv1.NetworkPolicyEgressRule
+	hasDNS := false
+	for i := range np.Spec.Egress {
+		r := &np.Spec.Egress[i]
+		for _, p := range r.Ports {
+			if p.Port != nil && p.Port.IntValue() == 53 {
+				hasDNS = true
+			}
+		}
+		for _, to := range r.To {
+			if to.IPBlock != nil && to.IPBlock.CIDR == "0.0.0.0/0" {
+				ipRule = r
+			}
+		}
+	}
+	if !hasDNS {
+		t.Fatal("backstop must still allow DNS so Envoy can resolve upstreams")
+	}
+	if ipRule == nil {
+		t.Fatal("backstop must allow 0.0.0.0/0 (minus the excepted ranges)")
+	}
+	except := ipRule.To[0].IPBlock.Except
+	for _, want := range []string{"169.254.0.0/16", "10.0.0.0/8"} {
+		found := false
+		for _, e := range except {
+			if e == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("backstop except missing %q: %#v", want, except)
+		}
+	}
+}
+
+func TestDefaultBackstopCIDRs_denyMetadata(t *testing.T) {
+	ctx := enforcement.SessionContext{SessionNamespace: "ns", SessionName: "s"}
+	np := BuildEgressProxyBackstop(ctx, DefaultBackstopCIDRs)
+	found := false
+	for _, r := range np.Spec.Egress {
+		for _, to := range r.To {
+			if to.IPBlock != nil {
+				for _, e := range to.IPBlock.Except {
+					if e == "169.254.169.254/32" || e == "169.254.0.0/16" {
+						found = true
+					}
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("default backstops must deny the cloud metadata IP; got %#v", DefaultBackstopCIDRs)
+	}
+}
+
 // A disabled envoy sidecar must not trigger the lock (falls back to CIDR behavior → nil here).
 func TestBuild_noEgressLockWhenEnvoyDisabled(t *testing.T) {
 	off := false

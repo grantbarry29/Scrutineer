@@ -16,6 +16,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -24,6 +25,7 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/networkpolicy"
 )
 
 // envoyProfile creates a RuntimeProfile in ns that enables the out-of-pod Envoy egress proxy.
@@ -145,6 +147,50 @@ var _ = Describe("Per-session Envoy egress proxy", func() {
 			g.Expect(apierrors.IsNotFound(k8sClient.Get(testCtx, key, &svc))).To(BeTrue())
 			g.Expect(gone(k8sClient.Get(testCtx, key, &pod), &pod)).To(BeTrue())
 			g.Expect(apierrors.IsNotFound(k8sClient.Get(testCtx, key, &sa))).To(BeTrue())
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+	})
+
+	It("creates the agent routing lock and the Envoy egress backstop, and tears them down", func() {
+		ns := newTestNamespace()
+		envoyProfile(ns, "egress")
+
+		session := minimalAgentSession(ns, "egress-np")
+		session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "egress"}
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		waitForJob(ns, session)
+
+		lockKey := types.NamespacedName{Namespace: ns, Name: networkpolicy.NameFor(ns, session.Name)}
+		backstopKey := types.NamespacedName{Namespace: ns, Name: networkpolicy.BackstopNameFor(ns, session.Name)}
+		var lock, backstop networkingv1.NetworkPolicy
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(testCtx, lockKey, &lock)).To(Succeed())
+			g.Expect(k8sClient.Get(testCtx, backstopKey, &backstop)).To(Succeed())
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		expectOwnedBy(&lock, session)
+		expectOwnedBy(&backstop, session)
+		// The lock is on the agent pod; the backstop is on the Envoy pod.
+		Expect(lock.Spec.PodSelector.MatchLabels[scrutineerjob.LabelSessionRef]).To(Equal(session.Name))
+		Expect(backstop.Spec.PodSelector.MatchLabels).To(Equal(envoy.Labels(session.Name)))
+		// The backstop denies the cloud-metadata range even for Envoy.
+		var excepted []string
+		for _, rule := range backstop.Spec.Egress {
+			for _, to := range rule.To {
+				if to.IPBlock != nil {
+					excepted = append(excepted, to.IPBlock.Except...)
+				}
+			}
+		}
+		Expect(excepted).To(ContainElement("169.254.0.0/16"))
+
+		// Both are torn down when the session goes terminal.
+		var job batchv1.Job
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
+		setJobSucceeded(&job)
+		waitForPhase(client.ObjectKeyFromObject(session), scrutineerv1alpha1.PhaseSucceeded)
+		Eventually(func(g Gomega) {
+			g.Expect(apierrors.IsNotFound(k8sClient.Get(testCtx, lockKey, &lock))).To(BeTrue())
+			g.Expect(apierrors.IsNotFound(k8sClient.Get(testCtx, backstopKey, &backstop))).To(BeTrue())
 		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 	})
 
