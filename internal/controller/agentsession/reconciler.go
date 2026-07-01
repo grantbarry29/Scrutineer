@@ -281,6 +281,17 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("reconcile runtime approvals: %w", err)
 	}
 
+	// Provision the per-session egress proxy before the agent runtime so the agent can be
+	// pointed at the proxy's ClusterIP (the Slice B routing lock denies DNS, so a name
+	// won't resolve). Idempotent; teardown on terminal/disabled stays in
+	// patchStatusWithEnforcement, which the terminal/cancelled paths above already hit.
+	if err := r.ensureEgressProxy(ctx, session, resolvedProfile); err != nil {
+		return ctrl.Result{}, fmt.Errorf("ensure egress proxy: %w", err)
+	}
+	if err := r.resolveEgressProxyEndpoint(ctx, session, resolvedProfile); err != nil {
+		return ctrl.Result{}, fmt.Errorf("resolve egress proxy endpoint: %w", err)
+	}
+
 	backend, err := r.runtimeBackendFor(session)
 	if err != nil {
 		return ctrl.Result{}, err

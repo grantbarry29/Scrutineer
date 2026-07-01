@@ -254,7 +254,7 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, session *scrutineerv1alpha1.Agent
 	// in-pod dns-proxy for HTTP(S)_PROXY so the two never emit conflicting proxy env.
 	switch {
 	case hasEnabledSidecar(profile, SidecarTypeEnvoy):
-		env = append(env, envoy.ExplicitProxyEnv(envoy.ProxyURL(session.Name, session.Namespace))...)
+		env = append(env, envoy.ExplicitProxyEnv(agentEnvoyProxyURL(session))...)
 	case hasEnabledSidecar(profile, SidecarTypeDNSProxy):
 		const noProxy = "localhost,127.0.0.1"
 		env = append(env,
@@ -273,6 +273,18 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, session *scrutineerv1alpha1.Agent
 		env = append(env, corev1.EnvVar{Name: EnvScrutineerFSGatewayURL, Value: workspace.DefaultInPodURL})
 	}
 	return env
+}
+
+// agentEnvoyProxyURL is the address the agent uses for its per-session Envoy. Once the
+// controller has resolved the Envoy Service ClusterIP (status.egressProxyEndpoint), the
+// agent targets that IP so it needs no DNS — required under the Slice B (#61) routing lock,
+// which denies direct DNS. Before the ClusterIP is known (and on non-enforcing CNIs where
+// the DNS name still resolves), fall back to the Service DNS name.
+func agentEnvoyProxyURL(session *scrutineerv1alpha1.AgentSession) string {
+	if ep := session.Status.EgressProxyEndpoint; ep != "" {
+		return ep
+	}
+	return envoy.ProxyURL(session.Name, session.Namespace)
 }
 
 func hasEnabledSidecar(profile *scrutineerv1alpha1.RuntimeProfile, sidecarType string) bool {

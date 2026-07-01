@@ -470,6 +470,13 @@ type AgentSessionStatus struct {
 	// +optional
 	PodName string `json:"podName,omitempty"`
 
+	// EgressProxyEndpoint is the in-cluster URL the agent uses to reach its per-session
+	// Envoy egress proxy, e.g. "http://10.96.3.7:15001". It is a ClusterIP (not a DNS
+	// name) so the agent needs no DNS: under the Slice B routing lock direct DNS is denied
+	// and Envoy performs all name resolution. Set once the Envoy Service exists.
+	// +optional
+	EgressProxyEndpoint string `json:"egressProxyEndpoint,omitempty"`
+
 	// MatchedPolicies lists policy CRDs that contributed to status.effectivePolicy.
 	// +optional
 	MatchedPolicies []MatchedPolicyRef `json:"matchedPolicies,omitempty"`

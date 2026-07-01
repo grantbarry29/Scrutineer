@@ -355,6 +355,35 @@ func TestBuild_agentEnvoyProxyEnv(t *testing.T) {
 	}
 }
 
+// Once the controller resolves the Envoy Service ClusterIP (status.egressProxyEndpoint),
+// the agent must target that IP — not the DNS name — so it needs no DNS under the Slice B
+// routing lock (#61).
+func TestBuild_agentEnvoyProxyEnv_prefersClusterIPEndpoint(t *testing.T) {
+	enabled := true
+	session := minimalSession()
+	session.Status.EgressProxyEndpoint = "http://10.96.7.7:15001"
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+				Name: "envoy", Type: SidecarTypeEnvoy, Enabled: &enabled,
+			}},
+		},
+	}
+	job := Build(session, &Task{}, &policy.Resolved{Mode: scrutineerv1alpha1.PolicyModeEnforced}, profile)
+
+	var agentEnv map[string]string
+	for _, c := range job.Spec.Template.Spec.Containers {
+		if c.Name == AgentContainerName {
+			agentEnv = envVarsToMap(c.Env)
+		}
+	}
+	for _, k := range []string{EnvHTTPProxy, EnvHTTPSProxy, EnvHTTPProxyLower, EnvHTTPSProxyLower} {
+		if agentEnv[k] != "http://10.96.7.7:15001" {
+			t.Fatalf("%s = %q, want the resolved ClusterIP endpoint", k, agentEnv[k])
+		}
+	}
+}
+
 func TestBuild_agentFSGatewayEnv(t *testing.T) {
 	enabled := true
 	session := minimalSession()

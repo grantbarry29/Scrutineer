@@ -89,17 +89,30 @@ var _ = Describe("Per-session Envoy egress proxy", func() {
 		Expect(svc.Spec.Ports).To(HaveLen(1))
 		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(envoy.ProxyPort)))
 
-		// The agent is pointed at its per-session Envoy via explicit-proxy env.
+		// The controller resolves the Envoy Service ClusterIP into status and points the
+		// agent at that IP (not a DNS name) so it needs no DNS under the routing lock.
+		Eventually(func(g Gomega) {
+			var got scrutineerv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
+			g.Expect(got.Status.EgressProxyEndpoint).NotTo(BeEmpty(), "controller did not resolve the Envoy ClusterIP endpoint")
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		Expect(k8sClient.Get(testCtx, key, &svc)).To(Succeed())
+		wantEndpoint := "http://" + svc.Spec.ClusterIP + ":15001"
+		var got scrutineerv1alpha1.AgentSession
+		Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
+		Expect(got.Status.EgressProxyEndpoint).To(Equal(wantEndpoint))
+
+		// The agent is pointed at that ClusterIP via explicit-proxy env; Envoy is out-of-pod.
 		var job batchv1.Job
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 		byName := map[string]corev1.Container{}
 		for _, c := range job.Spec.Template.Spec.Containers {
 			byName[c.Name] = c
 		}
-		// Envoy is out-of-pod: no in-pod envoy container.
 		Expect(byName).NotTo(HaveKey("envoy"))
 		agentEnv := envMap(byName[scrutineerjob.AgentContainerName].Env)
-		Expect(agentEnv[scrutineerjob.EnvHTTPSProxy]).To(Equal(envoy.ProxyURL(session.Name, ns)))
+		Expect(agentEnv[scrutineerjob.EnvHTTPSProxy]).To(Equal(wantEndpoint))
 	})
 
 	It("tears the egress proxy down when the session reaches a terminal phase", func() {

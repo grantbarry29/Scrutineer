@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -101,6 +102,34 @@ func (r *AgentSessionReconciler) ensureEgressProxy(ctx context.Context, session 
 		if err := r.ensureEgressObject(ctx, session, obj); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// resolveEgressProxyEndpoint records status.egressProxyEndpoint as the Envoy Service's
+// ClusterIP URL so the agent reaches the proxy by IP and needs no DNS (the Slice B routing
+// lock denies direct DNS). It must run after the Envoy Service is provisioned and before the
+// agent runtime is built, so the agent's proxy env is correct on first creation. The
+// uncached APIReader avoids a first-reconcile cache miss on the just-created Service.
+func (r *AgentSessionReconciler) resolveEgressProxyEndpoint(ctx context.Context, session *scrutineerv1alpha1.AgentSession, profile *scrutineerv1alpha1.RuntimeProfile) error {
+	if !profileEnablesEnvoy(profile) {
+		session.Status.EgressProxyEndpoint = ""
+		return nil
+	}
+	key := client.ObjectKey{Namespace: session.Namespace, Name: envoy.ResourceName(session.Name)}
+	var svc corev1.Service
+	reader := client.Reader(r.Client)
+	if r.APIReader != nil {
+		reader = r.APIReader
+	}
+	if err := reader.Get(ctx, key, &svc); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil // not provisioned yet; a later reconcile resolves it
+		}
+		return fmt.Errorf("get egress proxy Service %s: %w", key, err)
+	}
+	if ip := svc.Spec.ClusterIP; ip != "" && ip != corev1.ClusterIPNone {
+		session.Status.EgressProxyEndpoint = fmt.Sprintf("http://%s:%d", ip, envoy.ProxyPort)
 	}
 	return nil
 }
