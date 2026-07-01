@@ -1,0 +1,10 @@
+---
+description: Build features test-first and environment-first. Before writing feature code, ensure the matching test level (unit/envtest/e2e) is runnable; write the failing test, build, run in the devcontainer, iterate. Correctness that only a running artifact can prove (Envoy config, redirect path, deployed overlay) must have an e2e test; do not claim such work done on unit tests alone.
+alwaysApply: true
+---
+
+# test-driven-development
+
+> **Canonical content lives in [`dev-agent-rules/test-driven-development.md`](../../dev-agent-rules/test-driven-development.md).**
+> This file only carries the Cursor auto-attach metadata (description/globs/alwaysApply) above.
+> Read the canonical file before working in scope — do not edit rules here.
