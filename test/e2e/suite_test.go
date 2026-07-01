@@ -21,6 +21,8 @@ You may obtain a copy of the License at
 //   - agentsession_test.go — Ginkgo specs only
 //   - network_violation_test.go — live dns-proxy → reporter → status.violations
 //   - tool_violation_test.go — live tool-gateway → reporter → status.violations
+//   - egress_proxy_test.go — live per-session Envoy egress proxy: agent egress
+//     traverses Envoy (access log, incl. CONNECT) + teardown
 //
 // Run with:   make test-e2e
 // Skipped by: `go test ./...` (build tag `e2e`).
