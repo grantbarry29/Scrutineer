@@ -20,6 +20,7 @@ For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://git
 | [`phase-5-approval-workflows.md`](phase-5-approval-workflows.md) | Working on human approval gates — `ApprovalPolicy` / `ApprovalRequest` CRDs, the controller gate/resume state machine, or `requireHumanApproval` enforcement. |
 | [`phase-5-runtime-tool-approval.md`](phase-5-runtime-tool-approval.md) | Working on **mid-execution** per-tool approval — holding a running agent's tool/MCP call for a scoped, time-bounded human grant (runtime `ApprovalRequest`, reporter approval channel, gateway hold-and-ask). |
 | [`phase-4-observability-export.md`](phase-4-observability-export.md) | Working on exported telemetry — Prometheus metrics, OTel trace spans, or OTLP audit logs (names, labels, attributes, flags, propagation). |
+| [`evidence-integrity.md`](evidence-integrity.md) | Working on runtime-evidence integrity — the *cooperative → adversarial* trust boundary, mandatory out-of-pod egress, and `observed`-assurance evidence. Read before touching egress trust boundaries or #8/#32 enforcement placement. |
 | [`phase-6-orchestrator-interface.md`](phase-6-orchestrator-interface.md) | Decoupling the reconciler from Kubernetes Jobs — the `RuntimeBackend` interface, `spec.runtime.orchestrator` selection, or adding an orchestrator adapter (Tekton/Argo/Temporal). |
 
 ## Conventions
