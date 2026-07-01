@@ -64,6 +64,8 @@ const (
 	EventReasonPolicyEnvSynced        = "PolicyEnvSynced"
 	// EventReasonNetworkPolicySynced — owned NetworkPolicy was created or updated for CIDR enforcement.
 	EventReasonNetworkPolicySynced = "NetworkPolicySynced"
+	// EventReasonEgressProxySynced — a per-session Envoy egress proxy object was created.
+	EventReasonEgressProxySynced = "EgressProxySynced"
 	// EventReasonOutputsCollected — terminal session outputs were retained (logs/artifacts).
 	EventReasonOutputsCollected = "OutputsCollected"
 	// EventReasonOutputsCollectionFailed — output collection was requested but failed (warning).

@@ -15,6 +15,24 @@ import (
 	"testing"
 )
 
+func TestServiceAccountIsPerSession(t *testing.T) {
+	sa := ServiceAccount("sess-a", "ns1")
+	if sa.Name != ResourceName("sess-a") || sa.Namespace != "ns1" {
+		t.Fatalf("meta = %s/%s", sa.Namespace, sa.Name)
+	}
+	// The egress proxy Pod must run under this dedicated identity, not the
+	// namespace default, so evidence (Slice C) is attributable to the proxy.
+	pod := Pod("sess-a", "ns1", sa.Name, "img")
+	if pod.Spec.ServiceAccountName != sa.Name {
+		t.Fatalf("pod SA = %q, want %q", pod.Spec.ServiceAccountName, sa.Name)
+	}
+	for k, v := range Labels("sess-a") {
+		if sa.Labels[k] != v {
+			t.Fatalf("sa label %s=%q, want %q", k, sa.Labels[k], v)
+		}
+	}
+}
+
 func TestConfigMapCarriesBootstrap(t *testing.T) {
 	cm := ConfigMap("sess-a", "ns1")
 	if cm.Name != ResourceName("sess-a") || cm.Namespace != "ns1" {

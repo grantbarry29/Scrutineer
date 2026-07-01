@@ -38,7 +38,7 @@ func BuildPodTemplateSpec(session *scrutineerv1alpha1.AgentSession, task *Task, 
 		Command:         rt.Command,
 		Args:            rt.Args,
 		Resources:       rt.Resources,
-		Env:             applyAgentSidecarEnv(buildEnv(session, task, pol), profile),
+		Env:             applyAgentSidecarEnv(buildEnv(session, task, pol), session, profile),
 		SecurityContext: mergeContainerSecurityContext(defaultContainerSecurityContext(), profile),
 	}
 

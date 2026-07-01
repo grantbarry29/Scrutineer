@@ -55,6 +55,10 @@ type AgentSessionReconciler struct {
 	// backends maps spec.runtime.orchestrator → runtime backend. Lazily built from the
 	// reconciler's client/scheme/recorder so direct (non-manager) test construction works.
 	backends backendRegistry
+	// egress selects how agent egress is forced through the per-session chokepoint.
+	// Lazily defaulted to the explicit-proxy backend (the node interceptor, #64, plugs
+	// in here later). See egress_envoy.go.
+	egress egressBackend
 }
 
 // ensureBackends lazily builds the runtime backend registry from the reconciler's deps.
@@ -104,9 +108,12 @@ const deletionRequeueAfter = 2 * time.Second
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
-// Output ConfigMaps/Secrets are created+updated then owner-ref GC'd (no delete verb needed).
+// Output ConfigMaps/Secrets are created+updated then owner-ref GC'd; the per-session egress
+// proxy also creates+deletes a ConfigMap, Service, and ServiceAccount (torn down on terminal).
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main entry point for AgentSession reconciliation.
 //
@@ -568,7 +575,12 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.ensureBackends()
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&scrutineerv1alpha1.AgentSession{}).
-		Owns(&networkingv1.NetworkPolicy{})
+		Owns(&networkingv1.NetworkPolicy{}).
+		// Per-session egress-proxy objects (see egress_envoy.go); a deleted one is
+		// re-provisioned on the next reconcile.
+		Owns(&corev1.Service{}).
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&corev1.ConfigMap{})
 	// Watch each registered backend's runtime object so completions trigger reconciles,
 	// deduping in case two backends ever share an owned type.
 	ownedSeen := map[string]struct{}{}

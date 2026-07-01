@@ -19,22 +19,24 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/dnsproxy"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/workspace"
 	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
-// Known RuntimeProfile sidecar types injected in Phase 3 slice 5.
+// Known RuntimeProfile sidecar types.
+//
+// SidecarTypeEnvoy is deliberately NOT an in-pod sidecar: the per-session Envoy egress
+// proxy runs as a separate, controller-provisioned pod (evidence-integrity design, #8/#60)
+// so a compromised agent cannot tamper with the enforcement point it shares a pod with.
+// Enabling it in a RuntimeProfile provisions that out-of-pod proxy and points the agent at
+// it via explicit-proxy env; see internal/controller/agentsession/egress_envoy.go.
 const (
 	SidecarTypeDNSProxy    = "dns-proxy"
 	SidecarTypeToolGateway = "tool-gateway"
 	SidecarTypeFSGateway   = "fs-gateway"
 	SidecarTypeEnvoy       = "envoy"
-)
-
-// Placeholder sidecar images until first-party data-plane images ship.
-const (
-	PlaceholderEnvoyImage = "busybox:latest"
 )
 
 const (
@@ -67,11 +69,12 @@ const (
 	reporterTokenExpirationSec = int64(600)
 )
 
+// knownSidecarTypes are the types injected as in-pod containers. Envoy is intentionally
+// excluded — it is an out-of-pod egress proxy provisioned by the controller, not a sidecar.
 var knownSidecarTypes = map[string]struct{}{
 	SidecarTypeDNSProxy:    {},
 	SidecarTypeToolGateway: {},
 	SidecarTypeFSGateway:   {},
-	SidecarTypeEnvoy:       {},
 }
 
 // injectSidecars appends enabled, known sidecar containers from a RuntimeProfile.
@@ -195,8 +198,6 @@ func placeholderImageForType(sidecarType string) string {
 		return toolgateway.DefaultToolGatewayImage
 	case SidecarTypeFSGateway:
 		return workspace.DefaultFSGatewayImage
-	case SidecarTypeEnvoy:
-		return PlaceholderEnvoyImage
 	default:
 		return dnsproxy.DefaultDNSProxyImage
 	}
@@ -241,14 +242,20 @@ func sidecarBaseEnv(sidecarType string, session *scrutineerv1alpha1.AgentSession
 }
 
 // applyAgentSidecarEnv adds agent env vars when governance sidecars are enabled.
-func applyAgentSidecarEnv(env []corev1.EnvVar, profile *scrutineerv1alpha1.RuntimeProfile) []corev1.EnvVar {
+func applyAgentSidecarEnv(env []corev1.EnvVar, session *scrutineerv1alpha1.AgentSession, profile *scrutineerv1alpha1.RuntimeProfile) []corev1.EnvVar {
 	if profile == nil {
 		return env
 	}
 	if hasEnabledSidecar(profile, SidecarTypeToolGateway) {
 		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultInPodURL})
 	}
-	if hasEnabledSidecar(profile, SidecarTypeDNSProxy) {
+	// Egress proxy routing. The out-of-pod per-session Envoy is the preferred, tamper-
+	// resistant chokepoint (evidence-integrity design); when enabled it supersedes the
+	// in-pod dns-proxy for HTTP(S)_PROXY so the two never emit conflicting proxy env.
+	switch {
+	case hasEnabledSidecar(profile, SidecarTypeEnvoy):
+		env = append(env, envoy.ExplicitProxyEnv(envoy.ProxyURL(session.Name, session.Namespace))...)
+	case hasEnabledSidecar(profile, SidecarTypeDNSProxy):
 		const noProxy = "localhost,127.0.0.1"
 		env = append(env,
 			corev1.EnvVar{Name: EnvHTTPProxy, Value: dnsproxy.DefaultHTTPProxyURL},

@@ -38,6 +38,9 @@ func (r *AgentSessionReconciler) patchStatusWithEnforcement(ctx context.Context,
 			r.recordWarning(session, EventReasonOutputsCollectionFailed, err.Error())
 		}
 	}
+	if err := r.ensureEgressProxy(ctx, session, profile); err != nil {
+		return fmt.Errorf("ensure egress proxy: %w", err)
+	}
 	if err := r.ensureNetworkPolicy(ctx, session, profile); err != nil {
 		return fmt.Errorf("ensure NetworkPolicy: %w", err)
 	}

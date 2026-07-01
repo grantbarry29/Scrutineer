@@ -20,6 +20,7 @@ import (
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/dnsproxy"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/workspace"
 	"github.com/grantbarry29/scrutineer/internal/policy"
@@ -293,7 +294,11 @@ func TestBuild_reporterWiringForToolGateway(t *testing.T) {
 	}
 }
 
-func TestInjectSidecars_placeholderEnvoy(t *testing.T) {
+// The per-session Envoy egress proxy runs OUT of the agent pod (evidence-integrity
+// design, #8/#60): enabling it must NOT inject an in-pod container the agent could
+// tamper with. The proxy pod is provisioned by the controller; the agent is only
+// pointed at it via explicit-proxy env (see TestBuild_agentEnvoyProxyEnv).
+func TestInjectSidecars_envoyIsOutOfPod(t *testing.T) {
 	enabled := true
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
@@ -307,15 +312,46 @@ func TestInjectSidecars_placeholderEnvoy(t *testing.T) {
 		Containers: []corev1.Container{{Name: AgentContainerName, Image: "agent:latest"}},
 	}
 	injectSidecars(spec, session, nil, profile)
-	if len(spec.Containers) != 2 {
-		t.Fatalf("containers = %d", len(spec.Containers))
+	if len(spec.Containers) != 1 {
+		t.Fatalf("containers = %d, want agent only (envoy is out-of-pod)", len(spec.Containers))
 	}
-	sc := spec.Containers[1]
-	if sc.Image != PlaceholderEnvoyImage {
-		t.Fatalf("image = %q", sc.Image)
+	// An out-of-pod egress proxy also needs no in-agent-pod reporter token wiring.
+	for _, v := range spec.Volumes {
+		if v.Name == ReporterTokenVolumeName {
+			t.Fatalf("envoy-only profile wired reporter token into the agent pod: %+v", spec.Volumes)
+		}
 	}
-	if len(sc.Command) != 2 || sc.Command[0] != "sleep" {
-		t.Fatalf("command = %v", sc.Command)
+}
+
+// TestBuild_agentEnvoyProxyEnv proves that enabling the out-of-pod Envoy egress proxy
+// points the agent at its per-session Envoy Service via explicit-proxy env (both
+// casings, loopback bypassed).
+func TestBuild_agentEnvoyProxyEnv(t *testing.T) {
+	enabled := true
+	session := minimalSession()
+	profile := &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+				Name: "envoy", Type: SidecarTypeEnvoy, Enabled: &enabled,
+			}},
+		},
+	}
+	job := Build(session, &Task{}, &policy.Resolved{Mode: scrutineerv1alpha1.PolicyModeEnforced}, profile)
+
+	var agentEnv map[string]string
+	for _, c := range job.Spec.Template.Spec.Containers {
+		if c.Name == AgentContainerName {
+			agentEnv = envVarsToMap(c.Env)
+		}
+	}
+	wantURL := envoy.ProxyURL(session.Name, session.Namespace)
+	for _, k := range []string{EnvHTTPProxy, EnvHTTPSProxy, EnvHTTPProxyLower, EnvHTTPSProxyLower} {
+		if agentEnv[k] != wantURL {
+			t.Fatalf("%s = %q, want per-session Envoy %q", k, agentEnv[k], wantURL)
+		}
+	}
+	if agentEnv[EnvNoProxy] == "" || agentEnv[EnvNoProxyLower] == "" {
+		t.Fatalf("NO_PROXY unset; loopback would route through Envoy")
 	}
 }
 

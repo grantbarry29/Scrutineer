@@ -29,7 +29,8 @@ through the `runtimeBackend` interface (two backends today: `kubernetes-job` and
 ## Entry point & execution model
 
 - `SetupWithManager` registers the controller; `Reconcile` is the single idempotent loop.
-- Triggers: `AgentSession` plus owned `NetworkPolicy` and each backend's owned runtime
+- Triggers: `AgentSession` plus owned `NetworkPolicy`, the per-session egress-proxy
+  objects (`Service`/`ServiceAccount`/`ConfigMap`), and each backend's owned runtime
   object, and watches on `Pod`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, and
   `ApprovalRequest` (mapped back to affected sessions).
 
@@ -50,6 +51,13 @@ against an unchanged cluster makes no API mutations.
   `observation`/`runtimePhase` are the backend-neutral output.
 - `backend_pod.go` — the `kubernetes-pod` reference backend (runs the agent as a bare
   Pod via `job.BuildPodTemplateSpec`), selected by `spec.runtime.orchestrator: kubernetes-pod`.
+- `egress_envoy.go` — `egressBackend` seam + the interim `explicitProxyEgressBackend`,
+  which provisions the per-session out-of-pod Envoy proxy (`ServiceAccount`/`ConfigMap`/
+  `Service`/`Pod` from [`internal/enforcement/envoy`](../../enforcement/envoy)) when a
+  `RuntimeProfile` enables the `envoy` type, and tears it down on terminal. The agent is
+  pointed at it via explicit-proxy env set in [`../job`](../job). A future node
+  interceptor (#64) implements the same interface. (Distinct from `egress_proxy.go`,
+  which merges dns-proxy runtime evidence into status.)
 - `validation.go`, `task.go`, `policy.go` / `policy_decisions.go`, `runtimeprofile.go` —
   spec validation and resolution.
 - `approval.go` / `approval_runtime.go` — pre-runtime gate + per-tool runtime approvals.
@@ -69,7 +77,8 @@ against an unchanged cluster makes no API mutations.
 
 ## Interfaces & artifacts
 
-- Reconciles `AgentSession`; owns the runtime object (`Job` or `Pod`) + `NetworkPolicy` (owner refs).
+- Reconciles `AgentSession`; owns the runtime object (`Job` or `Pod`), `NetworkPolicy`, and
+  the per-session egress-proxy `Service`/`ServiceAccount`/`ConfigMap`/`Pod` (all owner refs).
 - Status subresource: `phase`, `observedGeneration`, `runtimeRef` (backend-neutral
   runtime identity), `jobName`/`podName` (`jobName` is a deprecated alias of
   `runtimeRef.name`), `conditions` (`Validated`, `PolicyResolved`, `RuntimeProfileResolved`,
@@ -88,7 +97,9 @@ against an unchanged cluster makes no API mutations.
   | `jobs` (batch) | get,list,watch,create,update,patch,delete | `kubernetes-job` runtime object (create + drift-replace + cancel) |
   | `pods` | get,list,watch,create,update,patch,delete | `kubernetes-pod` runtime object (create/owner-patch/stop); `get,list,watch` also serve the Job-owned-pod watch + `status.podName` |
   | `networkpolicies` | get,list,watch,create,update,patch,delete | Enforced egress baseline (create/update/delete) |
-  | `configmaps`, `secrets` | get,list,watch,create,update,patch | Prompt ConfigMap read + output logs/artifact tar (created with owner ref → GC deletes, no `delete`) |
+  | `configmaps` | get,list,watch,create,update,patch,delete | Prompt ConfigMap read + output logs/artifact tar; per-session egress-proxy bootstrap (created + torn down on terminal → `delete`) |
+  | `secrets` | get,list,watch,create,update,patch | Output artifacts (created with owner ref → GC deletes, no `delete`) |
+  | `services`, `serviceaccounts` | get,list,watch,create,update,patch,delete | Per-session Envoy egress proxy Service + dedicated identity (created + torn down on terminal) |
   | `events` | create,patch | Kubernetes events |
   | `pods/log`, `pods/exec` | get / create | Log + workspace-tar collection (`spec.outputs`) |
 
@@ -104,6 +115,12 @@ against an unchanged cluster makes no API mutations.
 - Adding/changing a backend touches `runtime_backend.go` ↔ its impl (e.g. `pod.go`) ↔
   `SetupWithManager`'s `Owns(backend.ownedType())`. Changing `+kubebuilder:rbac` markers
   requires re-running `make manifests`.
+- The egress proxy is provisioned in `patchStatusWithEnforcement` and **torn down on
+  terminal** (same lifecycle as `NetworkPolicy`); its objects are created create-if-missing
+  and are a function of the session name only, so provisioning and teardown share
+  `egressBackend.desiredObjects`. Enablement is the `envoy` type in the `RuntimeProfile`;
+  the agent's explicit-proxy env (set in `../job`) must point at the same
+  `envoy.ProxyURL(session)`.
 
 ## Build / test / run / validate
 

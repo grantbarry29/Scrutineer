@@ -52,6 +52,20 @@ func Labels(sessionName string) map[string]string {
 	}
 }
 
+// ServiceAccount is the per-session identity the egress proxy Pod runs as. It is a
+// dedicated identity (not the namespace default) so egress evidence is attributable to
+// exactly this session's proxy (Slice C) and so the agent can never borrow it. In Slice A
+// the Pod does not mount its token (AutomountServiceAccountToken is off).
+func ServiceAccount(sessionName, namespace string) *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ResourceName(sessionName),
+			Namespace: namespace,
+			Labels:    Labels(sessionName),
+		},
+	}
+}
+
 // ConfigMap holds the Envoy bootstrap for the session's proxy.
 func ConfigMap(sessionName, namespace string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
