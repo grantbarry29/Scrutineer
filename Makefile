@@ -62,6 +62,13 @@ test-e2e: manifests install ## Run e2e tests against the live kind cluster (assu
 	@echo ">> live evidence specs need images in kind: run 'make test-e2e-images' once"
 	go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v
 
+.PHONY: test-e2e-netpol
+test-e2e-netpol: manifests ## Run NetworkPolicy-enforcement e2e against the Calico netpol cluster (run when networking code changes).
+	@echo ">> targeting Calico netpol cluster '$(KIND_CLUSTER_NAME_NETPOL)' (run 'make kind-up-netpol' first)"
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) .devcontainer/kind-attach.sh
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) $(MAKE) install
+	SCRUTINEER_E2E_NETPOL=1 go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v
+
 ##@ Build
 
 .PHONY: build
@@ -128,6 +135,19 @@ kind-up: ## Create the local kind cluster if it does not exist.
 .PHONY: kind-down
 kind-down: ## Delete the local kind cluster.
 	@kind delete cluster --name $(KIND_CLUSTER_NAME)
+
+# Second cluster for NetworkPolicy-enforcement e2e (Slice B, #61): kindnet does not
+# enforce egress policy, so these specs need a Calico cluster.
+KIND_CLUSTER_NAME_NETPOL ?= scrutineer-netpol
+KIND_CONFIG_NETPOL ?= .devcontainer/kind-config-netpol.yaml
+
+.PHONY: kind-up-netpol
+kind-up-netpol: ## Create the Calico (NetworkPolicy-enforcing) kind cluster for netpol e2e.
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) KIND_CONFIG=$(KIND_CONFIG_NETPOL) KIND_CNI=calico .devcontainer/kind-up.sh
+
+.PHONY: kind-down-netpol
+kind-down-netpol: ## Delete the Calico netpol kind cluster.
+	@kind delete cluster --name $(KIND_CLUSTER_NAME_NETPOL)
 
 .PHONY: kind-load
 kind-load: docker-build ## Build the controller image and load it into kind.

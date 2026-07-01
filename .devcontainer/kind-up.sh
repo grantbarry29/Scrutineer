@@ -29,6 +29,10 @@ KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-scrutineer-dev}"
 KIND_CONFIG="${KIND_CONFIG:-${WORKSPACE}/.devcontainer/kind-config.yaml}"
 KIND_ATTACH="${SCRIPT_DIR}/kind-attach.sh"
 KINDNET_MANIFEST="${KINDNET_MANIFEST:-https://raw.githubusercontent.com/aojea/kindnet/v1.7.0/install-kindnet.yaml}"
+# CNI selection: "kindnet" (default; fast, does NOT enforce NetworkPolicy) or "calico"
+# (enforces egress NetworkPolicy — used by the scrutineer-netpol cluster for Slice B #61).
+KIND_CNI="${KIND_CNI:-kindnet}"
+CALICO_MANIFEST="${CALICO_MANIFEST:-https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml}"
 
 log()  { printf '\033[1;34m[kind-up]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[kind-up]\033[0m %s\n' "$*" >&2; }
@@ -90,6 +94,14 @@ verify_apiserver() {
 }
 
 ensure_cni() {
+  case "${KIND_CNI}" in
+    calico) ensure_calico ;;
+    kindnet) ensure_kindnet ;;
+    *) warn "unknown KIND_CNI='${KIND_CNI}'; expected kindnet|calico"; exit 1 ;;
+  esac
+}
+
+ensure_kindnet() {
   # If kind aborted during "Starting control-plane", the CNI install never ran.
   # Detect by checking whether any kindnet pod exists on the node.
   if kubectl get ds -n kube-system kindnet >/dev/null 2>&1; then
@@ -98,6 +110,20 @@ ensure_cni() {
   fi
   log "installing kindnet CNI manually (kind aborted before it could)..."
   kubectl apply -f "${KINDNET_MANIFEST}"
+}
+
+ensure_calico() {
+  # The netpol cluster runs with disableDefaultCNI, so the node stays NotReady until
+  # Calico is installed. Calico enforces egress NetworkPolicy (kindnet does not), which
+  # is what the Slice B (#61) enforcement e2e needs.
+  if kubectl get ds -n kube-system calico-node >/dev/null 2>&1; then
+    log "calico-node DaemonSet already present."
+  else
+    log "installing Calico CNI (${CALICO_MANIFEST})..."
+    kubectl apply -f "${CALICO_MANIFEST}"
+  fi
+  log "waiting for calico-node to become available (this can take a few minutes on first pull)..."
+  kubectl rollout status ds/calico-node -n kube-system --timeout=300s
 }
 
 remove_control_plane_taint() {
