@@ -28,6 +28,7 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 )
 
 const (
@@ -55,7 +56,16 @@ func NameFor(sessionNamespace, sessionName string) string {
 }
 
 // Build renders the desired NetworkPolicy for a session context, or nil when not applicable.
+//
+// When the per-session Envoy egress proxy is enabled, the agent pod gets the mandatory
+// routing lock (buildEgressLock) — the Envoy chokepoint is the only reachable egress, so
+// the lock takes precedence over the legacy coarse CIDR policy and applies regardless of
+// policy mode (the chokepoint must hold even in audit mode so egress is observable).
 func Build(ctx enforcement.SessionContext) *networkingv1.NetworkPolicy {
+	if egressProxyEnabled(ctx) {
+		return buildEgressLock(ctx)
+	}
+
 	if !Applicable(ctx) {
 		return nil
 	}
@@ -77,6 +87,48 @@ func Build(ctx enforcement.SessionContext) *networkingv1.NetworkPolicy {
 			},
 			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
 			Egress:      egress,
+		},
+	}
+}
+
+// egressProxyEnabled reports whether the session's RuntimeProfile enables the out-of-pod
+// Envoy egress proxy (the SidecarTypeEnvoy toggle; see internal/controller/agentsession/egress_envoy.go).
+func egressProxyEnabled(ctx enforcement.SessionContext) bool {
+	for _, sc := range ctx.Sidecars {
+		if sc.Type == scrutineerjob.SidecarTypeEnvoy && (sc.Enabled == nil || *sc.Enabled) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildEgressLock renders the mandatory default-deny egress policy for the agent pod: the
+// ONLY permitted egress is to the session's Envoy pod on the proxy port. There is no DNS
+// allowance — the agent reaches Envoy by ClusterIP and Envoy performs all name resolution,
+// which closes the direct-DNS exfil path (Slice B, #61). Backstops on the Envoy pod's own
+// egress are added separately (Slice B B3).
+func buildEgressLock(ctx enforcement.SessionContext) *networkingv1.NetworkPolicy {
+	tcp := corev1.ProtocolTCP
+	proxyPort := intstr.FromInt32(int32(envoy.ProxyPort))
+	return &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      NameFor(ctx.SessionNamespace, ctx.SessionName),
+			Namespace: ctx.SessionNamespace,
+			Labels:    labelsFor(ctx.SessionName),
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					scrutineerjob.LabelSessionRef: ctx.SessionName,
+				},
+			},
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
+			Egress: []networkingv1.NetworkPolicyEgressRule{{
+				To: []networkingv1.NetworkPolicyPeer{{
+					PodSelector: &metav1.LabelSelector{MatchLabels: envoy.Labels(ctx.SessionName)},
+				}},
+				Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &proxyPort}},
+			}},
 		},
 	}
 }
