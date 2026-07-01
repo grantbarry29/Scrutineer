@@ -14,7 +14,6 @@ package e2e
 
 import (
 	"context"
-	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,14 +30,13 @@ import (
 )
 
 // This spec proves the Slice B routing lock actually blocks bypass — the #8 guarantee that
-// an agent cannot egress except through Envoy. It requires a NetworkPolicy-enforcing CNI
-// (kindnet does not enforce), so it runs only on the Calico cluster via `make test-e2e-netpol`
-// (which sets SCRUTINEER_E2E_NETPOL=1); it is skipped by the default kindnet suite.
-var _ = Describe("Live routing lock enforcement (Calico)", func() {
+// an agent cannot egress except through Envoy. It is CNI-generic: it asserts enforcement
+// *behavior* (direct egress/DNS dropped, Envoy reachable), so the same test validates any
+// NetworkPolicy-enforcing CNI. Part of the networking suite (`make test-e2e-net`), run
+// across kindnet and Calico; skipped on a CNI that does not enforce egress policy.
+var _ = Describe("Live routing lock enforcement", Label(labelNetworking), func() {
 	BeforeEach(func(ctx SpecContext) {
-		if os.Getenv("SCRUTINEER_E2E_NETPOL") != "1" {
-			Skip("routing-lock enforcement requires the Calico cluster — run: make test-e2e-netpol")
-		}
+		requireEgressEnforcingCNI(ctx)
 		if !clusterImageRunnable(ctx, envoy.DefaultEnvoyImage) {
 			Skip("envoy image not available in cluster — run: make kind-load-envoy")
 		}
@@ -48,10 +46,11 @@ var _ = Describe("Live routing lock enforcement (Calico)", func() {
 		ns := newTestNamespace("scrutineer-e2e-lock")
 		createRuntimeProfileWithEnvoy(ctx, ns, "envoy-egress")
 
-		// A non-Envoy in-cluster destination the agent must NOT be able to reach directly.
-		var kube corev1.Service
-		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: "default", Name: "kubernetes"}, &kube)).To(Succeed())
-		Expect(kube.Spec.ClusterIP).NotTo(BeEmpty())
+		// A non-Envoy in-cluster POD the agent must NOT reach directly. A real pod (not the
+		// apiserver, which is host-network and exempt from pod egress policy on some CNIs)
+		// keeps this negative CNI-generic.
+		targetIP := kubeDNSPodIP(ctx)
+		Expect(targetIP).NotTo(BeEmpty(), "need a kube-dns pod IP as a non-Envoy egress target")
 
 		const probeHost = "probe.scrutineer.invalid"
 		session := newAgentSession(ns, "lock-live",
@@ -59,7 +58,7 @@ var _ = Describe("Live routing lock enforcement (Calico)", func() {
 			withNetpolEgressProbe(probeHost),
 		)
 		session.Spec.Runtime.Env = append(session.Spec.Runtime.Env,
-			corev1.EnvVar{Name: "PROBE_TARGET_IP", Value: kube.Spec.ClusterIP})
+			corev1.EnvVar{Name: "PROBE_TARGET_IP", Value: targetIP})
 		key := createAgentSession(ctx, session)
 
 		expectJobForSession(ctx, ns, session)

@@ -55,19 +55,40 @@ verify-samples: manifests install ## Server-side dry-run of config/samples manif
 .PHONY: test-e2e-images
 test-e2e-images: kind-load kind-load-dns-proxy kind-load-tool-gateway kind-load-fs-gateway kind-load-envoy ## Build and load controller + sidecar images into kind (e2e live-evidence prereq).
 
+# The e2e suite is split by Ginkgo label into two:
+#   - standard: controller logic, CRDs, evidence — everything NOT labeled "networking".
+#   - networking: CNI-generic Envoy egress / routing-lock / DNS enforcement specs, run
+#     across CNIs (see test/e2e/networking_suite_test.go).
 .PHONY: test-e2e
-test-e2e: manifests install ## Run e2e tests against the live kind cluster (assumes `make dev-up` has been run).
-	@echo ">> running e2e suite against $$(kubectl config current-context)"
+test-e2e: manifests install ## Run the standard e2e suite (excludes networking) against the current cluster.
+	@echo ">> running standard e2e suite against $$(kubectl config current-context)"
 	@echo ">> ensure no other scrutineer controller is running (no concurrent 'make run')"
 	@echo ">> live evidence specs need images in kind: run 'make test-e2e-images' once"
-	go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v
+	go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='!networking'
 
-.PHONY: test-e2e-netpol
-test-e2e-netpol: manifests ## Run NetworkPolicy-enforcement e2e against the Calico netpol cluster (run when networking code changes).
-	@echo ">> targeting Calico netpol cluster '$(KIND_CLUSTER_NAME_NETPOL)' (run 'make kind-up-netpol' first)"
+.PHONY: test-e2e-net
+test-e2e-net: manifests ## Run the CNI-generic networking e2e suite against the CURRENT cluster (assumes it is prepped).
+	@echo ">> running networking e2e suite against $$(kubectl config current-context)"
+	go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='networking'
+
+.PHONY: test-e2e-net-kindnet
+test-e2e-net-kindnet: ## Run the networking e2e suite on the kindnet cluster.
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) .devcontainer/kind-attach.sh
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) $(MAKE) install
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) $(MAKE) kind-load-envoy
+	$(MAKE) test-e2e-net
+
+.PHONY: test-e2e-net-calico
+test-e2e-net-calico: ## Run the networking e2e suite on the Calico cluster (run 'make kind-up-netpol' first).
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) .devcontainer/kind-attach.sh
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) $(MAKE) install
-	SCRUTINEER_E2E_NETPOL=1 go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) $(MAKE) kind-load-envoy
+	$(MAKE) test-e2e-net
+
+.PHONY: test-e2e-net-all
+test-e2e-net-all: test-e2e-net-kindnet test-e2e-net-calico ## Run the networking e2e suite across all CNIs (kindnet + Calico).
+	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) .devcontainer/kind-attach.sh
+	@echo ">> networking e2e passed on kindnet + Calico; kubeconfig restored to $(KIND_CLUSTER_NAME)"
 
 ##@ Build
 

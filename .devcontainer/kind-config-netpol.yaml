@@ -1,10 +1,12 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: scrutineer-netpol
-# Second dev cluster used only for NetworkPolicy *enforcement* e2e (Slice B, #61).
-# kindnet (the scrutineer-dev cluster's CNI) does not enforce egress NetworkPolicy, so
-# the routing-lock guarantee cannot be proven there. This cluster disables the default
-# CNI and installs Calico (see .devcontainer/kind-up.sh KIND_CNI=calico), which does.
+# Second dev cluster for the networking e2e suite (Slice B, #61) — a production-representative
+# CNI to cross-check NetworkPolicy enforcement. kindnet (the scrutineer-dev cluster) DOES
+# enforce egress policy, but CNIs differ in the details (host-network exemptions, ipBlock
+# semantics), so the generic networking suite (test/e2e, label "networking") runs on both.
+# This cluster disables the default CNI and installs Calico (see .devcontainer/kind-up.sh
+# KIND_CNI=calico).
 #
 # podSubnet matches Calico's default IPv4 pool (192.168.0.0/16) so pod IPs stay within
 # the routed range. Node image pinned to match ENVTEST_K8S_VERSION, as in kind-config.yaml.

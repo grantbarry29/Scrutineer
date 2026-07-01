@@ -177,7 +177,7 @@ sleep 120`, host)
 // (should reach Envoy — Envoy's access log is the proof); (2) TCP-connects to its Envoy by
 // ClusterIP (positive control — the lock allows Envoy, and confirms nc itself works); and
 // direct-egress NEGATIVES that must be dropped by the lock: (3) DNS resolution, and (4) a
-// TCP connect to a non-Envoy in-cluster IP ($PROBE_TARGET_IP, e.g. the apiserver). It prints
+// TCP connect to a non-Envoy in-cluster pod ($PROBE_TARGET_IP, e.g. a kube-dns pod). It prints
 // PROBE_* markers to stdout for the spec to assert on. Envoy's ClusterIP is derived from the
 // injected proxy env, so nothing about the (dynamic) proxy address needs to be known upfront.
 func withNetpolEgressProbe(host string) agentSessionOption {
@@ -190,7 +190,7 @@ while [ $i -lt 40 ]; do
   wget -q -O /dev/null "http://%[1]s/" 2>/dev/null || true
   if timeout 5 nc -w 3 "$ENVOY_IP" 15001 </dev/null >/dev/null 2>&1; then echo "PROBE_ENVOY_TCP=OK"; else echo "PROBE_ENVOY_TCP=FAIL"; fi
   if timeout 5 nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1; then echo "PROBE_DNS=OK"; else echo "PROBE_DNS=BLOCKED"; fi
-  if timeout 5 nc -w 3 "$PROBE_TARGET_IP" 443 </dev/null >/dev/null 2>&1; then echo "PROBE_DIRECT=OK"; else echo "PROBE_DIRECT=BLOCKED"; fi
+  if timeout 5 nc -w 3 "$PROBE_TARGET_IP" 53 </dev/null >/dev/null 2>&1; then echo "PROBE_DIRECT=OK"; else echo "PROBE_DIRECT=BLOCKED"; fi
   sleep 3
 done
 sleep 120`, host)

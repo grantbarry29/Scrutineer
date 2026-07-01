@@ -29,8 +29,9 @@ KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-scrutineer-dev}"
 KIND_CONFIG="${KIND_CONFIG:-${WORKSPACE}/.devcontainer/kind-config.yaml}"
 KIND_ATTACH="${SCRIPT_DIR}/kind-attach.sh"
 KINDNET_MANIFEST="${KINDNET_MANIFEST:-https://raw.githubusercontent.com/aojea/kindnet/v1.7.0/install-kindnet.yaml}"
-# CNI selection: "kindnet" (default; fast, does NOT enforce NetworkPolicy) or "calico"
-# (enforces egress NetworkPolicy — used by the scrutineer-netpol cluster for Slice B #61).
+# CNI selection: "kindnet" (default) or "calico" (the scrutineer-netpol cluster). Both
+# enforce egress NetworkPolicy; Calico is a second, production-representative CNI the
+# networking e2e suite cross-checks against (Slice B, #61).
 KIND_CNI="${KIND_CNI:-kindnet}"
 CALICO_MANIFEST="${CALICO_MANIFEST:-https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml}"
 

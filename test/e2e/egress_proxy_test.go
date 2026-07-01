@@ -29,8 +29,11 @@ import (
 	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 )
 
-var _ = Describe("Live per-session Envoy egress proxy", func() {
+// Part of the generic networking suite (Label "networking"): runs against any CNI cluster
+// via `make test-e2e-net` (kindnet, Calico, …). Excluded from the standard `make test-e2e`.
+var _ = Describe("Live per-session Envoy egress proxy", Label(labelNetworking), func() {
 	BeforeEach(func(ctx SpecContext) {
+		requireEgressEnforcingCNI(ctx)
 		if !clusterImageRunnable(ctx, envoy.DefaultEnvoyImage) {
 			Skip("envoy image not available in cluster — run: make kind-load-envoy")
 		}
