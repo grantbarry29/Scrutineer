@@ -1,8 +1,8 @@
-# Evidence Integrity — Mandatory Out-of-Pod Egress Chokepoint
+# Evidence Integrity — Mandatory Per-Session Egress Chokepoint (Envoy)
 
 **Status:** design (no code yet)
-**Scope:** the remaining hardening of runtime-evidence integrity — moving egress governance from *cooperative* to *adversarial-grade* (`observed`) by relocating the enforcement point outside the agent's trust domain.
-**Non-goals:** full eBPF/syscall/file observation in one pass; rewriting the reporter auth model; node-compromise defense (see Assumptions); implementing FQDN policy itself (that is [#32](https://github.com/grantbarry29/scrutineer/issues/32), which builds *on* this).
+**Scope:** the remaining hardening of runtime-evidence integrity — moving egress governance from *cooperative* to *adversarial-grade* (`observed`) by routing all agent egress through an **Envoy** proxy that lives outside the agent's trust domain and cannot be bypassed.
+**Non-goals:** full eBPF/syscall/file observation in one pass; rewriting the reporter auth model; node-compromise defense (see Assumptions); a shared per-node gateway (a future evolution of the placement interface); implementing rich FQDN policy content (that is [#32](https://github.com/grantbarry29/scrutineer/issues/32), realized *at* this Envoy).
 **Tracking:** [#8](https://github.com/grantbarry29/scrutineer/issues/8) (slices 1–3 shipped; this doc covers the remaining "independent `observed` source" hardening).
 
 ---
@@ -11,78 +11,95 @@
 
 Scrutineer is only trustworthy if **the agent it governs cannot forge or suppress the evidence of what it did.** Everything else — audit, observability, the UI's credibility — leans on this.
 
-Today's egress governance is **cooperative**: the `dns-proxy` runs as a sidecar *inside the agent pod*, sharing its network namespace and (historically) ServiceAccount. The agent reaches it via `HTTP_PROXY`. A compromised or prompt-injected agent can therefore:
+Today's egress governance is **cooperative**: the `dns-proxy` runs as a sidecar *inside the agent pod*, sharing its network namespace and (historically) ServiceAccount, reached via `HTTP_PROXY`. A compromised or prompt-injected agent can **bypass** it (raw socket to anywhere), **tamper/starve** it (adjacent process), or **forge** evidence (`self-reported` from within its own trust domain).
 
-- **Bypass** it — ignore `HTTP_PROXY` and open a raw socket directly to any destination.
-- **Tamper** with or **starve** the sidecar — same pod, adjacent process.
-- **Forge** evidence — evidence is `self-reported` from within the agent's own trust domain.
-
-Slices 1–3 (shipped) made this *honest and least-privilege* — an `EvidenceAssurance` enum, `self-reported` stamping, SA-token isolation, assurance on audit records — but they do not close the bypass/tamper gap. This doc does.
+Slices 1–3 (shipped) made this *honest and least-privilege* (`EvidenceAssurance` enum, `self-reported` stamping, SA-token isolation, audit assurance) but do not close the bypass/tamper gap. This doc does.
 
 ## 2. Principle
 
-> The integrity guarantee never comes from *which tool* we use (proxy, eBPF). It comes from the enforcement/observation point living in a **trust domain the agent has no privilege to alter**, and from making that point the **only path** for the governed traffic.
+> Integrity never comes from *which tool* we use. It comes from the enforcement/observation point living in a **trust domain the agent has no privilege to alter**, and from making that point the **only path** for the governed traffic.
 
-Two properties, both required:
+Two properties, both required: **out of the agent's control** (separate pod, own identity/netns) and **mandatory** (traffic forced through it by a layer the agent can't modify, so "connect elsewhere" *fails*).
 
-1. **Out of the agent's control** — the enforcement component runs with its own identity/network namespace (a separate pod, or the kernel/node), not co-resident with the agent.
-2. **Mandatory (non-bypassable)** — the agent's traffic is *forced* through it by a layer the agent cannot modify, so "just connect somewhere else" **fails** rather than escapes.
+## 3. Architecture
 
-## 3. Architecture: mandatory out-of-pod egress chokepoint
+All agent egress is forced through a **per-session Envoy proxy** that runs as its **own pod** (own ServiceAccount/identity/netns), created and owner-referenced by the controller and torn down with the session. Envoy handles **both L4 (TCP) and L7 (HTTP / TLS-SNI)** filtering in one place, with a filter chain that future L4 features (IDS, packet capture, per-flow metrics) extend — none of which a `NetworkPolicy` could ever host.
 
-Relocate the egress proxy out of the agent pod into a dedicated Deployment (per-namespace, own ServiceAccount/identity), and lock the agent pod's egress — via a CNI-enforced default-deny `NetworkPolicy` — to **only** the proxy (plus DNS and the reporter). The agent may *attempt* any destination; anything not via the proxy is dropped at the pod's veth boundary, outside the agent's network namespace.
+**Placement is behind an interface.** Per-session is the first implementation (trivial attribution, tightest blast radius, no control-plane machinery). The same trust model + Envoy config generation can later back a **shared per-node gateway** for scale, without changing the guarantee.
+
+**Routing enforcement — transparent redirect (chosen direction).** A privileged **init container** (`CAP_NET_ADMIN`) in the agent pod installs redirect rules so all outbound traffic is steered to the session's Envoy; the agent's **main container runs unprivileged** (`drop ALL`, `seccomp: RuntimeDefault`, no `NET_ADMIN`) so it cannot undo them. Transparency means the agent workload needs no proxy awareness. *(The exact mechanism for preserving the original destination to an out-of-pod Envoy is an open question — see §8.1.)*
+
+**NetworkPolicy — defense-in-depth, not the L4 policy engine.** A CNI-enforced default-deny egress policy does two jobs the proxy can't guarantee alone:
+1. **Routing lock** — permit egress only to the session's Envoy (+ the governed DNS path + reporter); everything else is dropped at the pod boundary, outside the agent netns. This is the backstop that holds even if the redirect rules are somehow defeated.
+2. **Hard security backstops** — deny cloud metadata (`169.254.169.254`), cluster-internal/API ranges, and known-bad CIDRs. These must hold **even if Envoy itself is compromised**, so they live in the kernel/CNI, not in Envoy.
+
+Rich, extensible L4+L7 policy and all `observed` evidence live in Envoy; the non-negotiables stay CNI-enforced.
+
+**DNS.** Direct DNS is a tunneling/exfil channel, so it is governed too: DNS is redirected to a controlled resolver (in/beside Envoy), which resolves, applies name policy, and records the name→IP mapping so later L4 connections can be policy-checked by name (with TLS **SNI** / HTTP **Host** recovering the hostname directly for those protocols).
+
+**Fail-closed.** If the Envoy pod or redirect isn't ready, the agent has **no egress** (start ordering gates the agent behind Envoy readiness). An outage denies egress rather than silently bypassing governance.
+
+**Evidence.** Because Envoy is outside the agent's trust domain, its egress evidence is stamped **`observed`** (authenticated by Envoy's own identity to the reporter) — the first independent evidence source #8 requires. Agent-adjacent sources stay `self-reported`.
 
 ```mermaid
 flowchart LR
-  subgraph agentpod["Agent Pod (unprivileged, SA-token off)"]
-    agent["agent container"]
+  subgraph agentpod["Agent Pod"]
+    init["init container (NET_ADMIN)\ninstalls redirect rules"]
+    agent["agent container (unprivileged,\nno NET_ADMIN, SA-token off)"]
   end
-  subgraph np["CNI / NetworkPolicy (kernel, node — agent cannot modify)"]
-    deny["default-deny egress\nallow only: proxy, DNS, reporter"]
+  subgraph cni["CNI / NetworkPolicy (kernel — agent cannot modify)"]
+    lock["default-deny egress:\nallow only Envoy + DNS path + reporter\n+ hard backstops (metadata, cluster-internal)"]
   end
-  proxy["Egress Proxy (separate pod\nown identity + netns)"]
+  envoy["Per-session Envoy Pod\n(own identity/netns; L4+L7 + filters)"]
   reporter["Reporter (controller-owned)"]
-  upstream["Allowed upstreams"]
+  up["Allowed upstreams"]
 
-  agent -->|any destination attempt| deny
-  deny -->|dropped| x((✗))
-  deny -->|permitted| proxy
-  proxy -->|policy allow| upstream
-  proxy -->|observed evidence| reporter
+  agent -->|redirected| envoy
+  agent -.->|direct attempt| lock
+  lock -.->|dropped| x((✗))
+  envoy -->|policy allow| up
+  envoy -->|observed evidence| reporter
 ```
-
-Because the proxy is now outside the agent's trust domain, the evidence it reports is **`observed`**, not `self-reported` — the first independent evidence source #8 requires.
 
 ## 4. Why the agent cannot bypass or tamper
 
-- **Bypass:** direct connections to non-proxy destinations are dropped by the **CNI**, which enforces `NetworkPolicy` at the pod boundary — *outside* the pod netns. Changing routes/iptables inside its own netns does not help; container-root does not help.
-- **Modify policy:** the `NetworkPolicy` is a Kubernetes object the agent pod has **no RBAC** to change, and with SA-token automount off (slice 2) it cannot reach the API server at all.
-- **Tamper with the proxy:** it is a separate pod with its own identity/netns — not an adjacent process the agent can signal, ptrace, or starve.
-- **Forge evidence:** the proxy authenticates to the reporter with its **own** projected token; the reporter stamps its evidence `observed` based on that identity, and the agent has no path to impersonate it.
+- **Bypass:** redirect steers traffic to Envoy; even if the agent defeats the redirect, the CNI drops all non-Envoy egress at the pod boundary (outside its netns). Container-root doesn't help.
+- **Modify the redirect / policy:** the init container holds `NET_ADMIN`; the main container drops it, so the agent can't flush the rules. The `NetworkPolicy` is a k8s object it has no RBAC for and (SA-token off) can't reach the API to change.
+- **Tamper with Envoy:** separate pod, own netns/identity — not an adjacent process the agent can signal/ptrace/starve.
+- **Forge evidence:** Envoy authenticates to the reporter with its own token; the reporter stamps `observed` on that identity; the agent can't impersonate it.
 
 ## 5. Assumptions and honest boundaries
 
-This is adversarial-grade **for network egress** under these stated assumptions — the doc must never claim more:
+Adversarial-grade **for network egress** under these stated assumptions — never claim more:
 
-1. **DNS is constrained** — DNS resolution is forced through the proxy or an allowed resolver; otherwise the agent can tunnel/exfiltrate over DNS. (Included in the chokepoint allow-list design.)
-2. **The agent pod is unprivileged** — `drop ALL` capabilities, `seccomp: RuntimeDefault`, no `CAP_NET_ADMIN`. A pod that can reach host networking can defeat the boundary.
-3. **The node / CNI is not compromised** — node compromise is a strictly higher threat tier and is **explicitly out of scope**. The guarantee is "the agent cannot tamper without escaping to the node."
-4. **The CNI enforces egress `NetworkPolicy`** — not all CNIs do; document the requirement (Calico/Cilium do).
-5. **Coverage is L3/L4 + L7 combined** — NetworkPolicy stops "connect by raw IP to evade domain policy" (dropped unless via proxy); the proxy makes the L7 (domain/FQDN) decision for traffic that does traverse it.
+1. **DNS is governed** (redirected to a controlled resolver); otherwise DNS tunneling/exfil is open.
+2. **The agent main container is unprivileged** — `drop ALL`, `seccomp: RuntimeDefault`, no `CAP_NET_ADMIN`. A pod that can reach host networking defeats the boundary.
+3. **The init container is privileged (`NET_ADMIN`) but agent-inaccessible** — it runs to completion before the agent starts; this raises the pod's Pod-Security posture (init needs elevated caps while the main container stays restricted — verify against target-cluster PSA, see §8.4).
+4. **The node / CNI is not compromised** — a strictly higher threat tier, explicitly out of scope. The guarantee is "the agent can't tamper without escaping to the node."
+5. **The CNI enforces egress `NetworkPolicy`** (Calico/Cilium do; document the requirement).
+6. **Coverage is L4 + L7 combined at Envoy**, with CNI backstops for the non-negotiables.
 
-This closes the *cooperative → adversarial* gap for **egress**. Syscall/file observation (eBPF/Tetragon) remains a future, separate independent source and is out of scope here.
+This closes the *cooperative → adversarial* gap for **egress**. Syscall/file observation (eBPF/Tetragon) remains a separate future `observed` source, out of scope here.
 
 ## 6. Relationship to #32 (FQDN egress)
 
-[#32](https://github.com/grantbarry29/scrutineer/issues/32) is the *L7 policy* (FQDN allow/deny via Envoy/Cilium). This doc is the *trust boundary* (make egress mandatory and out-of-pod). They compose on one substrate: #8 delivers the non-bypassable out-of-pod chokepoint; #32 implements richer FQDN policy **at** that chokepoint. Build #8's boundary first so #32's policy is enforced somewhere the agent can't route around.
+Envoy is the shared substrate. #8 delivers the non-bypassable per-session Envoy chokepoint + trust boundary; [#32](https://github.com/grantbarry29/scrutineer/issues/32) implements the richer FQDN allow/deny **as Envoy policy config** at that chokepoint. Build the boundary first so #32's policy is enforced where the agent can't route around it.
 
 ## 7. Increment plan
 
-Sliced so each increment is independently reviewable and verifiable (`make test` in the devcontainer). Each is a tracked GitHub issue under #8.
+Each increment is an independently reviewable, `make test`-verifiable GitHub issue under #8.
 
-- **Slice A — Out-of-pod egress proxy deployment.** Run the egress proxy as a dedicated Deployment + Service (own SA/identity, per-namespace) instead of an in-pod sidecar; the agent pod points at the shared proxy Service. Foundational; everything else depends on it.
-- **Slice B — Mandatory routing (default-deny egress NetworkPolicy).** Extend `internal/enforcement/networkpolicy` + the controller to emit a default-deny egress policy on agent pods permitting only the proxy, DNS, and reporter. This is the non-bypassable primitive.
-- **Slice C — `observed` evidence from the out-of-pod proxy.** The relocated proxy stamps egress evidence `observed`; `internal/reporter/normalize.go` accepts `observed` only from the trusted proxy identity (all in-pod/agent-adjacent sources stay `self-reported`).
-- **Slice D — Opt-in + docs.** `RuntimeProfile` toggle to enable the mandatory-egress mode; component READMEs and this doc updated to describe the guarantee and its assumptions precisely.
+- **Slice A ([#60]) — per-session Envoy egress proxy.** Controller creates a per-session Envoy pod (own SA/identity, owner-referenced, torn down with the session) behind a placement interface; agent egress is directed to it. Foundational.
+- **Slice B ([#61]) — mandatory routing.** Transparent redirect (privileged init container; main container drops `NET_ADMIN`) **plus** the CNI default-deny egress `NetworkPolicy` (routing lock + hard backstops). Resolve §8.1 first.
+- **Slice C ([#62]) — `observed` evidence.** Envoy stamps egress evidence `observed`; `internal/reporter/normalize.go` accepts `observed` only from Envoy's authenticated identity.
+- **Slice D ([#63]) — opt-in + docs.** `RuntimeProfile` toggle; optional SA-token re-enable for agents that need API access; precise docs (never "tamper-proof" without the §5 boundaries).
 
-Recommended order: A → B → C → D. Slice A is the first code increment.
+Order: A → B → C → D. Slice A is the first code increment.
+
+## 8. Open questions / design gaps (need decisions)
+
+1. **Preserving original destination to an out-of-pod Envoy (blocks Slice B).** Transparent redirect (TPROXY/`SO_ORIGINAL_DST`) preserves the original destination only when the transparent listener is in the **same netns** (Istio's sidecar case). For a *separate* Envoy pod, a DNAT loses the original dst. Options: (a) a **minimal in-pod redirect shim** that TPROXYs locally and tunnels to Envoy carrying original dst (PROXY-protocol/HBONE-style) — a dumb, policy-free component whose bypass is still caught by NetworkPolicy; (b) **explicit proxy** (SOCKS5h + HTTP CONNECT) instead of transparent — conveys dst in-band, no shim, but the agent must be proxy-aware; (c) accept transparency only when we later move to a **per-node** gateway. This is the crux to settle before B.
+2. **Protocol scope for the first increment** — TCP-only first? How do we treat **UDP / QUIC (HTTP/3 over UDP 443)** — block it (force TCP fallback) or defer UDP governance?
+3. **DNS mechanism** — depends on §8.1: with explicit proxy, force name resolution at Envoy (deny direct DNS entirely); with transparent, redirect `:53` to a governed resolver.
+4. **Pod Security / privileged init** — confirm the `NET_ADMIN` init container is acceptable under the target clusters' Pod Security Admission (baseline/restricted), and how we document/gate it.
+5. **Evidence granularity/schema** — does the existing `PolicyDecision`/`PolicyViolation`/event schema capture L4 flow evidence (5-tuple, bytes, duration) well, or does it need an extension for connection-level records?
