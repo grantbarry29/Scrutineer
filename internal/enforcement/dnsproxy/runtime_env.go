@@ -11,20 +11,21 @@ You may obtain a copy of the License at
 package dnsproxy
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
 )
 
-// Sidecar env keys for the dns-proxy runtime binary (mirrors job builder propagation).
+// Sidecar env keys for the dns-proxy runtime binary. Session/reporter keys are owned by
+// the shared sidecarenv package; aliased here for local (and test) reference.
 const (
-	EnvSessionName      = "SCRUTINEER_SESSION_NAME"
-	EnvSessionNamespace = "SCRUTINEER_SESSION_NAMESPACE"
-	EnvReporterURL      = "SCRUTINEER_REPORTER_URL"
-	EnvReporterToken    = "SCRUTINEER_REPORTER_TOKEN_PATH"
+	EnvSessionName      = sidecarenv.EnvSessionName
+	EnvSessionNamespace = sidecarenv.EnvSessionNamespace
+	EnvReporterURL      = sidecarenv.EnvReporterURL
+	EnvReporterToken    = sidecarenv.EnvReporterToken
 )
 
 // DefaultDNSProxyImage is the first-party dns-proxy container image reference.
@@ -32,68 +33,34 @@ const DefaultDNSProxyImage = "ghcr.io/grantbarry29/scrutineer-dns-proxy:latest"
 
 // RuntimeEnv is configuration loaded from the sidecar container environment.
 type RuntimeEnv struct {
-	SessionNamespace string
-	SessionName      string
-	ListenAddr       string
-	ReporterURL      string
-	ReporterToken    string
-	Mode             scrutineerv1alpha1.PolicyMode
-	Policy           scrutineerv1alpha1.PolicyRules
+	sidecarenv.Base
+	ListenAddr string
+	Policy     scrutineerv1alpha1.PolicyRules
 }
 
 // LoadRuntimeEnv reads dns-proxy configuration from the process environment.
 func LoadRuntimeEnv() (RuntimeEnv, error) {
+	base, err := sidecarenv.LoadBase(os.Getenv(EnvPolicyMode))
+	if err != nil {
+		return RuntimeEnv{}, err
+	}
 	env := RuntimeEnv{
-		SessionNamespace: strings.TrimSpace(os.Getenv(EnvSessionNamespace)),
-		SessionName:      strings.TrimSpace(os.Getenv(EnvSessionName)),
-		ListenAddr:       strings.TrimSpace(os.Getenv(EnvListenAddr)),
-		ReporterURL:      strings.TrimSpace(os.Getenv(EnvReporterURL)),
-		ReporterToken:    strings.TrimSpace(os.Getenv(EnvReporterToken)),
-		Mode:             scrutineerv1alpha1.PolicyMode(strings.TrimSpace(os.Getenv(EnvPolicyMode))),
+		Base:       base,
+		ListenAddr: strings.TrimSpace(os.Getenv(EnvListenAddr)),
 		Policy: scrutineerv1alpha1.PolicyRules{
-			AllowedDomains: splitCSV(os.Getenv(EnvPolicyAllowedDomains)),
-			DeniedDomains:  splitCSV(os.Getenv(EnvPolicyDeniedDomains)),
-			AllowedCIDRs:   splitCSV(os.Getenv(EnvPolicyAllowedCIDRs)),
-			DeniedCIDRs:    splitCSV(os.Getenv(EnvPolicyDeniedCIDRs)),
+			AllowedDomains: sidecarenv.SplitCSV(os.Getenv(EnvPolicyAllowedDomains)),
+			DeniedDomains:  sidecarenv.SplitCSV(os.Getenv(EnvPolicyDeniedDomains)),
+			AllowedCIDRs:   sidecarenv.SplitCSV(os.Getenv(EnvPolicyAllowedCIDRs)),
+			DeniedCIDRs:    sidecarenv.SplitCSV(os.Getenv(EnvPolicyDeniedCIDRs)),
 		},
 	}
 	if env.ListenAddr == "" {
 		env.ListenAddr = DefaultListenAddr
-	}
-	if env.SessionNamespace == "" || env.SessionName == "" {
-		return RuntimeEnv{}, fmt.Errorf("SCRUTINEER_SESSION_NAMESPACE and SCRUTINEER_SESSION_NAME are required")
-	}
-	if env.ReporterURL == "" || env.ReporterToken == "" {
-		return RuntimeEnv{}, fmt.Errorf("SCRUTINEER_REPORTER_URL and SCRUTINEER_REPORTER_TOKEN_PATH are required")
-	}
-	if env.Mode == "" {
-		env.Mode = scrutineerv1alpha1.PolicyModeAuditOnly
 	}
 	return env, nil
 }
 
 // SessionContext returns enforcement input for policy evaluation and reporting.
 func (e RuntimeEnv) SessionContext() enforcement.SessionContext {
-	return enforcement.SessionContext{
-		SessionNamespace: e.SessionNamespace,
-		SessionName:      e.SessionName,
-		Mode:             e.Mode,
-		Policy:           e.Policy,
-	}
-}
-
-func splitCSV(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
+	return e.Base.SessionContext(e.Policy)
 }

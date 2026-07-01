@@ -24,6 +24,7 @@ import (
 	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
 )
 
 func TestProxy_deniesAndReportsEnforcedEgress(t *testing.T) {
@@ -46,11 +47,13 @@ func TestProxy_deniesAndReportsEnforcedEgress(t *testing.T) {
 	tokenPath := writeTempToken(t, "test-token")
 
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		ReporterURL:      reporterSrv.URL,
-		ReporterToken:    tokenPath,
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			ReporterURL:      reporterSrv.URL,
+			ReporterToken:    tokenPath,
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
 		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedDomains: []string{"evil.example"},
 		},
@@ -106,9 +109,11 @@ func TestProxy_allowsHTTPViaDial(t *testing.T) {
 	defer upstream.Close()
 
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
 	}
 	proxy := httptest.NewServer(&Proxy{
 		Env: env,
@@ -158,9 +163,11 @@ func TestProxy_connectHalfClose(t *testing.T) {
 	}()
 
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
 	}
 	proxy := httptest.NewServer(&Proxy{
 		Env: env,

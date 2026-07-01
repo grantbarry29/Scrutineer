@@ -12,21 +12,22 @@ package toolgateway
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
 )
 
-// Sidecar env keys for reporter wiring (mirrors job builder / dns-proxy).
+// Sidecar env keys for reporter wiring. Session/reporter keys are owned by the shared
+// sidecarenv package; aliased here for local (and test) reference.
 const (
-	EnvSessionName      = "SCRUTINEER_SESSION_NAME"
-	EnvSessionNamespace = "SCRUTINEER_SESSION_NAMESPACE"
-	EnvReporterURL      = "SCRUTINEER_REPORTER_URL"
-	EnvReporterToken    = "SCRUTINEER_REPORTER_TOKEN_PATH"
+	EnvSessionName      = sidecarenv.EnvSessionName
+	EnvSessionNamespace = sidecarenv.EnvSessionNamespace
+	EnvReporterURL      = sidecarenv.EnvReporterURL
+	EnvReporterToken    = sidecarenv.EnvReporterToken
 )
 
 // DefaultToolGatewayImage is the first-party tool-gateway container image reference.
@@ -34,28 +35,24 @@ const DefaultToolGatewayImage = "ghcr.io/grantbarry29/scrutineer-tool-gateway:la
 
 // RuntimeEnv is configuration loaded from the sidecar container environment.
 type RuntimeEnv struct {
-	SessionNamespace string
-	SessionName      string
-	ListenHost       string
-	ReporterURL      string
-	ReporterToken    string
-	Mode             scrutineerv1alpha1.PolicyMode
-	Policy           scrutineerv1alpha1.PolicyRules
+	sidecarenv.Base
+	ListenHost string
+	Policy     scrutineerv1alpha1.PolicyRules
 }
 
 // LoadRuntimeEnv reads tool-gateway configuration from the process environment.
 func LoadRuntimeEnv() (RuntimeEnv, error) {
+	base, err := sidecarenv.LoadBase(os.Getenv(EnvPolicyMode))
+	if err != nil {
+		return RuntimeEnv{}, err
+	}
 	env := RuntimeEnv{
-		SessionNamespace: strings.TrimSpace(os.Getenv(EnvSessionNamespace)),
-		SessionName:      strings.TrimSpace(os.Getenv(EnvSessionName)),
-		ListenHost:       strings.TrimSpace(os.Getenv(EnvListenAddr)),
-		ReporterURL:      strings.TrimSpace(os.Getenv(EnvReporterURL)),
-		ReporterToken:    strings.TrimSpace(os.Getenv(EnvReporterToken)),
-		Mode:             scrutineerv1alpha1.PolicyMode(strings.TrimSpace(os.Getenv(EnvPolicyMode))),
+		Base:       base,
+		ListenHost: strings.TrimSpace(os.Getenv(EnvListenAddr)),
 		Policy: scrutineerv1alpha1.PolicyRules{
-			AllowedTools:         splitCSV(os.Getenv(EnvPolicyAllowedTools)),
-			DeniedTools:          splitCSV(os.Getenv(EnvPolicyDeniedTools)),
-			RequireHumanApproval: splitCSV(os.Getenv(EnvPolicyRequireApproval)),
+			AllowedTools:         sidecarenv.SplitCSV(os.Getenv(EnvPolicyAllowedTools)),
+			DeniedTools:          sidecarenv.SplitCSV(os.Getenv(EnvPolicyDeniedTools)),
+			RequireHumanApproval: sidecarenv.SplitCSV(os.Getenv(EnvPolicyRequireApproval)),
 			MaxToolCalls:         int32Env(os.Getenv(EnvPolicyMaxToolCalls)),
 			MaxCallsPerMinute:    int32Env(os.Getenv(EnvPolicyMaxToolCallsPerMinute)),
 			ArgumentRules:        argumentRulesEnv(os.Getenv(EnvPolicyArgumentRules)),
@@ -64,42 +61,12 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 	if env.ListenHost == "" {
 		env.ListenHost = DefaultListenHost
 	}
-	if env.SessionNamespace == "" || env.SessionName == "" {
-		return RuntimeEnv{}, fmt.Errorf("SCRUTINEER_SESSION_NAMESPACE and SCRUTINEER_SESSION_NAME are required")
-	}
-	if env.ReporterURL == "" || env.ReporterToken == "" {
-		return RuntimeEnv{}, fmt.Errorf("SCRUTINEER_REPORTER_URL and SCRUTINEER_REPORTER_TOKEN_PATH are required")
-	}
-	if env.Mode == "" {
-		env.Mode = scrutineerv1alpha1.PolicyModeAuditOnly
-	}
 	return env, nil
 }
 
 // SessionContext returns enforcement input for policy evaluation and reporting.
 func (e RuntimeEnv) SessionContext() enforcement.SessionContext {
-	return enforcement.SessionContext{
-		SessionNamespace: e.SessionNamespace,
-		SessionName:      e.SessionName,
-		Mode:             e.Mode,
-		Policy:           e.Policy,
-	}
-}
-
-func splitCSV(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
+	return e.Base.SessionContext(e.Policy)
 }
 
 func argumentRulesEnv(raw string) []scrutineerv1alpha1.ToolArgumentRule {

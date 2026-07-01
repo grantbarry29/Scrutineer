@@ -24,6 +24,7 @@ import (
 	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
 )
 
 func TestGateway_deniesAndReportsEnforcedTool(t *testing.T) {
@@ -45,11 +46,13 @@ func TestGateway_deniesAndReportsEnforcedTool(t *testing.T) {
 
 	tokenPath := writeTempToken(t, "test-token")
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		ReporterURL:      reporterSrv.URL,
-		ReporterToken:    tokenPath,
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			ReporterURL:      reporterSrv.URL,
+			ReporterToken:    tokenPath,
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
 		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedTools: []string{"kubectl"},
 		},
@@ -100,11 +103,13 @@ func TestGateway_deniesAndReportsEnforcedTool(t *testing.T) {
 
 func TestGateway_allowsPermittedTool(t *testing.T) {
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		ReporterURL:      "http://unused",
-		ReporterToken:    writeTempToken(t, "x"),
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			ReporterURL:      "http://unused",
+			ReporterToken:    writeTempToken(t, "x"),
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
 		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedTools: []string{"read_file"},
 		},
@@ -164,12 +169,14 @@ func newApprovalGateway(t *testing.T, registerState, pollState string, hold, pol
 	t.Cleanup(srv.Close)
 
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		ReporterURL:      srv.URL,
-		ReporterToken:    writeTempToken(t, "tok"),
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
-		Policy:           scrutineerv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			ReporterURL:      srv.URL,
+			ReporterToken:    writeTempToken(t, "tok"),
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
+		Policy: scrutineerv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
 	}
 	gw := httptest.NewServer(&Gateway{
 		Env:                  env,
@@ -275,10 +282,12 @@ func TestGateway_approvalPendingReturns202(t *testing.T) {
 
 func TestGateway_approvalNoChannelFailsClosed(t *testing.T) {
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
-		Policy:           scrutineerv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
+		Policy: scrutineerv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
 	}
 	gw := httptest.NewServer(&Gateway{Env: env})
 	defer gw.Close()

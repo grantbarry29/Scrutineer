@@ -22,6 +22,7 @@ import (
 	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
 )
 
 func TestGateway_deniesAndReportsEnforcedPath(t *testing.T) {
@@ -43,11 +44,13 @@ func TestGateway_deniesAndReportsEnforcedPath(t *testing.T) {
 
 	tokenPath := writeTempToken(t, "test-token")
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		ReporterURL:      reporterSrv.URL,
-		ReporterToken:    tokenPath,
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			ReporterURL:      reporterSrv.URL,
+			ReporterToken:    tokenPath,
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
 		Policy: scrutineerv1alpha1.PolicyRules{
 			DeniedPaths: []string{"/etc/**"},
 		},
@@ -95,11 +98,13 @@ func TestGateway_deniesAndReportsEnforcedPath(t *testing.T) {
 
 func TestGateway_allowsPermittedPath(t *testing.T) {
 	env := RuntimeEnv{
-		SessionNamespace: "ns1",
-		SessionName:      "sess-a",
-		ReporterURL:      "http://unused",
-		ReporterToken:    writeTempToken(t, "x"),
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Base: sidecarenv.Base{
+			SessionNamespace: "ns1",
+			SessionName:      "sess-a",
+			ReporterURL:      "http://unused",
+			ReporterToken:    writeTempToken(t, "x"),
+			Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		},
 		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedPaths: []string{"/workspace/**"},
 		},

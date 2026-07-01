@@ -18,6 +18,7 @@ import (
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
 )
 
 func TestReporterClient_Submit_success(t *testing.T) {
@@ -34,7 +35,7 @@ func TestReporterClient_Submit_success(t *testing.T) {
 	defer srv.Close()
 
 	client := NewReporterClient(srv.URL, writeTempToken(t, "test-token"), srv.Client())
-	env := RuntimeEnv{SessionNamespace: "ns", SessionName: "s"}
+	env := RuntimeEnv{Base: sidecarenv.Base{SessionNamespace: "ns", SessionName: "s"}}
 	report := enforcement.RuntimeReport{
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{Type: "network", Action: scrutineerv1alpha1.PolicyDecisionDeny}},
 	}
@@ -50,7 +51,7 @@ func TestReporterClient_Submit_badStatus(t *testing.T) {
 	defer srv.Close()
 
 	client := NewReporterClient(srv.URL, writeTempToken(t, "x"), srv.Client())
-	err := client.Submit(context.Background(), RuntimeEnv{SessionNamespace: "ns", SessionName: "s"}, enforcement.RuntimeReport{})
+	err := client.Submit(context.Background(), RuntimeEnv{Base: sidecarenv.Base{SessionNamespace: "ns", SessionName: "s"}}, enforcement.RuntimeReport{})
 	if err == nil {
 		t.Fatal("expected error for non-202 response")
 	}
