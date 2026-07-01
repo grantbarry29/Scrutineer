@@ -28,7 +28,6 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
 	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
-	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/networkpolicy"
 )
 
@@ -153,21 +152,48 @@ func withDeniedDomainEgressProbe(domain string) agentSessionOption {
 }
 
 // withEnvoyEgressProbe makes the busybox agent exercise its per-session Envoy egress
-// proxy after startup: an HTTP GET and an HTTPS request via the injected proxy env, plus a
-// raw CONNECT sent straight at the proxy port (deterministic even where busybox lacks TLS).
-// host is intentionally non-resolvable — the assertion is on Envoy's access log, not on the
-// upstream succeeding, so the probe proves traversal without any external dependency.
+// proxy after startup: an HTTP GET via the injected proxy env, plus a raw CONNECT sent
+// straight at the proxy (proves the HTTPS tunnel path deterministically — busybox's own
+// wget resolves https hosts locally rather than tunneling via a proxy). Both target Envoy
+// by ClusterIP (derived from the injected proxy env), never a DNS name: under the routing
+// lock direct DNS is denied, so a name would not resolve. host is intentionally
+// non-resolvable — the assertion is on Envoy's access log, not upstream success.
 func withEnvoyEgressProbe(host string) agentSessionOption {
 	return func(s *scrutineerv1alpha1.AgentSession) {
-		proxyAuthority := fmt.Sprintf("%s.%s.svc", envoy.ServiceName(s.Name), s.Namespace)
-		script := fmt.Sprintf(`sleep 15
+		script := fmt.Sprintf(`sleep 12
+ENVOY_IP=$(printf '%%s' "${http_proxy:-$HTTP_PROXY}" | sed 's|^http://||; s|:.*$||')
 for i in $(seq 1 40); do
   wget -q -O /dev/null "http://%[1]s/" 2>/dev/null || true
-  wget -q -O /dev/null "https://%[1]s/" 2>/dev/null || true
-  printf 'CONNECT %[1]s:443 HTTP/1.1\r\nHost: %[1]s:443\r\n\r\n' | nc -w 3 %[2]s %[3]d 2>/dev/null || true
+  printf 'CONNECT %[1]s:443 HTTP/1.1\r\nHost: %[1]s:443\r\n\r\n' | nc -w 3 "$ENVOY_IP" 15001 2>/dev/null || true
   sleep 2
 done
-sleep 120`, host, proxyAuthority, envoy.ProxyPort)
+sleep 120`, host)
+		s.Spec.Runtime.Command = []string{"sh", "-c", script}
+	}
+}
+
+// withNetpolEgressProbe exercises the Slice B routing lock on a NetworkPolicy-enforcing
+// cluster. The agent (busybox) continuously: (1) requests host via its injected proxy
+// (should reach Envoy — Envoy's access log is the proof); (2) TCP-connects to its Envoy by
+// ClusterIP (positive control — the lock allows Envoy, and confirms nc itself works); and
+// direct-egress NEGATIVES that must be dropped by the lock: (3) DNS resolution, and (4) a
+// TCP connect to a non-Envoy in-cluster IP ($PROBE_TARGET_IP, e.g. the apiserver). It prints
+// PROBE_* markers to stdout for the spec to assert on. Envoy's ClusterIP is derived from the
+// injected proxy env, so nothing about the (dynamic) proxy address needs to be known upfront.
+func withNetpolEgressProbe(host string) agentSessionOption {
+	return func(s *scrutineerv1alpha1.AgentSession) {
+		script := fmt.Sprintf(`sleep 12
+ENVOY_IP=$(printf '%%s' "${http_proxy:-$HTTP_PROXY}" | sed 's|^http://||; s|:.*$||')
+i=0
+while [ $i -lt 40 ]; do
+  i=$((i+1))
+  wget -q -O /dev/null "http://%[1]s/" 2>/dev/null || true
+  if timeout 5 nc -w 3 "$ENVOY_IP" 15001 </dev/null >/dev/null 2>&1; then echo "PROBE_ENVOY_TCP=OK"; else echo "PROBE_ENVOY_TCP=FAIL"; fi
+  if timeout 5 nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1; then echo "PROBE_DNS=OK"; else echo "PROBE_DNS=BLOCKED"; fi
+  if timeout 5 nc -w 3 "$PROBE_TARGET_IP" 443 </dev/null >/dev/null 2>&1; then echo "PROBE_DIRECT=OK"; else echo "PROBE_DIRECT=BLOCKED"; fi
+  sleep 3
+done
+sleep 120`, host)
 		s.Spec.Runtime.Command = []string{"sh", "-c", script}
 	}
 }
