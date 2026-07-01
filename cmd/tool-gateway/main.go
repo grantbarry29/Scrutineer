@@ -34,13 +34,13 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:    env.ListenHost,
+		Addr:    env.BindAddr,
 		Handler: gw,
 	}
 
 	go func() {
 		log.Printf("scrutineer tool-gateway listening on %s (session %s/%s, mode=%s)",
-			env.ListenHost, env.SessionNamespace, env.SessionName, env.Mode)
+			env.BindAddr, env.SessionNamespace, env.SessionName, env.Mode)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %v", err)
 		}

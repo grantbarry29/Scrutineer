@@ -32,8 +32,8 @@ const (
 // RuntimeEnv is configuration loaded from the sidecar container environment.
 type RuntimeEnv struct {
 	sidecarenv.Base
-	ListenHost string
-	Policy     scrutineerv1alpha1.PolicyRules
+	BindAddr string
+	Policy   scrutineerv1alpha1.PolicyRules
 }
 
 // LoadRuntimeEnv reads fs-gateway configuration from the process environment.
@@ -43,16 +43,16 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 		return RuntimeEnv{}, err
 	}
 	env := RuntimeEnv{
-		Base:       base,
-		ListenHost: strings.TrimSpace(os.Getenv(EnvListenAddr)),
+		Base:     base,
+		BindAddr: strings.TrimSpace(os.Getenv(EnvBindAddr)),
 		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedPaths:      sidecarenv.SplitCSV(os.Getenv(EnvPolicyAllowedPaths)),
 			DeniedPaths:       sidecarenv.SplitCSV(os.Getenv(EnvPolicyDeniedPaths)),
 			MaxWorkspaceBytes: int64Env(os.Getenv(EnvPolicyMaxWorkspaceBytes)),
 		},
 	}
-	if env.ListenHost == "" {
-		env.ListenHost = DefaultListenHost
+	if env.BindAddr == "" {
+		env.BindAddr = DefaultBindAddr
 	}
 	return env, nil
 }

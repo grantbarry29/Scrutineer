@@ -31,7 +31,7 @@ func BuildConfig(ctx enforcement.SessionContext) *ProxyConfig {
 		DeniedDomains:    append([]string(nil), ctx.Policy.DeniedDomains...),
 		AllowedCIDRs:     append([]string(nil), ctx.Policy.AllowedCIDRs...),
 		DeniedCIDRs:      append([]string(nil), ctx.Policy.DeniedCIDRs...),
-		ListenAddr:       DefaultListenAddr,
+		BindAddr:         DefaultBindAddr,
 		HTTPProxyURL:     DefaultHTTPProxyURL,
 	}
 }
@@ -42,7 +42,7 @@ func EnvForConfig(cfg *ProxyConfig) []corev1.EnvVar {
 		return nil
 	}
 	return []corev1.EnvVar{
-		{Name: EnvListenAddr, Value: cfg.ListenAddr},
+		{Name: EnvBindAddr, Value: cfg.BindAddr},
 		{Name: EnvHTTPProxyURL, Value: cfg.HTTPProxyURL},
 		{Name: EnvPolicyMode, Value: string(cfg.Mode)},
 		{Name: EnvPolicyAllowedDomains, Value: csv(cfg.AllowedDomains)},

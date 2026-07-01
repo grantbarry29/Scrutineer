@@ -94,7 +94,7 @@ func TestBuildConfig_fromToolPolicy(t *testing.T) {
 		AllowedTools:      []string{"shell"},
 		MaxCallsPerMinute: &max,
 	}))
-	if cfg == nil || cfg.ListenAddr != DefaultListenAddr {
+	if cfg == nil || cfg.InPodURL != DefaultInPodURL {
 		t.Fatalf("cfg=%+v", cfg)
 	}
 	if len(cfg.AllowedTools) != 1 || *cfg.MaxCallsPerMinute != 10 {

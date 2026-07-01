@@ -74,8 +74,8 @@ type GatewayConfig struct {
 	RequireApproval   []string                      `json:"requireHumanApproval,omitempty"`
 	// ArgumentRules constrain tool calls by their arguments (evaluated per-call).
 	ArgumentRules []scrutineerv1alpha1.ToolArgumentRule `json:"argumentRules,omitempty"`
-	// ListenHost is the HTTP bind address (127.0.0.1:19090).
-	ListenHost string `json:"listenHost"`
-	// ListenAddr is the in-pod URL agents should target (contract default).
-	ListenAddr string `json:"listenAddr"`
+	// BindAddr is the HTTP bind address (127.0.0.1:19090).
+	BindAddr string `json:"bindAddr"`
+	// InPodURL is the in-pod URL agents should target (contract default).
+	InPodURL string `json:"inPodURL"`
 }

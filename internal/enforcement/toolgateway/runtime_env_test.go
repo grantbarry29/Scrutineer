@@ -42,8 +42,8 @@ func TestLoadRuntimeEnv_full(t *testing.T) {
 	if env.Policy.MaxCallsPerMinute != nil {
 		t.Fatalf("invalid int should be nil, got %v", env.Policy.MaxCallsPerMinute)
 	}
-	if env.ListenHost != DefaultListenHost {
-		t.Fatalf("listen = %q", env.ListenHost)
+	if env.BindAddr != DefaultBindAddr {
+		t.Fatalf("listen = %q", env.BindAddr)
 	}
 }
 

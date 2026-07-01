@@ -36,8 +36,8 @@ const DefaultToolGatewayImage = "ghcr.io/grantbarry29/scrutineer-tool-gateway:la
 // RuntimeEnv is configuration loaded from the sidecar container environment.
 type RuntimeEnv struct {
 	sidecarenv.Base
-	ListenHost string
-	Policy     scrutineerv1alpha1.PolicyRules
+	BindAddr string
+	Policy   scrutineerv1alpha1.PolicyRules
 }
 
 // LoadRuntimeEnv reads tool-gateway configuration from the process environment.
@@ -47,8 +47,8 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 		return RuntimeEnv{}, err
 	}
 	env := RuntimeEnv{
-		Base:       base,
-		ListenHost: strings.TrimSpace(os.Getenv(EnvListenAddr)),
+		Base:     base,
+		BindAddr: strings.TrimSpace(os.Getenv(EnvBindAddr)),
 		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedTools:         sidecarenv.SplitCSV(os.Getenv(EnvPolicyAllowedTools)),
 			DeniedTools:          sidecarenv.SplitCSV(os.Getenv(EnvPolicyDeniedTools)),
@@ -58,8 +58,8 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 			ArgumentRules:        argumentRulesEnv(os.Getenv(EnvPolicyArgumentRules)),
 		},
 	}
-	if env.ListenHost == "" {
-		env.ListenHost = DefaultListenHost
+	if env.BindAddr == "" {
+		env.BindAddr = DefaultBindAddr
 	}
 	return env, nil
 }

@@ -31,11 +31,11 @@ const (
 	ReasonApprovalDenied  = "ApprovalDenied"
 )
 
-// DefaultListenAddr is the in-pod URL agents use when a tool-gateway sidecar is injected.
-const DefaultListenAddr = "http://127.0.0.1:19090"
+// DefaultInPodURL is the in-pod URL agents use when a tool-gateway sidecar is injected.
+const DefaultInPodURL = "http://127.0.0.1:19090"
 
-// DefaultListenHost is the bind address for the tool-gateway HTTP server.
-const DefaultListenHost = "127.0.0.1:19090"
+// DefaultBindAddr is the bind address for the tool-gateway HTTP server.
+const DefaultBindAddr = "127.0.0.1:19090"
 
 // HasToolPolicy reports whether effective policy contains tool governance hints.
 func HasToolPolicy(rules scrutineerv1alpha1.PolicyRules) bool {

@@ -216,7 +216,7 @@ func sidecarBaseEnv(sidecarType string, session *scrutineerv1alpha1.AgentSession
 		{Name: EnvPolicyMode, Value: string(mode)},
 	}
 	if sidecarType == SidecarTypeToolGateway {
-		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultListenAddr})
+		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultInPodURL})
 		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))
 		ctx.Mode = mode
 		ctx.Policy = rules
@@ -246,7 +246,7 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, profile *scrutineerv1alpha1.Runti
 		return env
 	}
 	if hasEnabledSidecar(profile, SidecarTypeToolGateway) {
-		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultListenAddr})
+		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultInPodURL})
 	}
 	if hasEnabledSidecar(profile, SidecarTypeDNSProxy) {
 		const noProxy = "localhost,127.0.0.1"
@@ -263,7 +263,7 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, profile *scrutineerv1alpha1.Runti
 		)
 	}
 	if hasEnabledSidecar(profile, SidecarTypeFSGateway) {
-		env = append(env, corev1.EnvVar{Name: EnvScrutineerFSGatewayURL, Value: workspace.DefaultListenAddr})
+		env = append(env, corev1.EnvVar{Name: EnvScrutineerFSGatewayURL, Value: workspace.DefaultInPodURL})
 	}
 	return env
 }

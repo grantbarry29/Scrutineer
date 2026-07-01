@@ -22,15 +22,15 @@ import (
 // SidecarType is the RuntimeProfile sidecar type for DNS/egress proxies.
 const SidecarType = "dns-proxy"
 
-// DefaultListenAddr is the in-pod listen address for the egress proxy.
-const DefaultListenAddr = "127.0.0.1:15053"
+// DefaultBindAddr is the in-pod listen address for the egress proxy.
+const DefaultBindAddr = "127.0.0.1:15053"
 
 // DefaultHTTPProxyURL is the HTTP(S) proxy URL agents should use when a dns-proxy sidecar is injected.
 const DefaultHTTPProxyURL = "http://127.0.0.1:15053"
 
 // Env keys propagated to dns-proxy sidecars (AGENT_POLICY_* reuse job builder names).
 const (
-	EnvListenAddr           = "SCRUTINEER_EGRESS_PROXY_LISTEN"
+	EnvBindAddr             = "SCRUTINEER_EGRESS_PROXY_LISTEN"
 	EnvHTTPProxyURL         = "SCRUTINEER_EGRESS_PROXY_HTTP"
 	EnvPolicyAllowedDomains = "AGENT_POLICY_ALLOWED_DOMAINS"
 	EnvPolicyDeniedDomains  = "AGENT_POLICY_DENIED_DOMAINS"
@@ -64,7 +64,7 @@ type ProxyConfig struct {
 	DeniedDomains    []string                      `json:"deniedDomains,omitempty"`
 	AllowedCIDRs     []string                      `json:"allowedCIDRs,omitempty"`
 	DeniedCIDRs      []string                      `json:"deniedCIDRs,omitempty"`
-	ListenAddr       string                        `json:"listenAddr"`
+	BindAddr         string                        `json:"bindAddr"`
 	HTTPProxyURL     string                        `json:"httpProxyURL"`
 }
 

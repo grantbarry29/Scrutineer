@@ -255,8 +255,8 @@ func TestLoadRuntimeEnv_requiredFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if env.ListenAddr != DefaultListenAddr {
-		t.Fatalf("listen = %q", env.ListenAddr)
+	if env.BindAddr != DefaultBindAddr {
+		t.Fatalf("listen = %q", env.BindAddr)
 	}
 	if len(env.Policy.DeniedDomains) != 0 {
 		t.Fatalf("policy = %+v", env.Policy)

@@ -22,7 +22,7 @@ import (
 
 // Env keys for fs-gateway sidecars (mirrors job builder AGENT_POLICY_* names).
 const (
-	EnvListenAddr              = "SCRUTINEER_FS_GATEWAY_LISTEN"
+	EnvBindAddr                = "SCRUTINEER_FS_GATEWAY_LISTEN"
 	EnvPolicyAllowedPaths      = "AGENT_POLICY_ALLOWED_PATHS"
 	EnvPolicyDeniedPaths       = "AGENT_POLICY_DENIED_PATHS"
 	EnvPolicyMaxWorkspaceBytes = "AGENT_POLICY_MAX_WORKSPACE_BYTES"
@@ -37,8 +37,8 @@ type GatewayConfig struct {
 	AllowedPaths      []string
 	DeniedPaths       []string
 	MaxWorkspaceBytes *int64
-	ListenHost        string
-	ListenAddr        string
+	BindAddr          string
+	InPodURL          string
 }
 
 // BuildConfig renders desired gateway configuration, or nil when not applicable.
@@ -53,8 +53,8 @@ func BuildConfig(ctx enforcement.SessionContext) *GatewayConfig {
 		AllowedPaths:      append([]string(nil), ctx.Policy.AllowedPaths...),
 		DeniedPaths:       append([]string(nil), ctx.Policy.DeniedPaths...),
 		MaxWorkspaceBytes: ctx.Policy.MaxWorkspaceBytes,
-		ListenHost:        DefaultListenHost,
-		ListenAddr:        DefaultListenAddr,
+		BindAddr:          DefaultBindAddr,
+		InPodURL:          DefaultInPodURL,
 	}
 }
 
@@ -64,7 +64,7 @@ func EnvForConfig(cfg *GatewayConfig) []corev1.EnvVar {
 		return nil
 	}
 	env := []corev1.EnvVar{
-		{Name: EnvListenAddr, Value: cfg.ListenHost},
+		{Name: EnvBindAddr, Value: cfg.BindAddr},
 		{Name: EnvPolicyMode, Value: string(cfg.Mode)},
 		{Name: EnvPolicyAllowedPaths, Value: csv(cfg.AllowedPaths)},
 		{Name: EnvPolicyDeniedPaths, Value: csv(cfg.DeniedPaths)},

@@ -250,7 +250,7 @@ func TestBuild_agentToolGatewayEnv(t *testing.T) {
 		byName[c.Name] = c
 	}
 	agentEnv := envVarsToMap(byName[AgentContainerName].Env)
-	if agentEnv[EnvScrutineerToolGatewayURL] != toolgateway.DefaultListenAddr {
+	if agentEnv[EnvScrutineerToolGatewayURL] != toolgateway.DefaultInPodURL {
 		t.Fatalf("agent env = %v", agentEnv[EnvScrutineerToolGatewayURL])
 	}
 
@@ -340,7 +340,7 @@ func TestBuild_agentFSGatewayEnv(t *testing.T) {
 		byName[c.Name] = c
 	}
 	agentEnv := envVarsToMap(byName[AgentContainerName].Env)
-	if agentEnv[EnvScrutineerFSGatewayURL] != workspace.DefaultListenAddr {
+	if agentEnv[EnvScrutineerFSGatewayURL] != workspace.DefaultInPodURL {
 		t.Fatalf("agent env = %v", agentEnv[EnvScrutineerFSGatewayURL])
 	}
 

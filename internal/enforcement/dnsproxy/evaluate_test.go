@@ -77,8 +77,8 @@ func TestEnvForConfig_includesPolicyLists(t *testing.T) {
 	if env[EnvPolicyDeniedDomains] != "evil.example" {
 		t.Fatalf("denied domains = %q", env[EnvPolicyDeniedDomains])
 	}
-	if env[EnvListenAddr] != DefaultListenAddr {
-		t.Fatalf("listen = %q", env[EnvListenAddr])
+	if env[EnvBindAddr] != DefaultBindAddr {
+		t.Fatalf("listen = %q", env[EnvBindAddr])
 	}
 }
 

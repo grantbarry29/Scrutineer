@@ -20,11 +20,11 @@ const SidecarType = "fs-gateway"
 // DefaultFSGatewayImage is the first-party fs-gateway container image reference.
 const DefaultFSGatewayImage = "ghcr.io/grantbarry29/scrutineer-fs-gateway:latest"
 
-// DefaultListenHost is the bind address for the fs-gateway HTTP server.
-const DefaultListenHost = "127.0.0.1:19191"
+// DefaultBindAddr is the bind address for the fs-gateway HTTP server.
+const DefaultBindAddr = "127.0.0.1:19191"
 
-// DefaultListenAddr is the in-pod URL agents use when an fs-gateway sidecar is injected.
-const DefaultListenAddr = "http://127.0.0.1:19191"
+// DefaultInPodURL is the in-pod URL agents use when an fs-gateway sidecar is injected.
+const DefaultInPodURL = "http://127.0.0.1:19191"
 
 // FileRequest is metadata for a single file operation.
 type FileRequest struct {

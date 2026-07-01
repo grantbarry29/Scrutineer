@@ -34,8 +34,8 @@ const DefaultDNSProxyImage = "ghcr.io/grantbarry29/scrutineer-dns-proxy:latest"
 // RuntimeEnv is configuration loaded from the sidecar container environment.
 type RuntimeEnv struct {
 	sidecarenv.Base
-	ListenAddr string
-	Policy     scrutineerv1alpha1.PolicyRules
+	BindAddr string
+	Policy   scrutineerv1alpha1.PolicyRules
 }
 
 // LoadRuntimeEnv reads dns-proxy configuration from the process environment.
@@ -45,8 +45,8 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 		return RuntimeEnv{}, err
 	}
 	env := RuntimeEnv{
-		Base:       base,
-		ListenAddr: strings.TrimSpace(os.Getenv(EnvListenAddr)),
+		Base:     base,
+		BindAddr: strings.TrimSpace(os.Getenv(EnvBindAddr)),
 		Policy: scrutineerv1alpha1.PolicyRules{
 			AllowedDomains: sidecarenv.SplitCSV(os.Getenv(EnvPolicyAllowedDomains)),
 			DeniedDomains:  sidecarenv.SplitCSV(os.Getenv(EnvPolicyDeniedDomains)),
@@ -54,8 +54,8 @@ func LoadRuntimeEnv() (RuntimeEnv, error) {
 			DeniedCIDRs:    sidecarenv.SplitCSV(os.Getenv(EnvPolicyDeniedCIDRs)),
 		},
 	}
-	if env.ListenAddr == "" {
-		env.ListenAddr = DefaultListenAddr
+	if env.BindAddr == "" {
+		env.BindAddr = DefaultBindAddr
 	}
 	return env, nil
 }

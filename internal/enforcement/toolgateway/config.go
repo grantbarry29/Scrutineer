@@ -23,7 +23,7 @@ import (
 
 // Env keys propagated to tool-gateway sidecars (AGENT_POLICY_* reuse job builder names).
 const (
-	EnvListenAddr                  = "SCRUTINEER_TOOL_GATEWAY_LISTEN"
+	EnvBindAddr                    = "SCRUTINEER_TOOL_GATEWAY_LISTEN"
 	EnvPolicyAllowedTools          = "AGENT_POLICY_ALLOWED_TOOLS"
 	EnvPolicyDeniedTools           = "AGENT_POLICY_DENIED_TOOLS"
 	EnvPolicyRequireApproval       = "AGENT_POLICY_REQUIRE_HUMAN_APPROVAL"
@@ -50,8 +50,8 @@ func BuildConfig(ctx enforcement.SessionContext) *GatewayConfig {
 		MaxToolCalls:      ctx.Policy.MaxToolCalls,
 		MaxCallsPerMinute: ctx.Policy.MaxCallsPerMinute,
 		ArgumentRules:     append([]scrutineerv1alpha1.ToolArgumentRule(nil), ctx.Policy.ArgumentRules...),
-		ListenHost:        DefaultListenHost,
-		ListenAddr:        DefaultListenAddr,
+		BindAddr:          DefaultBindAddr,
+		InPodURL:          DefaultInPodURL,
 	}
 }
 
@@ -61,7 +61,7 @@ func EnvForConfig(cfg *GatewayConfig) []corev1.EnvVar {
 		return nil
 	}
 	env := []corev1.EnvVar{
-		{Name: EnvListenAddr, Value: cfg.ListenHost},
+		{Name: EnvBindAddr, Value: cfg.BindAddr},
 		{Name: EnvPolicyMode, Value: string(cfg.Mode)},
 		{Name: EnvPolicyAllowedTools, Value: csv(cfg.AllowedTools)},
 		{Name: EnvPolicyDeniedTools, Value: csv(cfg.DeniedTools)},
