@@ -28,6 +28,7 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
 	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/networkpolicy"
 )
 
@@ -148,6 +149,26 @@ func withDeniedDomainEgressProbe(domain string) agentSessionOption {
 			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null http://%s/ 2>/dev/null || true; sleep 2; done; sleep 120`,
 			domain,
 		)}
+	}
+}
+
+// withEnvoyEgressProbe makes the busybox agent exercise its per-session Envoy egress
+// proxy after startup: an HTTP GET and an HTTPS request via the injected proxy env, plus a
+// raw CONNECT sent straight at the proxy port (deterministic even where busybox lacks TLS).
+// host is intentionally non-resolvable — the assertion is on Envoy's access log, not on the
+// upstream succeeding, so the probe proves traversal without any external dependency.
+func withEnvoyEgressProbe(host string) agentSessionOption {
+	return func(s *scrutineerv1alpha1.AgentSession) {
+		proxyAuthority := fmt.Sprintf("%s.%s.svc", envoy.ServiceName(s.Name), s.Namespace)
+		script := fmt.Sprintf(`sleep 15
+for i in $(seq 1 40); do
+  wget -q -O /dev/null "http://%[1]s/" 2>/dev/null || true
+  wget -q -O /dev/null "https://%[1]s/" 2>/dev/null || true
+  printf 'CONNECT %[1]s:443 HTTP/1.1\r\nHost: %[1]s:443\r\n\r\n' | nc -w 3 %[2]s %[3]d 2>/dev/null || true
+  sleep 2
+done
+sleep 120`, host, proxyAuthority, envoy.ProxyPort)
+		s.Spec.Runtime.Command = []string{"sh", "-c", script}
 	}
 }
 
@@ -394,6 +415,31 @@ func createRuntimeProfileWithDNSProxy(ctx context.Context, namespace, name strin
 			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
 				Name:    "egress",
 				Type:    scrutineerjob.SidecarTypeDNSProxy,
+				Enabled: &enabled,
+			}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
+}
+
+// createRuntimeProfileWithEnvoy enables the out-of-pod per-session Envoy egress proxy.
+func createRuntimeProfileWithEnvoy(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	enabled := true
+	rp := &scrutineerv1alpha1.RuntimeProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
+				AllowPrivilegeEscalation: boolPtr(false),
+			},
+			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+				Name:    "envoy",
+				Type:    scrutineerjob.SidecarTypeEnvoy,
 				Enabled: &enabled,
 			}},
 		},

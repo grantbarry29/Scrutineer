@@ -20,6 +20,11 @@ import "fmt"
 // internal_address_config is set to trust no addresses: as a forward proxy we never honor
 // a client-supplied X-Forwarded-For, and it also silences Envoy's default-trust warning.
 //
+// A stdout access log records every proxied request (method + authority + response), which
+// (a) proves in the Slice A e2e that agent egress actually traverses Envoy and (b) is the
+// seed of the `observed` egress evidence in Slice C (#62). The `%%` are fmt escapes for
+// Envoy command operators; the rendered config contains single `%`.
+//
 // Validated with `envoy --mode validate` (Envoy 1.31). Full CONNECT/forward-proxy behavior
 // is proven by the Slice A e2e (issue #60, A4), not by unit tests.
 func BootstrapYAML(port int) string {
@@ -41,6 +46,13 @@ static_resources:
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
           stat_prefix: egress_http
+          access_log:
+          - name: envoy.access_loggers.stdout
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+              log_format:
+                text_format_source:
+                  inline_string: "scrutineer-egress %%REQ(:METHOD)%% %%REQ(:AUTHORITY)%% -> %%RESPONSE_CODE%% %%RESPONSE_FLAGS%%\n"
           internal_address_config:
             cidr_ranges: []
           upgrade_configs:

@@ -53,7 +53,7 @@ verify-samples: manifests install ## Server-side dry-run of config/samples manif
 	done
 
 .PHONY: test-e2e-images
-test-e2e-images: kind-load kind-load-dns-proxy kind-load-tool-gateway kind-load-fs-gateway ## Build and load controller + sidecar images into kind (e2e live-evidence prereq).
+test-e2e-images: kind-load kind-load-dns-proxy kind-load-tool-gateway kind-load-fs-gateway kind-load-envoy ## Build and load controller + sidecar images into kind (e2e live-evidence prereq).
 
 .PHONY: test-e2e
 test-e2e: manifests install ## Run e2e tests against the live kind cluster (assumes `make dev-up` has been run).
@@ -159,6 +159,18 @@ docker-build-fs-gateway: ## Build the fs-gateway sidecar image.
 
 kind-load-fs-gateway: docker-build-fs-gateway ## Build and load fs-gateway image into kind.
 	kind load docker-image $(FS_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
+
+.PHONY: kind-load-envoy
+# The per-session egress proxy uses the upstream Envoy image (no first-party build);
+# keep this tag in sync with envoy.DefaultEnvoyImage.
+ENVOY_IMG ?= envoyproxy/envoy:distroless-v1.31-latest
+
+kind-load-envoy: ## Pull the upstream Envoy egress-proxy image and load it into kind.
+	$(CONTAINER_TOOL) pull $(ENVOY_IMG)
+	@# `kind load docker-image` uses `ctr import --all-platforms`, which fails on the
+	@# multi-arch Envoy manifest when only the host platform was pulled. Import just the
+	@# local single-platform image into the (single-node dev) cluster's containerd instead.
+	$(CONTAINER_TOOL) save $(ENVOY_IMG) | $(CONTAINER_TOOL) exec -i $(KIND_CLUSTER_NAME)-control-plane ctr --namespace=k8s.io images import -
 
 .PHONY: dev-up
 dev-up: kind-up install ## Bring up kind + install CRDs (controller runs locally via `make run`).

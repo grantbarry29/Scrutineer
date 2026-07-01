@@ -28,6 +28,9 @@ func TestBootstrapYAML(t *testing.T) {
 		"envoy.clusters.dynamic_forward_proxy",     // dynamic forward proxy cluster
 		"envoy.filters.http.router",                // router terminal filter
 		"address: 127.0.0.1",                       // admin bound to loopback only
+		"envoy.access_loggers.stdout",              // stdout access log (traversal evidence)
+		"scrutineer-egress %REQ(:METHOD)%",         // rendered format has single %, not %%
+		"%REQ(:AUTHORITY)%",                        // logs the requested host / CONNECT target
 	}
 	for _, s := range must {
 		if !strings.Contains(cfg, s) {
