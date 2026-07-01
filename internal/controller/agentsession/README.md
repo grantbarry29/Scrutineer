@@ -54,10 +54,18 @@ against an unchanged cluster makes no API mutations.
 - `egress_envoy.go` — `egressBackend` seam + the interim `explicitProxyEgressBackend`,
   which provisions the per-session out-of-pod Envoy proxy (`ServiceAccount`/`ConfigMap`/
   `Service`/`Pod` from [`internal/enforcement/envoy`](../../enforcement/envoy)) when a
-  `RuntimeProfile` enables the `envoy` type, and tears it down on terminal. The agent is
-  pointed at it via explicit-proxy env set in [`../job`](../job). A future node
+  `RuntimeProfile` enables the `envoy` type, and tears it down on terminal. `Reconcile`
+  provisions it (and `resolveEgressProxyEndpoint` records the Envoy Service ClusterIP into
+  `status.egressProxyEndpoint`) **before** the agent runtime is built, so the agent is
+  pointed at Envoy by ClusterIP — no DNS needed under the routing lock. A future node
   interceptor (#64) implements the same interface. (Distinct from `egress_proxy.go`,
   which merges dns-proxy runtime evidence into status.)
+- `networkpolicy.go` — reconciles **two** per-session egress policies via
+  `reconcileOwnedNetworkPolicy`: the agent-pod **routing lock** (allow only the session's
+  Envoy pod; deny DNS and everything else — the mandatory chokepoint) and, on the Envoy pod,
+  the **egress backstop** (`networkpolicy.BuildEgressProxyBackstop`: allow DNS + internet
+  EXCEPT `EgressBackstopCIDRs`, so even a compromised Envoy can't reach cloud metadata).
+  Both are torn down on terminal.
 - `validation.go`, `task.go`, `policy.go` / `policy_decisions.go`, `runtimeprofile.go` —
   spec validation and resolution.
 - `approval.go` / `approval_runtime.go` — pre-runtime gate + per-tool runtime approvals.
@@ -77,11 +85,16 @@ against an unchanged cluster makes no API mutations.
 
 ## Interfaces & artifacts
 
-- Reconciles `AgentSession`; owns the runtime object (`Job` or `Pod`), `NetworkPolicy`, and
-  the per-session egress-proxy `Service`/`ServiceAccount`/`ConfigMap`/`Pod` (all owner refs).
+- Reconciles `AgentSession`; owns the runtime object (`Job` or `Pod`), the per-session
+  egress-proxy `Service`/`ServiceAccount`/`ConfigMap`/`Pod`, and **two** `NetworkPolicy`
+  objects — the agent routing lock and the Envoy egress backstop (all owner refs).
+- `--egress-backstop-cidrs` (manager flag → `EgressBackstopCIDRs`): CIDRs hard-denied to the
+  Envoy proxy pod; empty ⇒ safe default `169.254.0.0/16` (cloud metadata). Operators add
+  cluster/service/API CIDRs.
 - Status subresource: `phase`, `observedGeneration`, `runtimeRef` (backend-neutral
   runtime identity), `jobName`/`podName` (`jobName` is a deprecated alias of
-  `runtimeRef.name`), `conditions` (`Validated`, `PolicyResolved`, `RuntimeProfileResolved`,
+  `runtimeRef.name`), `egressProxyEndpoint` (the Envoy ClusterIP URL the agent proxies
+  through), `conditions` (`Validated`, `PolicyResolved`, `RuntimeProfileResolved`,
   `PolicyPropagated`, `RuntimeCreated`, `Completed`, `Ready`), `result`, and
   reporter-populated `policyDecisions`/`violations`/`usage`.
 - RBAC is generated from the `+kubebuilder:rbac` markers in `reconciler.go` via
@@ -96,7 +109,7 @@ against an unchanged cluster makes no API mutations.
   | `approvalrequests` (+`/status`) | get,list,watch,create,update,patch | Created with an owner ref (GC deletes them → no `delete`) |
   | `jobs` (batch) | get,list,watch,create,update,patch,delete | `kubernetes-job` runtime object (create + drift-replace + cancel) |
   | `pods` | get,list,watch,create,update,patch,delete | `kubernetes-pod` runtime object (create/owner-patch/stop); `get,list,watch` also serve the Job-owned-pod watch + `status.podName` |
-  | `networkpolicies` | get,list,watch,create,update,patch,delete | Enforced egress baseline (create/update/delete) |
+  | `networkpolicies` | get,list,watch,create,update,patch,delete | Per-session agent routing lock + Envoy egress backstop (create/update/delete) |
   | `configmaps` | get,list,watch,create,update,patch,delete | Prompt ConfigMap read + output logs/artifact tar; per-session egress-proxy bootstrap (created + torn down on terminal → `delete`) |
   | `secrets` | get,list,watch,create,update,patch | Output artifacts (created with owner ref → GC deletes, no `delete`) |
   | `services`, `serviceaccounts` | get,list,watch,create,update,patch,delete | Per-session Envoy egress proxy Service + dedicated identity (created + torn down on terminal) |
@@ -115,12 +128,18 @@ against an unchanged cluster makes no API mutations.
 - Adding/changing a backend touches `runtime_backend.go` ↔ its impl (e.g. `pod.go`) ↔
   `SetupWithManager`'s `Owns(backend.ownedType())`. Changing `+kubebuilder:rbac` markers
   requires re-running `make manifests`.
-- The egress proxy is provisioned in `patchStatusWithEnforcement` and **torn down on
-  terminal** (same lifecycle as `NetworkPolicy`); its objects are created create-if-missing
-  and are a function of the session name only, so provisioning and teardown share
-  `egressBackend.desiredObjects`. Enablement is the `envoy` type in the `RuntimeProfile`;
-  the agent's explicit-proxy env (set in `../job`) must point at the same
-  `envoy.ProxyURL(session)`.
+- The egress proxy is provisioned **before the agent runtime** in `Reconcile` (so its Service
+  ClusterIP is known and injected as the agent's proxy) and again idempotently in
+  `patchStatusWithEnforcement`; it is **torn down on terminal**, same as the NetworkPolicies.
+  Its objects are create-if-missing and a function of the session name only, so provisioning
+  and teardown share `egressBackend.desiredObjects`. Enablement is the `envoy` type in the
+  `RuntimeProfile`.
+- **Routing lock ⇄ ClusterIP ⇄ DNS are coupled:** the agent lock denies DNS, so the agent
+  must reach Envoy by ClusterIP (`status.egressProxyEndpoint`, resolved before the Job is
+  built and consumed by `../job`'s `agentEnvoyProxyURL`). Changing any one — the lock's
+  allowed peer, the endpoint form, or the agent proxy env — requires changing the others.
+  The Envoy backstop's `EgressBackstopCIDRs` must always keep DNS reachable (dedicated rule)
+  or Envoy can't resolve upstreams.
 
 ## Build / test / run / validate
 

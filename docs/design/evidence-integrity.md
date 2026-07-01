@@ -78,7 +78,7 @@ Adversarial-grade **for governed egress** under these stated assumptions — nev
 2. **The agent pod is unprivileged** — `drop ALL`, `seccomp: RuntimeDefault`, no `CAP_NET_ADMIN`. (Explicit proxy adds nothing privileged, so this is easy to hold.)
 3. **DNS is governed** — resolved at Envoy; direct DNS egress denied.
 4. **The node / CNI is not compromised** — a strictly higher threat tier, explicitly out of scope. The guarantee is "the agent can't tamper without escaping to the node."
-5. **The CNI enforces egress `NetworkPolicy`** (Calico/Cilium do; document the requirement).
+5. **The CNI enforces egress `NetworkPolicy`** — required; Calico/Cilium and kindnet all do. The routing lock is verified against a CNI matrix (kindnet + Calico) by the generic networking e2e suite. Document the requirement for operators.
 6. **Interim coverage is HTTP/S (L7) + client-`CONNECT`-tunneled TCP**; raw non-HTTP L4 is fail-closed until #64.
 
 This closes the *cooperative → adversarial* gap for governed egress. Syscall/file observation (eBPF/Tetragon) remains a separate future `observed` source, out of scope here.
@@ -91,8 +91,8 @@ Envoy is the shared substrate. #8 delivers the non-bypassable per-session Envoy 
 
 Each increment is an independently reviewable, `make test`-verifiable GitHub issue under #8.
 
-- **Slice A ([#60]) — per-session Envoy egress proxy.** Controller creates a per-session Envoy pod (own SA/identity, owner-referenced, torn down with the session) behind a placement interface; inject explicit-proxy env into the agent container. Routing mechanism behind a backend interface (interim: explicit proxy).
-- **Slice B ([#61]) — mandatory routing (default-deny egress NetworkPolicy).** Routing lock (allow only Envoy + reporter), deny direct DNS, and hard backstops (metadata, cluster-internal). No privileged init container in the explicit-proxy path.
+- **Slice A ([#60]) — per-session Envoy egress proxy. ✅ landed.** Controller creates a per-session Envoy pod (own SA/identity, owner-referenced, torn down with the session) behind the `egressBackend` interface; inject explicit-proxy env into the agent container. Routing mechanism behind a backend interface (interim: explicit proxy). Envoy emits a stdout access log (traversal evidence + Slice C seed).
+- **Slice B ([#61]) — mandatory routing (default-deny egress NetworkPolicy). ✅ landed.** Agent-pod routing lock (allow only the session's Envoy pod; deny direct DNS — the agent reaches Envoy by ClusterIP via `status.egressProxyEndpoint`, Envoy resolves), plus a hard backstop on the Envoy pod (allow DNS + internet EXCEPT cloud-metadata/operator CIDRs, configurable via `--egress-backstop-cidrs`). No privileged init container. Proven on kindnet + Calico via the CNI-generic networking e2e suite.
 - **Slice C ([#62]) — `observed` evidence.** Envoy stamps egress evidence `observed`; `internal/reporter/normalize.go` accepts `observed` only from Envoy's authenticated identity.
 - **Slice D ([#63]) — opt-in + docs.** `RuntimeProfile` toggle; optional SA-token re-enable for agents that need API access; precise docs (never "tamper-proof" without the §5 boundaries).
 - **Future epic ([#64]) — transparent node interceptor.** A portable, node-level (DaemonSet/eBPF) transparent-redirect backend that preserves the original destination unforgeably and removes the explicit-proxy app-compat gap for *all* protocols. Same trust model, added behind the routing backend interface. Not required for the #8 guarantee.
@@ -101,9 +101,8 @@ Order: A → B → C → D; #64 later. Slice A is the first code increment.
 
 ## 8. Open questions / design gaps
 
-Resolved: routing mechanism (explicit proxy interim; transparency via the portable node-interceptor epic #64, not a Cilium baseline); placement (per-session first, per-node later behind the interface).
+Resolved: routing mechanism (explicit proxy interim; transparency via the portable node-interceptor epic #64, not a Cilium baseline); placement (per-session first, per-node later behind the interface). **Hard-backstop CIDR list (Slice B)** — resolved: the Envoy-pod backstop denies `169.254.0.0/16` (cloud metadata) by default and is extended with environment-specific cluster/service/API CIDRs via `--egress-backstop-cidrs`; `ipBlock` `except` targets cluster-external IPs (per the NetworkPolicy spec), so pod-to-pod egress is governed by the routing lock's podSelector rules, not the backstop.
 
 Remaining, smaller:
-1. **Hard-backstop CIDR list** — exact denies (cloud metadata, cluster/service CIDR, kube-API) are environment-specific; make them configurable with safe defaults.
-2. **Non-HTTP L4 in the interim** — decided: **deny by default (fail-closed)**; broad L4 transparency is delivered by #64 (a `CONNECT`-tunnel escape hatch for specific tools may be offered if needed).
-3. **L4 evidence schema** — does the existing `PolicyDecision`/`PolicyViolation`/event schema capture connection-level evidence (5-tuple, bytes, duration), or does #64 need a schema extension? Assess during Slice C / #64.
+1. **Non-HTTP L4 in the interim** — decided: **deny by default (fail-closed)**; broad L4 transparency is delivered by #64 (a `CONNECT`-tunnel escape hatch for specific tools may be offered if needed).
+2. **L4 evidence schema** — does the existing `PolicyDecision`/`PolicyViolation`/event schema capture connection-level evidence (5-tuple, bytes, duration), or does #64 need a schema extension? Assess during Slice C / #64.
