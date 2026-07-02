@@ -57,12 +57,21 @@ func (explicitProxyEgressBackend) manages(profile *scrutineerv1alpha1.RuntimePro
 func (explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.AgentSession) []client.Object {
 	ns := session.Namespace
 	name := session.Name
-	// The Pod runs as its dedicated per-session ServiceAccount (envoy.ResourceName).
+	// The Pod runs as its dedicated per-session ServiceAccount (envoy.ResourceName). The
+	// egress-reporter container beside Envoy submits observed evidence with that
+	// identity's projected token (Slice C, #62); URL/audience come from the job package
+	// because envoy cannot import it back.
 	return []client.Object{
 		envoy.ServiceAccount(name, ns),
 		envoy.ConfigMap(name, ns),
 		envoy.Service(name, ns),
-		envoy.Pod(name, ns, envoy.ResourceName(name), envoy.DefaultEnvoyImage),
+		envoy.Pod(name, ns, envoy.PodConfig{
+			ServiceAccount:   envoy.ResourceName(name),
+			Image:            envoy.DefaultEnvoyImage,
+			ReporterImage:    envoy.DefaultEgressReporterImage,
+			ReporterURL:      scrutineerjob.DefaultReporterURL,
+			ReporterAudience: scrutineerjob.ReporterTokenAudience,
+		}),
 	}
 }
 

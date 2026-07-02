@@ -91,6 +91,26 @@ var _ = Describe("Per-session Envoy egress proxy", func() {
 		Expect(svc.Spec.Ports).To(HaveLen(1))
 		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(envoy.ProxyPort)))
 
+		// Slice C: the egress-reporter container rides beside Envoy with the projected
+		// per-session token — the identity behind observed evidence.
+		podContainers := map[string]corev1.Container{}
+		for _, c := range pod.Spec.Containers {
+			podContainers[c.Name] = c
+		}
+		Expect(podContainers).To(HaveKey("egress-reporter"))
+		Expect(podContainers["egress-reporter"].Image).To(Equal(envoy.DefaultEgressReporterImage))
+		var hasToken bool
+		for _, v := range pod.Spec.Volumes {
+			if v.Projected != nil {
+				for _, src := range v.Projected.Sources {
+					if src.ServiceAccountToken != nil && src.ServiceAccountToken.Audience == scrutineerjob.ReporterTokenAudience {
+						hasToken = true
+					}
+				}
+			}
+		}
+		Expect(hasToken).To(BeTrue(), "expected a projected reporter-audience token volume on the Envoy pod")
+
 		// The controller resolves the Envoy Service ClusterIP into status and points the
 		// agent at that IP (not a DNS name) so it needs no DNS under the routing lock.
 		Eventually(func(g Gomega) {

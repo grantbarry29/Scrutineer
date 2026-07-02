@@ -45,6 +45,31 @@ const (
 // docs/design/evidence-integrity.md §8) and are added by operators via configuration.
 var DefaultBackstopCIDRs = []string{"169.254.0.0/16"}
 
+// Reporter endpoint identity for the backstop's evidence-channel allow rule. Kept in
+// sync with job.DefaultReporterURL (scrutineer-controller-reporter.scrutineer-system
+// .svc:8088) — the observed-evidence channel (Slice C, #62) must survive any operator
+// backstop CIDRs, so the Envoy pod always keeps this explicit allow.
+const (
+	ReporterNamespace = "scrutineer-system"
+	ReporterPort      = 8088
+)
+
+// reporterEgressRule allows the egress-proxy pod to reach the reporter namespace on the
+// reporter port regardless of backstopped CIDRs (NetworkPolicy rules are additive
+// allows; namespace-selector peers are unaffected by ipBlock excepts).
+func reporterEgressRule() networkingv1.NetworkPolicyEgressRule {
+	port := intstr.FromInt32(ReporterPort)
+	tcp := corev1.ProtocolTCP
+	return networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{{
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"kubernetes.io/metadata.name": ReporterNamespace},
+			},
+		}},
+		Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &port}},
+	}
+}
+
 // HasCIDRRules reports whether policy contains CIDR hints this backend can render.
 func HasCIDRRules(rules scrutineerv1alpha1.PolicyRules) bool {
 	return len(rules.AllowedCIDRs) > 0 || len(rules.DeniedCIDRs) > 0
@@ -97,6 +122,9 @@ func BuildEgressProxyBackstop(ctx enforcement.SessionContext, backstopCIDRs []st
 				// Keep DNS reachable even if cluster ranges are backstopped, so Envoy can
 				// still resolve upstreams.
 				dnsEgressRule(),
+				// Keep the observed-evidence channel to the reporter open regardless of
+				// backstopped CIDRs (Slice C, #62).
+				reporterEgressRule(),
 				{To: []networkingv1.NetworkPolicyPeer{{
 					IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: cidrs},
 				}}},

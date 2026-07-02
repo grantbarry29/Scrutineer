@@ -138,6 +138,37 @@ func TestBuildEgressProxyBackstop(t *testing.T) {
 	}
 }
 
+// The backstop must never sever the evidence channel: even when operators backstop
+// cluster/service CIDRs, the Envoy pod keeps an explicit allow to the reporter namespace
+// on the reporter port so observed evidence (Slice C, #62) still flows.
+func TestBuildEgressProxyBackstop_alwaysAllowsReporter(t *testing.T) {
+	ctx := enforcement.SessionContext{SessionNamespace: "team-a", SessionName: "demo"}
+	// Backstop the entire service+pod space — the worst case for the evidence channel.
+	np := BuildEgressProxyBackstop(ctx, []string{"10.0.0.0/8", "192.168.0.0/16"})
+	if np == nil {
+		t.Fatal("expected a backstop NetworkPolicy")
+	}
+	found := false
+	for _, rule := range np.Spec.Egress {
+		for _, to := range rule.To {
+			if to.NamespaceSelector == nil {
+				continue
+			}
+			if to.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != ReporterNamespace {
+				continue
+			}
+			for _, p := range rule.Ports {
+				if p.Port != nil && p.Port.IntValue() == ReporterPort {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("backstop must allow the reporter namespace on port %d: %+v", ReporterPort, np.Spec.Egress)
+	}
+}
+
 func TestDefaultBackstopCIDRs_denyMetadata(t *testing.T) {
 	ctx := enforcement.SessionContext{SessionNamespace: "ns", SessionName: "s"}
 	np := BuildEgressProxyBackstop(ctx, DefaultBackstopCIDRs)
