@@ -48,6 +48,37 @@ func TestEvaluateEgress_dryRunDeniedDomain(t *testing.T) {
 	}
 }
 
+// Shared wildcard semantics (#32): the dns-proxy now honors "*." patterns too, so it
+// agrees with the Envoy path. Exact entries still do not cover subdomains.
+func TestEvaluateEgress_wildcardDomains(t *testing.T) {
+	denyCtx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
+		DeniedDomains: []string{"*.evil.example"},
+	})
+	if auth := EvaluateEgress(denyCtx, EgressRequest{Host: "c2.evil.example"}); auth.Allowed || auth.Reason != ReasonDeniedDomains {
+		t.Fatalf("wildcard deny subdomain: got %+v", auth)
+	}
+	if auth := EvaluateEgress(denyCtx, EgressRequest{Host: "evil.example"}); !auth.Allowed {
+		t.Fatalf("wildcard must not match apex: got %+v", auth)
+	}
+
+	allowCtx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
+		AllowedDomains: []string{"*.github.com"},
+	})
+	if auth := EvaluateEgress(allowCtx, EgressRequest{Host: "api.github.com"}); !auth.Allowed {
+		t.Fatalf("wildcard allow subdomain: got %+v", auth)
+	}
+	if auth := EvaluateEgress(allowCtx, EgressRequest{Host: "api.gitlab.com"}); auth.Allowed || auth.Reason != ReasonNotInAllowedDomains {
+		t.Fatalf("wildcard allowlist must deny others: got %+v", auth)
+	}
+	// Exact entry still does not cover subdomains.
+	exactCtx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
+		AllowedDomains: []string{"github.com"},
+	})
+	if auth := EvaluateEgress(exactCtx, EgressRequest{Host: "api.github.com"}); auth.Allowed {
+		t.Fatalf("exact entry must not cover subdomain: got %+v", auth)
+	}
+}
+
 func TestEvaluateEgress_allowlistDomain(t *testing.T) {
 	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		AllowedDomains: []string{"github.com"},

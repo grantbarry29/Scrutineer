@@ -75,10 +75,12 @@ func EvaluateEgress(ctx enforcement.SessionContext, req EgressRequest) EgressAut
 
 func evaluateDomain(ctx enforcement.SessionContext, domain string) EgressAuthorization {
 	rules := ctx.Policy
-	if containsStringFold(rules.DeniedDomains, domain) {
+	// Shared FQDN semantics (exact + "*." wildcard) so the dns-proxy, the out-of-pod
+	// Envoy's generated RBAC, and the egress-reporter's evidence all agree (#32).
+	if enforcement.MatchDomain(rules.DeniedDomains, domain) {
 		return authorize(ctx.Mode, true, ReasonDeniedDomains)
 	}
-	if len(rules.AllowedDomains) > 0 && !containsStringFold(rules.AllowedDomains, domain) {
+	if len(rules.AllowedDomains) > 0 && !enforcement.MatchDomain(rules.AllowedDomains, domain) {
 		return authorize(ctx.Mode, true, ReasonNotInAllowedDomains)
 	}
 	return allowed()
@@ -110,15 +112,6 @@ func allowed() EgressAuthorization {
 		},
 		Reason: ReasonAllowed,
 	}
-}
-
-func containsStringFold(list []string, value string) bool {
-	for _, item := range list {
-		if strings.EqualFold(strings.TrimSpace(item), value) {
-			return true
-		}
-	}
-	return false
 }
 
 func matchesAnyCIDR(ip net.IP, cidrs []string) bool {
