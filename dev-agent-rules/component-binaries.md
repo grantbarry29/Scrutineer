@@ -14,6 +14,7 @@ Each of these is a separately built/deployed component and keeps a README at its
 | dns-proxy sidecar | `cmd/dns-proxy` | `Dockerfile.dns-proxy` | `ghcr.io/grantbarry29/scrutineer-dns-proxy` | `make docker-build-dns-proxy` / `kind-load-dns-proxy` | `internal/enforcement/dnsproxy` |
 | tool-gateway sidecar | `cmd/tool-gateway` | `Dockerfile.tool-gateway` | `ghcr.io/grantbarry29/scrutineer-tool-gateway` | `make docker-build-tool-gateway` / `kind-load-tool-gateway` | `internal/enforcement/toolgateway` |
 | fs-gateway sidecar | `cmd/fs-gateway` | `Dockerfile.fs-gateway` | `ghcr.io/grantbarry29/scrutineer-fs-gateway` | `make docker-build-fs-gateway` / `kind-load-fs-gateway` | `internal/enforcement/workspace` |
+| egress-reporter (runs beside Envoy in the egress-proxy pod, NOT an in-agent-pod sidecar) | `cmd/egress-reporter` | `Dockerfile.egress-reporter` | `ghcr.io/grantbarry29/scrutineer-egress-reporter` | `make docker-build-egress-reporter` / `kind-load-egress-reporter` | `internal/enforcement/envoy` |
 
 ## Conventions a binary README must capture
 

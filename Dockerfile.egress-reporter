@@ -1,0 +1,22 @@
+# Build the egress-reporter binary (runs beside Envoy in the per-session egress-proxy pod).
+FROM golang:1.23 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY cmd/egress-reporter/ cmd/egress-reporter/
+COPY api/ api/
+COPY internal/ internal/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o egress-reporter ./cmd/egress-reporter
+
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/egress-reporter .
+USER 65532:65532
+
+ENTRYPOINT ["/egress-reporter"]

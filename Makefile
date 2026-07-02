@@ -53,7 +53,7 @@ verify-samples: manifests install ## Server-side dry-run of config/samples manif
 	done
 
 .PHONY: test-e2e-images
-test-e2e-images: kind-load kind-load-dns-proxy kind-load-tool-gateway kind-load-fs-gateway kind-load-envoy ## Build and load controller + sidecar images into kind (e2e live-evidence prereq).
+test-e2e-images: kind-load kind-load-dns-proxy kind-load-tool-gateway kind-load-fs-gateway kind-load-envoy kind-load-egress-reporter ## Build and load controller + sidecar images into kind (e2e live-evidence prereq).
 
 # The e2e suite is split by Ginkgo label into two:
 #   - standard: controller logic, CRDs, evidence — everything NOT labeled "networking".
@@ -200,6 +200,15 @@ docker-build-fs-gateway: ## Build the fs-gateway sidecar image.
 
 kind-load-fs-gateway: docker-build-fs-gateway ## Build and load fs-gateway image into kind.
 	kind load docker-image $(FS_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
+
+.PHONY: docker-build-egress-reporter kind-load-egress-reporter
+EGRESS_REPORTER_IMG ?= ghcr.io/grantbarry29/scrutineer-egress-reporter:latest
+
+docker-build-egress-reporter: ## Build the egress-reporter image (runs beside Envoy in the egress-proxy pod).
+	$(CONTAINER_TOOL) build -f Dockerfile.egress-reporter -t ${EGRESS_REPORTER_IMG} .
+
+kind-load-egress-reporter: docker-build-egress-reporter ## Build and load egress-reporter image into kind.
+	kind load docker-image $(EGRESS_REPORTER_IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: kind-load-envoy
 # The per-session egress proxy uses the upstream Envoy image (no first-party build);
