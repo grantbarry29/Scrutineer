@@ -20,10 +20,12 @@ import "fmt"
 // internal_address_config is set to trust no addresses: as a forward proxy we never honor
 // a client-supplied X-Forwarded-For, and it also silences Envoy's default-trust warning.
 //
-// A stdout access log records every proxied request (method + authority + response), which
-// (a) proves in the Slice A e2e that agent egress actually traverses Envoy and (b) is the
-// seed of the `observed` egress evidence in Slice C (#62). The `%%` are fmt escapes for
-// Envoy command operators; the rendered config contains single `%`.
+// Two access logs record every proxied request: a human-readable stdout log (kubectl-logs
+// visibility; also the Slice A e2e traversal proof) and a JSON file log at AccessLogPath in
+// the shared access-log volume, tailed by the egress-reporter container and converted into
+// `observed` egress evidence (Slice C, #62 — keys must stay in sync with AccessLogEntry).
+// json_format renders numeric operators as JSON numbers/null, never "-" placeholders. The
+// `%%` are fmt escapes for Envoy command operators; the rendered config contains single `%`.
 //
 // Validated with `envoy --mode validate` (Envoy 1.31). Full CONNECT/forward-proxy behavior
 // is proven by the Slice A e2e (issue #60, A4), not by unit tests.
@@ -53,6 +55,20 @@ static_resources:
               log_format:
                 text_format_source:
                   inline_string: "scrutineer-egress %%REQ(:METHOD)%% %%REQ(:AUTHORITY)%% -> %%RESPONSE_CODE%% %%RESPONSE_FLAGS%%\n"
+          - name: envoy.access_loggers.file
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+              path: %s
+              log_format:
+                json_format:
+                  method: "%%REQ(:METHOD)%%"
+                  authority: "%%REQ(:AUTHORITY)%%"
+                  response_code: "%%RESPONSE_CODE%%"
+                  flags: "%%RESPONSE_FLAGS%%"
+                  bytes_sent: "%%BYTES_SENT%%"
+                  bytes_received: "%%BYTES_RECEIVED%%"
+                  duration_ms: "%%DURATION%%"
+                  start_time: "%%START_TIME%%"
           internal_address_config:
             cidr_ranges: []
           upgrade_configs:
@@ -95,5 +111,5 @@ static_resources:
         dns_cache_config:
           name: dynamic_forward_proxy_cache_config
           dns_lookup_family: V4_ONLY
-`, port)
+`, port, AccessLogPath)
 }
