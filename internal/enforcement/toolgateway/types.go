@@ -17,8 +17,8 @@ import (
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
-// SidecarType is the RuntimeProfile sidecar type for tool gateways.
-const SidecarType = "tool-gateway"
+// EnforcementType is the RuntimeProfile enforcement entry type for the tool-gateway in-pod sidecar.
+const EnforcementType = "tool-gateway"
 
 // ToolRequest is metadata for a single tool invocation observed at the gateway.
 type ToolRequest struct {

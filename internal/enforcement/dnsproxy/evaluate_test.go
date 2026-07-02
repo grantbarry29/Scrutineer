@@ -123,14 +123,14 @@ func TestEvaluateEgress_emptyHost(t *testing.T) {
 func TestHasEnabledSidecar(t *testing.T) {
 	disabled := false
 	ctx := enforcement.SessionContext{
-		Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
-			{Type: SidecarType, Enabled: &disabled},
+		Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
+			{Type: EnforcementType, Enabled: &disabled},
 		},
 	}
 	if HasEnabledSidecar(ctx) {
 		t.Fatal("disabled sidecar should not count")
 	}
-	ctx.Sidecars[0].Enabled = nil
+	ctx.Enforcement[0].Enabled = nil
 	if !HasEnabledSidecar(ctx) {
 		t.Fatal("nil enabled should default to enabled")
 	}

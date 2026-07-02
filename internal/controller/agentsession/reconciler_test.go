@@ -216,10 +216,10 @@ var _ = Describe("AgentSession reconciler", func() {
 			rp := &scrutineerv1alpha1.RuntimeProfile{
 				ObjectMeta: metav1.ObjectMeta{Name: "with-sidecars", Namespace: ns},
 				Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-					Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
-						{Name: "egress-dns", Type: scrutineerjob.SidecarTypeDNSProxy, Enabled: &enabled},
-						{Name: "tool-gw", Type: scrutineerjob.SidecarTypeToolGateway, Enabled: &enabled},
-						{Name: "envoy-off", Type: scrutineerjob.SidecarTypeEnvoy, Enabled: &disabled},
+					Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
+						{Name: "egress-dns", Type: scrutineerjob.EnforcementTypeDNSProxy, Enabled: &enabled},
+						{Name: "tool-gw", Type: scrutineerjob.EnforcementTypeToolGateway, Enabled: &enabled},
+						{Name: "envoy-off", Type: scrutineerjob.EnforcementTypeEnvoy, Enabled: &disabled},
 						{Name: "custom", Type: "unknown-sidecar", Enabled: &enabled},
 					},
 				},
@@ -265,8 +265,8 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.RuntimeProfile{
 				ObjectMeta: metav1.ObjectMeta{Name: "egress-profile", Namespace: ns},
 				Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-					Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-						Name: "egress-dns", Type: scrutineerjob.SidecarTypeDNSProxy, Enabled: &enabled,
+					Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+						Name: "egress-dns", Type: scrutineerjob.EnforcementTypeDNSProxy, Enabled: &enabled,
 					}},
 				},
 			})).To(Succeed())

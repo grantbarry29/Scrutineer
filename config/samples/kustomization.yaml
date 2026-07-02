@@ -4,7 +4,7 @@ resources:
 - scrutineer_v1alpha1_approvalpolicy.yaml
 - scrutineer_v1alpha1_approvalrequest.yaml
 - scrutineer_v1alpha1_runtimeprofile.yaml
-- scrutineer_v1alpha1_runtimeprofile_sidecars.yaml
+- scrutineer_v1alpha1_runtimeprofile_enforcement.yaml
 - scrutineer_v1alpha1_agentsession.yaml
 - scrutineer_v1alpha1_agentsession_failing.yaml
 - scrutineer_v1alpha1_agentsession_cancel.yaml
@@ -12,4 +12,4 @@ resources:
 - scrutineer_v1alpha1_agentsession_policy_ref.yaml
 - scrutineer_v1alpha1_agentsession_toolpolicy_ref.yaml
 - scrutineer_v1alpha1_agentsession_runtimeprofile_ref.yaml
-- scrutineer_v1alpha1_agentsession_runtimeprofile_sidecars.yaml
+- scrutineer_v1alpha1_agentsession_runtimeprofile_enforcement.yaml

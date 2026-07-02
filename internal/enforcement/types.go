@@ -44,7 +44,7 @@ type SessionContext struct {
 	PodName          string
 	Mode             scrutineerv1alpha1.PolicyMode
 	Policy           scrutineerv1alpha1.PolicyRules
-	Sidecars         []scrutineerv1alpha1.RuntimeProfileSidecar
+	Enforcement      []scrutineerv1alpha1.RuntimeProfileEnforcement
 }
 
 // RuntimeReport is evidence produced by a data-plane backend for controller aggregation.

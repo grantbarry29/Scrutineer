@@ -125,7 +125,7 @@ classDiagram
     class RuntimeProfile {
       spec.container_security
       spec.pod_security_runtimeClassName
-      spec.sidecars[]
+      spec.enforcement[]
     }
     class PolicyRules {
       allowedDomains_deniedDomains

@@ -34,8 +34,8 @@ func envoyProfile(ns, name string) *scrutineerv1alpha1.RuntimeProfile {
 	rp := &scrutineerv1alpha1.RuntimeProfile{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
-				{Name: "envoy", Type: scrutineerjob.SidecarTypeEnvoy, Enabled: &enabled},
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
+				{Name: "envoy", Type: scrutineerjob.EnforcementTypeEnvoy, Enabled: &enabled},
 			},
 		},
 	}

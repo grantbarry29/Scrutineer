@@ -19,8 +19,8 @@ import (
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
-// SidecarType is the RuntimeProfile sidecar type for DNS/egress proxies.
-const SidecarType = "dns-proxy"
+// EnforcementType is the RuntimeProfile enforcement entry type for the dns-proxy in-pod sidecar.
+const EnforcementType = "dns-proxy"
 
 // DefaultBindAddr is the in-pod listen address for the egress proxy.
 const DefaultBindAddr = "127.0.0.1:15053"

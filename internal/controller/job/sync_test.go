@@ -94,11 +94,11 @@ func TestRuntimeProfileDrift_sidecarEnv(t *testing.T) {
 	dns := Build(minimalSession(), &Task{}, &policy.Resolved{
 		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
 		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
-	}, profileWithSidecar(SidecarTypeDNSProxy))
+	}, profileWithSidecar(EnforcementTypeDNSProxy))
 	dns2 := Build(minimalSession(), &Task{}, &policy.Resolved{
 		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
 		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"other.example"}},
-	}, profileWithSidecar(SidecarTypeDNSProxy))
+	}, profileWithSidecar(EnforcementTypeDNSProxy))
 	if !RuntimeProfileDrift(dns, dns2) {
 		t.Fatal("expected drift when sidecar policy env differs")
 	}

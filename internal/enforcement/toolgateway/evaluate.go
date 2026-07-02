@@ -49,8 +49,8 @@ func HasToolPolicy(rules scrutineerv1alpha1.PolicyRules) bool {
 
 // HasEnabledSidecar reports whether the session context includes an enabled tool-gateway sidecar.
 func HasEnabledSidecar(ctx enforcement.SessionContext) bool {
-	for _, s := range ctx.Sidecars {
-		if s.Type != SidecarType {
+	for _, s := range ctx.Enforcement {
+		if s.Type != EnforcementType {
 			continue
 		}
 		if s.Enabled == nil || *s.Enabled {

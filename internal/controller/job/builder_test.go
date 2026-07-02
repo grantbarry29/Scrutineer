@@ -36,8 +36,8 @@ func TestBuildPodTemplateSpec(t *testing.T) {
 	}
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
-				{Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled},
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
+				{Name: "egress", Type: EnforcementTypeDNSProxy, Enabled: &enabled},
 			},
 		},
 	}

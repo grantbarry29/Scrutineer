@@ -60,7 +60,7 @@ lives in [`docs/design/`](docs/design/) and component `README.md`s.
 1. Defines namespaced CRDs (`scrutineer.sh/v1alpha1`): `AgentSession`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`, `ApprovalRequest`.
 2. Reconciles each `AgentSession` into a runtime object named `scrutineer-session-<name>`, owned by the session, behind a backend-neutral `runtimeBackend` interface: a `batch/v1` Job (`kubernetes-job`, default) or a bare `v1` Pod (`kubernetes-pod`). `status.runtimeRef` records which object was created.
 3. Merges reusable policies (`spec.policyRefs`) with inline `spec.policy` overrides → `status.effectivePolicy`, `status.policyDecisions`, and `AGENT_POLICY_*` env vars.
-4. Applies optional `RuntimeProfile` hardening and injects enabled enforcement sidecars into the Job pod template via `spec.runtimeProfileRef` / `spec.sidecars[]`.
+4. Applies optional `RuntimeProfile` hardening and enables data-plane enforcement backends via `spec.runtimeProfileRef` / `spec.enforcement[]` (in-pod sidecars injected into the Job pod template; the `envoy` type provisions a per-session out-of-pod egress proxy).
 5. Tracks lifecycle in `status.phase` and structured `status.conditions` (including aggregate `Ready`), emits Kubernetes Events, supports cancellation and finalizer-gated deletion.
 6. Gates sensitive actions behind **human approval** (`ApprovalPolicy` → `AwaitingApproval` → grant/deny), including **mid-execution per-tool approval holds** and an opt-in mutating webhook that stamps the authenticated approver identity.
 
@@ -196,7 +196,7 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 | `status.matchedRuntimeProfile` | Which `RuntimeProfile` was applied (name, UID, resourceVersion) |
 | `RuntimeProfileResolved` condition | `ProfileApplied` when a ref resolves; `NoProfileRef` when unset |
 
-**Enforcement sidecars:** enabled `spec.sidecars[]` entries are injected into the Job pod template. **dns-proxy** (`ghcr.io/grantbarry29/scrutineer-dns-proxy`), **tool-gateway** (`ghcr.io/grantbarry29/scrutineer-tool-gateway`), and **fs-gateway** (`ghcr.io/grantbarry29/scrutineer-fs-gateway`) use first-party images (build: `make docker-build-<name>`; load into kind: `make kind-load-<name>`) and enforce network / tool / file policy respectively. `envoy` still uses a placeholder `busybox` image until its image ships. See the per-sidecar READMEs under [`cmd/`](cmd/).
+**Enforcement backends (`spec.enforcement[]`):** **dns-proxy** (`ghcr.io/grantbarry29/scrutineer-dns-proxy`), **tool-gateway** (`ghcr.io/grantbarry29/scrutineer-tool-gateway`), and **fs-gateway** (`ghcr.io/grantbarry29/scrutineer-fs-gateway`) are injected into the Job pod template as first-party in-pod sidecars (build: `make docker-build-<name>`; load into kind: `make kind-load-<name>`) enforcing network / tool / file policy respectively. **envoy** provisions a per-session out-of-pod egress proxy (upstream `envoyproxy/envoy` + the first-party `scrutineer-egress-reporter` for `observed` evidence) — see `docs/design/evidence-integrity.md`. Per-binary READMEs live under [`cmd/`](cmd/).
 
 **Runtime reporter wiring (Phase 3b):** when any enabled enforcement sidecar is present, the Job pod template also includes:
 
@@ -468,7 +468,7 @@ When a referenced policy changes:
 
 ### Runtime profile resolution
 
-When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` (same namespace) and merges container/pod security fields plus enabled `spec.sidecars[]` into the Job template. Profile drift (including sidecar changes) follows the same pending-Job-replace rules as policy env drift.
+When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` (same namespace) and merges container/pod security fields plus enabled `spec.enforcement[]` into the Job template (in-pod types as sidecar containers; the `envoy` type as an out-of-pod proxy). Profile drift (including enforcement changes) follows the same pending-Job-replace rules as policy env drift.
 
 ### Job lifecycle (`internal/controller/job`)
 
@@ -783,7 +783,7 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/scrutineer_*.
 | `status.policyDecisions` | Yes | Merge-time + runtime decisions (max 64) |
 | Policy / profile change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
-| Sidecar injection (`spec.sidecars`) | Yes | First-party `dns-proxy` / `tool-gateway` / `fs-gateway`; `envoy` placeholder until its image ships |
+| Enforcement backends (`spec.enforcement`) | Yes | First-party in-pod `dns-proxy` / `tool-gateway` / `fs-gateway`; out-of-pod `envoy` egress proxy with `observed` evidence |
 | **Network egress enforcement** | Yes (cooperative) | [dns-proxy](cmd/dns-proxy/): allow/deny domains + CIDRs |
 | **Tool-call enforcement** | Yes (cooperative) | [tool-gateway](cmd/tool-gateway/): allow/deny tools, caps, argument constraints |
 | **File-access enforcement** | Yes (cooperative) | [fs-gateway](cmd/fs-gateway/): allow/deny paths, size cap |

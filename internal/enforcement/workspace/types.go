@@ -14,8 +14,8 @@ package workspace
 
 import "github.com/grantbarry29/scrutineer/internal/enforcement"
 
-// SidecarType is the RuntimeProfile sidecar type for FS gateways.
-const SidecarType = "fs-gateway"
+// EnforcementType is the RuntimeProfile enforcement entry type for the fs-gateway in-pod sidecar.
+const EnforcementType = "fs-gateway"
 
 // DefaultFSGatewayImage is the first-party fs-gateway container image reference.
 const DefaultFSGatewayImage = "ghcr.io/grantbarry29/scrutineer-fs-gateway:latest"

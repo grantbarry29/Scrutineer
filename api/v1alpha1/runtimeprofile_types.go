@@ -39,10 +39,13 @@ type RuntimeProfileSpec struct {
 	// +optional
 	Pod *RuntimeProfilePodSpec `json:"pod,omitempty"`
 
-	// Sidecars lists optional data-plane sidecars injected when enabled (dns-proxy, tool-gateway, envoy).
-	// Schema only in Phase 2 — the controller does not inject these containers yet.
+	// Enforcement lists the data-plane enforcement backends enabled for sessions using
+	// this profile. Placement depends on the type: dns-proxy, tool-gateway, and
+	// fs-gateway are injected as cooperative in-pod sidecar containers (self-reported
+	// evidence), while envoy provisions a per-session out-of-pod egress proxy in its own
+	// pod and identity (observed evidence) — see docs/design/evidence-integrity.md.
 	// +optional
-	Sidecars []RuntimeProfileSidecar `json:"sidecars,omitempty"`
+	Enforcement []RuntimeProfileEnforcement `json:"enforcement,omitempty"`
 }
 
 // RuntimeProfileContainerSpec mirrors a subset of corev1.SecurityContext for agent containers.
@@ -76,18 +79,20 @@ type RuntimeProfilePodSpec struct {
 	SeccompProfile *corev1.SeccompProfile `json:"seccompProfile,omitempty"`
 }
 
-// RuntimeProfileSidecar describes a sidecar to inject alongside the agent when enabled.
-type RuntimeProfileSidecar struct {
-	// Name is a unique identifier for this sidecar within the profile.
+// RuntimeProfileEnforcement enables one data-plane enforcement backend for sessions
+// using the profile. Unknown types are ignored (forward compatibility for new backends).
+type RuntimeProfileEnforcement struct {
+	// Name is a unique identifier for this entry within the profile; it also names the
+	// injected container for in-pod types.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Type identifies the sidecar role. Known values: envoy, dns-proxy, tool-gateway, fs-gateway.
-	// Additional types may be added when enforcement backends ship.
+	// Type identifies the enforcement backend. Known values: dns-proxy, tool-gateway,
+	// fs-gateway (in-pod sidecars) and envoy (out-of-pod per-session egress proxy).
 	// +kubebuilder:validation:MinLength=1
 	Type string `json:"type"`
 
-	// Enabled gates whether the sidecar should be injected when injection is implemented.
+	// Enabled gates the backend; nil means enabled.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 }

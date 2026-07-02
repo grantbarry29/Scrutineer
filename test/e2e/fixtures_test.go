@@ -414,9 +414,9 @@ func createRuntimeProfileWithToolGateway(ctx context.Context, namespace, name st
 			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				AllowPrivilegeEscalation: boolPtr(false),
 			},
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
 				Name:    "tools",
-				Type:    scrutineerjob.SidecarTypeToolGateway,
+				Type:    scrutineerjob.EnforcementTypeToolGateway,
 				Enabled: &enabled,
 			}},
 		},
@@ -438,9 +438,9 @@ func createRuntimeProfileWithDNSProxy(ctx context.Context, namespace, name strin
 			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				AllowPrivilegeEscalation: boolPtr(false),
 			},
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
 				Name:    "egress",
-				Type:    scrutineerjob.SidecarTypeDNSProxy,
+				Type:    scrutineerjob.EnforcementTypeDNSProxy,
 				Enabled: &enabled,
 			}},
 		},
@@ -463,9 +463,9 @@ func createRuntimeProfileWithEnvoy(ctx context.Context, namespace, name string) 
 			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				AllowPrivilegeEscalation: boolPtr(false),
 			},
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
 				Name:    "envoy",
-				Type:    scrutineerjob.SidecarTypeEnvoy,
+				Type:    scrutineerjob.EnforcementTypeEnvoy,
 				Enabled: &enabled,
 			}},
 		},
@@ -487,9 +487,9 @@ func createRuntimeProfileWithFSGateway(ctx context.Context, namespace, name stri
 			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				AllowPrivilegeEscalation: boolPtr(false),
 			},
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
 				Name:    "files",
-				Type:    scrutineerjob.SidecarTypeFSGateway,
+				Type:    scrutineerjob.EnforcementTypeFSGateway,
 				Enabled: &enabled,
 			}},
 		},

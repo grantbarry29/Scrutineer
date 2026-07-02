@@ -115,8 +115,8 @@ func TestBackend_metadata(t *testing.T) {
 func TestHasEnabledSidecar(t *testing.T) {
 	disabled := false
 	ctx := enforcement.SessionContext{
-		Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
-			{Type: SidecarType, Enabled: &disabled},
+		Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
+			{Type: EnforcementType, Enabled: &disabled},
 		},
 	}
 	if HasEnabledSidecar(ctx) {

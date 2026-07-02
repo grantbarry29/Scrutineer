@@ -33,8 +33,8 @@ func NewSessionContext(session *scrutineerv1alpha1.AgentSession, profile *scruti
 		ctx.Policy = ep.PolicyRules
 	}
 
-	if profile != nil && len(profile.Spec.Sidecars) > 0 {
-		ctx.Sidecars = append([]scrutineerv1alpha1.RuntimeProfileSidecar(nil), profile.Spec.Sidecars...)
+	if profile != nil && len(profile.Spec.Enforcement) > 0 {
+		ctx.Enforcement = append([]scrutineerv1alpha1.RuntimeProfileEnforcement(nil), profile.Spec.Enforcement...)
 	}
 
 	return ctx

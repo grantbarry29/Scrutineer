@@ -81,8 +81,8 @@ func profileEnablesEnvoy(profile *scrutineerv1alpha1.RuntimeProfile) bool {
 	if profile == nil {
 		return false
 	}
-	for _, sc := range profile.Spec.Sidecars {
-		if sc.Type == scrutineerjob.SidecarTypeEnvoy && (sc.Enabled == nil || *sc.Enabled) {
+	for _, sc := range profile.Spec.Enforcement {
+		if sc.Type == scrutineerjob.EnforcementTypeEnvoy && (sc.Enabled == nil || *sc.Enabled) {
 			return true
 		}
 	}

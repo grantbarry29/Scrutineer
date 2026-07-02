@@ -26,7 +26,7 @@ Phase 2 already gives enforcement backends these inputs:
 - `status.effectivePolicy`
 - `status.matchedPolicies`
 - `status.policyDecisions` with merge-time decisions
-- `RuntimeProfile.spec.sidecars[]` as schema-only sidecar intent
+- `RuntimeProfile.spec.sidecars[]` as schema-only sidecar intent (renamed to `spec.enforcement[]` in #65)
 - `RuntimeProfile.spec.pod.runtimeClassName` and `seccompProfile`
 - Job env vars (`AGENT_POLICY_*`) for propagation and debugging
 
@@ -139,7 +139,7 @@ Acceptance:
 
 Implemented in `internal/controller/job/sidecars.go`:
 
-- Injects enabled `dns-proxy`, `tool-gateway`, and `envoy` sidecars from `RuntimeProfile.spec.sidecars[]`
+- Injects enabled `dns-proxy`, `tool-gateway`, and `fs-gateway` sidecars from `RuntimeProfile.spec.enforcement[]` (formerly `spec.sidecars[]`; the `envoy` type became an out-of-pod proxy — see evidence-integrity.md)
 - Skips disabled and unknown types; placeholder `busybox` images until data-plane images ship
 - Sets `SCRUTINEER_TOOL_GATEWAY_URL` on the agent when tool-gateway is enabled
 - `RuntimeProfileDrift` detects sidecar template changes

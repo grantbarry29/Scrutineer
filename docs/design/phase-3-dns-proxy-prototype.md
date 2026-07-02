@@ -10,7 +10,7 @@ Scrutineer enforces domain and CIDR egress policy through an in-pod **dns-proxy*
 
 ## Sidecar configuration
 
-When `RuntimeProfile.spec.sidecars[]` includes an enabled `dns-proxy` entry, the Job builder injects:
+When `RuntimeProfile.spec.enforcement[]` (formerly `spec.sidecars[]`) includes an enabled `dns-proxy` entry, the Job builder injects:
 
 | Env var | Purpose |
 |---------|---------|

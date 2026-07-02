@@ -22,9 +22,9 @@ import (
 	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 )
 
-func enabledEnvoySidecar() scrutineerv1alpha1.RuntimeProfileSidecar {
+func enabledEnvoySidecar() scrutineerv1alpha1.RuntimeProfileEnforcement {
 	on := true
-	return scrutineerv1alpha1.RuntimeProfileSidecar{Name: "envoy", Type: scrutineerjob.SidecarTypeEnvoy, Enabled: &on}
+	return scrutineerv1alpha1.RuntimeProfileEnforcement{Name: "envoy", Type: scrutineerjob.EnforcementTypeEnvoy, Enabled: &on}
 }
 
 // When the per-session Envoy egress proxy is enabled, the agent pod gets a mandatory
@@ -36,7 +36,7 @@ func TestBuild_egressLockWhenEnvoyEnabled(t *testing.T) {
 		SessionNamespace: "team-a",
 		SessionName:      "demo",
 		Mode:             scrutineerv1alpha1.PolicyModeAuditOnly, // lock is mandatory regardless of mode
-		Sidecars:         []scrutineerv1alpha1.RuntimeProfileSidecar{enabledEnvoySidecar()},
+		Enforcement:      []scrutineerv1alpha1.RuntimeProfileEnforcement{enabledEnvoySidecar()},
 	}
 	np := Build(ctx)
 	if np == nil {
@@ -196,8 +196,8 @@ func TestBuild_noEgressLockWhenEnvoyDisabled(t *testing.T) {
 		SessionNamespace: "team-a",
 		SessionName:      "demo",
 		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
-		Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
-			{Name: "envoy", Type: scrutineerjob.SidecarTypeEnvoy, Enabled: &off},
+		Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
+			{Name: "envoy", Type: scrutineerjob.EnforcementTypeEnvoy, Enabled: &off},
 		},
 	}
 	if got := Build(ctx); got != nil {

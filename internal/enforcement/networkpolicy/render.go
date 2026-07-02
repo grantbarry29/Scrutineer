@@ -170,10 +170,10 @@ func Build(ctx enforcement.SessionContext) *networkingv1.NetworkPolicy {
 }
 
 // egressProxyEnabled reports whether the session's RuntimeProfile enables the out-of-pod
-// Envoy egress proxy (the SidecarTypeEnvoy toggle; see internal/controller/agentsession/egress_envoy.go).
+// Envoy egress proxy (the EnforcementTypeEnvoy toggle; see internal/controller/agentsession/egress_envoy.go).
 func egressProxyEnabled(ctx enforcement.SessionContext) bool {
-	for _, sc := range ctx.Sidecars {
-		if sc.Type == scrutineerjob.SidecarTypeEnvoy && (sc.Enabled == nil || *sc.Enabled) {
+	for _, sc := range ctx.Enforcement {
+		if sc.Type == scrutineerjob.EnforcementTypeEnvoy && (sc.Enabled == nil || *sc.Enabled) {
 			return true
 		}
 	}

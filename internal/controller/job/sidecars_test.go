@@ -34,10 +34,10 @@ func TestInjectSidecars_enabledKnownTypes(t *testing.T) {
 	}
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{
-				{Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled},
-				{Name: "tools", Type: SidecarTypeToolGateway, Enabled: &enabled},
-				{Name: "envoy-off", Type: SidecarTypeEnvoy, Enabled: &disabled},
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
+				{Name: "egress", Type: EnforcementTypeDNSProxy, Enabled: &enabled},
+				{Name: "tools", Type: EnforcementTypeToolGateway, Enabled: &enabled},
+				{Name: "envoy-off", Type: EnforcementTypeEnvoy, Enabled: &disabled},
 				{Name: "unknown", Type: "custom-proxy", Enabled: &enabled},
 			},
 		},
@@ -69,8 +69,8 @@ func TestBuild_agentDNSProxyEnv(t *testing.T) {
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "egress", Type: EnforcementTypeDNSProxy, Enabled: &enabled,
 			}},
 		},
 	}
@@ -116,8 +116,8 @@ func TestBuild_agentEnvRoutesGoAndBusyBoxClients(t *testing.T) {
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "egress", Type: EnforcementTypeDNSProxy, Enabled: &enabled,
 			}},
 		},
 	}
@@ -170,8 +170,8 @@ func TestBuild_reporterWiringForSidecars(t *testing.T) {
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "egress", Type: SidecarTypeDNSProxy, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "egress", Type: EnforcementTypeDNSProxy, Enabled: &enabled,
 			}},
 		},
 	}
@@ -235,8 +235,8 @@ func TestBuild_agentToolGatewayEnv(t *testing.T) {
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "tools", Type: SidecarTypeToolGateway, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "tools", Type: EnforcementTypeToolGateway, Enabled: &enabled,
 			}},
 		},
 	}
@@ -269,8 +269,8 @@ func TestBuild_reporterWiringForToolGateway(t *testing.T) {
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "tools", Type: SidecarTypeToolGateway, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "tools", Type: EnforcementTypeToolGateway, Enabled: &enabled,
 			}},
 		},
 	}
@@ -303,8 +303,8 @@ func TestInjectSidecars_envoyIsOutOfPod(t *testing.T) {
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "envoy", Type: SidecarTypeEnvoy, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "envoy", Type: EnforcementTypeEnvoy, Enabled: &enabled,
 			}},
 		},
 	}
@@ -331,8 +331,8 @@ func TestBuild_agentEnvoyProxyEnv(t *testing.T) {
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "envoy", Type: SidecarTypeEnvoy, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "envoy", Type: EnforcementTypeEnvoy, Enabled: &enabled,
 			}},
 		},
 	}
@@ -364,8 +364,8 @@ func TestBuild_agentEnvoyProxyEnv_prefersClusterIPEndpoint(t *testing.T) {
 	session.Status.EgressProxyEndpoint = "http://10.96.7.7:15001"
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "envoy", Type: SidecarTypeEnvoy, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "envoy", Type: EnforcementTypeEnvoy, Enabled: &enabled,
 			}},
 		},
 	}
@@ -389,8 +389,8 @@ func TestBuild_agentFSGatewayEnv(t *testing.T) {
 	session := minimalSession()
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
-				Name: "files", Type: SidecarTypeFSGateway, Enabled: &enabled,
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name: "files", Type: EnforcementTypeFSGateway, Enabled: &enabled,
 			}},
 		},
 	}
@@ -423,7 +423,7 @@ func TestBuild_agentFSGatewayEnv(t *testing.T) {
 
 func TestRuntimeProfileDrift_sidecars(t *testing.T) {
 	base := Build(minimalSession(), &Task{}, nil, nil)
-	withSidecar := Build(minimalSession(), &Task{}, nil, profileWithSidecar(SidecarTypeDNSProxy))
+	withSidecar := Build(minimalSession(), &Task{}, nil, profileWithSidecar(EnforcementTypeDNSProxy))
 	if !RuntimeProfileDrift(base, withSidecar) {
 		t.Fatal("expected drift when sidecars added")
 	}
@@ -446,7 +446,7 @@ func profileWithSidecar(sidecarType string) *scrutineerv1alpha1.RuntimeProfile {
 	enabled := true
 	return &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Sidecars: []scrutineerv1alpha1.RuntimeProfileSidecar{{
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
 				Name: sidecarType, Type: sidecarType, Enabled: &enabled,
 			}},
 		},

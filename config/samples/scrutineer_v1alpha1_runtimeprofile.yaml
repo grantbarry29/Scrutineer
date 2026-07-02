@@ -14,7 +14,7 @@ spec:
   pod:
     seccompProfile:
       type: RuntimeDefault
-  sidecars:
+  enforcement:
   - name: egress-envoy
     type: envoy
     enabled: false

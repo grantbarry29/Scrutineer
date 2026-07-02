@@ -1,4 +1,4 @@
-# AgentSession using enforced-sidecars RuntimeProfile (dns-proxy + tool-gateway).
+# AgentSession using the enforced-sidecars RuntimeProfile (dns-proxy + tool-gateway in-pod sidecars).
 # Requires scrutineer-controller-reporter Service in scrutineer-system (make deploy).
 apiVersion: scrutineer.sh/v1alpha1
 kind: AgentSession

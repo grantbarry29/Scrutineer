@@ -1,0 +1,29 @@
+# RuntimeProfile with data-plane enforcement backends and runtime reporter wiring.
+# In-pod types (dns-proxy, tool-gateway, fs-gateway) are injected as sidecar
+# containers with SCRUTINEER_REPORTER_URL and a projected SA token (audience:
+# scrutineer-reporter) mounted into the sidecar containers only. The envoy type
+# instead provisions a per-session out-of-pod egress proxy (its own pod/identity)
+# whose evidence is stamped `observed` -- see docs/design/evidence-integrity.md.
+apiVersion: scrutineer.sh/v1alpha1
+kind: RuntimeProfile
+metadata:
+  name: enforced-sidecars
+  namespace: default
+spec:
+  container:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+  pod:
+    seccompProfile:
+      type: RuntimeDefault
+  enforcement:
+  - name: egress
+    type: dns-proxy
+    enabled: true
+  - name: tools
+    type: tool-gateway
+    enabled: true

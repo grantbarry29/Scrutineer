@@ -25,18 +25,18 @@ import (
 	"github.com/grantbarry29/scrutineer/internal/policy"
 )
 
-// Known RuntimeProfile sidecar types.
+// Known RuntimeProfile spec.enforcement entry types.
 //
-// SidecarTypeEnvoy is deliberately NOT an in-pod sidecar: the per-session Envoy egress
+// EnforcementTypeEnvoy is deliberately NOT an in-pod sidecar: the per-session Envoy egress
 // proxy runs as a separate, controller-provisioned pod (evidence-integrity design, #8/#60)
 // so a compromised agent cannot tamper with the enforcement point it shares a pod with.
 // Enabling it in a RuntimeProfile provisions that out-of-pod proxy and points the agent at
 // it via explicit-proxy env; see internal/controller/agentsession/egress_envoy.go.
 const (
-	SidecarTypeDNSProxy    = "dns-proxy"
-	SidecarTypeToolGateway = "tool-gateway"
-	SidecarTypeFSGateway   = "fs-gateway"
-	SidecarTypeEnvoy       = "envoy"
+	EnforcementTypeDNSProxy    = "dns-proxy"
+	EnforcementTypeToolGateway = "tool-gateway"
+	EnforcementTypeFSGateway   = "fs-gateway"
+	EnforcementTypeEnvoy       = "envoy"
 )
 
 const (
@@ -69,26 +69,26 @@ const (
 	reporterTokenExpirationSec = int64(600)
 )
 
-// knownSidecarTypes are the types injected as in-pod containers. Envoy is intentionally
+// inPodSidecarTypes are the types injected as in-pod containers. Envoy is intentionally
 // excluded — it is an out-of-pod egress proxy provisioned by the controller, not a sidecar.
-var knownSidecarTypes = map[string]struct{}{
-	SidecarTypeDNSProxy:    {},
-	SidecarTypeToolGateway: {},
-	SidecarTypeFSGateway:   {},
+var inPodSidecarTypes = map[string]struct{}{
+	EnforcementTypeDNSProxy:    {},
+	EnforcementTypeToolGateway: {},
+	EnforcementTypeFSGateway:   {},
 }
 
 // injectSidecars appends enabled, known sidecar containers from a RuntimeProfile.
 // Unknown or disabled entries are skipped.
 func injectSidecars(spec *corev1.PodSpec, session *scrutineerv1alpha1.AgentSession, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) {
-	if spec == nil || profile == nil || len(profile.Spec.Sidecars) == 0 {
+	if spec == nil || profile == nil || len(profile.Spec.Enforcement) == 0 {
 		return
 	}
 	wireReporterAccess(spec, profile)
-	for _, sc := range profile.Spec.Sidecars {
-		if !sidecarEnabled(sc) {
+	for _, sc := range profile.Spec.Enforcement {
+		if !enforcementEnabled(sc) {
 			continue
 		}
-		if _, ok := knownSidecarTypes[sc.Type]; !ok {
+		if _, ok := inPodSidecarTypes[sc.Type]; !ok {
 			continue
 		}
 		spec.Containers = append(spec.Containers, buildSidecarContainer(sc, session, pol, profile))
@@ -99,9 +99,9 @@ func hasEnabledReportingSidecar(profile *scrutineerv1alpha1.RuntimeProfile) bool
 	if profile == nil {
 		return false
 	}
-	for _, sc := range profile.Spec.Sidecars {
-		if sidecarEnabled(sc) {
-			if _, ok := knownSidecarTypes[sc.Type]; ok {
+	for _, sc := range profile.Spec.Enforcement {
+		if enforcementEnabled(sc) {
+			if _, ok := inPodSidecarTypes[sc.Type]; ok {
 				return true
 			}
 		}
@@ -150,11 +150,11 @@ func reporterVolumeMount() corev1.VolumeMount {
 	}
 }
 
-func sidecarEnabled(sc scrutineerv1alpha1.RuntimeProfileSidecar) bool {
+func enforcementEnabled(sc scrutineerv1alpha1.RuntimeProfileEnforcement) bool {
 	return sc.Enabled == nil || *sc.Enabled
 }
 
-func buildSidecarContainer(sc scrutineerv1alpha1.RuntimeProfileSidecar, session *scrutineerv1alpha1.AgentSession, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) corev1.Container {
+func buildSidecarContainer(sc scrutineerv1alpha1.RuntimeProfileEnforcement, session *scrutineerv1alpha1.AgentSession, pol *policy.Resolved, profile *scrutineerv1alpha1.RuntimeProfile) corev1.Container {
 	name := strings.TrimSpace(sc.Name)
 	if name == "" {
 		name = sc.Type
@@ -176,7 +176,7 @@ func buildSidecarContainer(sc scrutineerv1alpha1.RuntimeProfileSidecar, session 
 
 func sidecarCommand(sidecarType string) []string {
 	switch sidecarType {
-	case SidecarTypeDNSProxy, SidecarTypeToolGateway, SidecarTypeFSGateway:
+	case EnforcementTypeDNSProxy, EnforcementTypeToolGateway, EnforcementTypeFSGateway:
 		return nil
 	default:
 		return []string{"sleep", placeholderSidecarSleep}
@@ -192,11 +192,11 @@ func sidecarVolumeMounts(profile *scrutineerv1alpha1.RuntimeProfile) []corev1.Vo
 
 func placeholderImageForType(sidecarType string) string {
 	switch sidecarType {
-	case SidecarTypeDNSProxy:
+	case EnforcementTypeDNSProxy:
 		return dnsproxy.DefaultDNSProxyImage
-	case SidecarTypeToolGateway:
+	case EnforcementTypeToolGateway:
 		return toolgateway.DefaultToolGatewayImage
-	case SidecarTypeFSGateway:
+	case EnforcementTypeFSGateway:
 		return workspace.DefaultFSGatewayImage
 	default:
 		return dnsproxy.DefaultDNSProxyImage
@@ -216,20 +216,20 @@ func sidecarBaseEnv(sidecarType string, session *scrutineerv1alpha1.AgentSession
 		{Name: EnvScrutineerSidecarType, Value: sidecarType},
 		{Name: EnvPolicyMode, Value: string(mode)},
 	}
-	if sidecarType == SidecarTypeToolGateway {
+	if sidecarType == EnforcementTypeToolGateway {
 		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultInPodURL})
 		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))
 		ctx.Mode = mode
 		ctx.Policy = rules
 		env = append(env, toolgateway.EnvForConfig(toolgateway.BuildConfig(ctx))...)
 	}
-	if sidecarType == SidecarTypeDNSProxy {
+	if sidecarType == EnforcementTypeDNSProxy {
 		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))
 		ctx.Mode = mode
 		ctx.Policy = rules
 		env = append(env, dnsproxy.EnvForConfig(dnsproxy.BuildConfig(ctx))...)
 	}
-	if sidecarType == SidecarTypeFSGateway {
+	if sidecarType == EnforcementTypeFSGateway {
 		ctx := enforcement.NewSessionContext(session, profile, NameFor(session))
 		ctx.Mode = mode
 		ctx.Policy = rules
@@ -246,16 +246,16 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, session *scrutineerv1alpha1.Agent
 	if profile == nil {
 		return env
 	}
-	if hasEnabledSidecar(profile, SidecarTypeToolGateway) {
+	if hasEnabledEnforcement(profile, EnforcementTypeToolGateway) {
 		env = append(env, corev1.EnvVar{Name: EnvScrutineerToolGatewayURL, Value: toolgateway.DefaultInPodURL})
 	}
 	// Egress proxy routing. The out-of-pod per-session Envoy is the preferred, tamper-
 	// resistant chokepoint (evidence-integrity design); when enabled it supersedes the
 	// in-pod dns-proxy for HTTP(S)_PROXY so the two never emit conflicting proxy env.
 	switch {
-	case hasEnabledSidecar(profile, SidecarTypeEnvoy):
+	case hasEnabledEnforcement(profile, EnforcementTypeEnvoy):
 		env = append(env, envoy.ExplicitProxyEnv(agentEnvoyProxyURL(session))...)
-	case hasEnabledSidecar(profile, SidecarTypeDNSProxy):
+	case hasEnabledEnforcement(profile, EnforcementTypeDNSProxy):
 		const noProxy = "localhost,127.0.0.1"
 		env = append(env,
 			corev1.EnvVar{Name: EnvHTTPProxy, Value: dnsproxy.DefaultHTTPProxyURL},
@@ -269,7 +269,7 @@ func applyAgentSidecarEnv(env []corev1.EnvVar, session *scrutineerv1alpha1.Agent
 			corev1.EnvVar{Name: EnvNoProxyLower, Value: noProxy},
 		)
 	}
-	if hasEnabledSidecar(profile, SidecarTypeFSGateway) {
+	if hasEnabledEnforcement(profile, EnforcementTypeFSGateway) {
 		env = append(env, corev1.EnvVar{Name: EnvScrutineerFSGatewayURL, Value: workspace.DefaultInPodURL})
 	}
 	return env
@@ -287,12 +287,12 @@ func agentEnvoyProxyURL(session *scrutineerv1alpha1.AgentSession) string {
 	return envoy.ProxyURL(session.Name, session.Namespace)
 }
 
-func hasEnabledSidecar(profile *scrutineerv1alpha1.RuntimeProfile, sidecarType string) bool {
+func hasEnabledEnforcement(profile *scrutineerv1alpha1.RuntimeProfile, sidecarType string) bool {
 	if profile == nil {
 		return false
 	}
-	for _, sc := range profile.Spec.Sidecars {
-		if sc.Type == sidecarType && sidecarEnabled(sc) {
+	for _, sc := range profile.Spec.Enforcement {
+		if sc.Type == sidecarType && enforcementEnabled(sc) {
 			return true
 		}
 	}
