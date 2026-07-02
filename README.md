@@ -105,9 +105,16 @@ we never claim more than these boundaries support. (Design:
   denied** — no DNS-exfil path.
 - **The agent can't tamper with the enforcement point.** It lives outside the agent's
   pod, so a compromised agent can't reconfigure, restart, or read the proxy's identity.
+- **FQDN allow/deny is enforced at the proxy.** The policy's `allowedDomains`/
+  `deniedDomains` render into Envoy RBAC on the `:authority`, so denied (or not-allowed)
+  hosts are blocked at the chokepoint for both plain HTTP and HTTPS `CONNECT` — not just
+  recorded. Matching is exact or `*.`-wildcard (subdomains, apex excluded), shared with
+  the dns-proxy so both agree.
 - **Evidence is independent.** Egress is recorded as `observed` — stamped by the
   reporter from the **proxy pod's authenticated identity**, never from the payload, so
-  the agent cannot forge `observed` records or suppress them by lying.
+  the agent cannot forge `observed` records or suppress them by lying. In enforced mode a
+  blocked host is an `observed` deny; in audit mode it flows but is recorded as an
+  `observed` dry-run.
 - **Defense in depth.** Even the proxy pod is denied cloud-metadata (and operator-set
   cluster) CIDRs, so a compromised Envoy still can't reach `169.254.169.254`.
 
@@ -121,15 +128,16 @@ we never claim more than these boundaries support. (Design:
   higher threat tier, explicitly out of scope.
 - **Coverage is HTTP/S + client-`CONNECT`-tunneled TCP.** Proxy-unaware or raw non-HTTP
   tools **fail closed** (no leak; they need proxy config or the future transparent
-  node interceptor, [#64](https://github.com/grantbarry29/scrutineer/issues/64)).
+  node interceptor, [#64](https://github.com/grantbarry29/scrutineer/issues/64)). FQDN
+  matching is **host-level** (SNI/`:authority`) — HTTPS is CONNECT-tunnelled, so there is
+  no path/method matching.
 - **`observed` means "independent of the agent," not "tamper-proof."** It is only as
   strong as the assumptions above.
 
 Agents that legitimately need the Kubernetes API can opt into
 `spec.pod.automountServiceAccountToken: true` (see
 [RuntimeProfile](#reusable-runtime-profile-runtimeprofile)); that traffic still transits
-the proxy. FQDN allow/deny in the proxy is tracked separately in
-[#32](https://github.com/grantbarry29/scrutineer/issues/32).
+the proxy.
 
 ---
 
@@ -344,8 +352,10 @@ spec:
         cpu: "2"
         memory: "2Gi"
   policy:
-    allowedDomains: [github.com, api.github.com]
-    deniedDomains:  [dropbox.com, gmail.com]
+    # Domains match exactly, or use a "*." wildcard for a subdomain tree
+    # (e.g. "*.github.com" covers api.github.com but not github.com itself).
+    allowedDomains: ["github.com", "*.github.com"]
+    deniedDomains:  ["dropbox.com", "*.gmail.com"]
     allowedTools:   [shell, github]
     deniedTools:    [kubectl-prod]
     requireHumanApproval: [production_deploy, external_write]
@@ -894,11 +904,12 @@ endpoint) and `SessionTemplate` (parameterized blueprints) remain future work.
 ### In progress / next
 
 - **Adversarial-grade egress (#8) — shipped.** The per-session out-of-pod Envoy proxy,
-  the default-deny routing lock (kindnet + Calico), and identity-authenticated `observed`
-  egress evidence are in place; agents can't bypass egress or forge its record (under the
-  documented assumptions). Next in this area: **FQDN allow/deny** in the proxy
-  ([#32](https://github.com/grantbarry29/scrutineer/issues/32)) and a transparent node
-  interceptor ([#64](https://github.com/grantbarry29/scrutineer/issues/64)).
+  the default-deny routing lock (kindnet + Calico), identity-authenticated `observed`
+  egress evidence, and **FQDN allow/deny enforced at the proxy**
+  ([#32](https://github.com/grantbarry29/scrutineer/issues/32)) are in place; agents can't
+  bypass egress or forge its record (under the documented assumptions). Next in this area:
+  a transparent node interceptor ([#64](https://github.com/grantbarry29/scrutineer/issues/64))
+  for non-HTTP protocols.
 - **Phase 6 — orchestrator adapters.** The backend-neutral `runtimeBackend`
   interface, `status.runtimeRef`, and a second in-tree backend (`kubernetes-pod`)
   have shipped, proving Scrutineer is orchestrator-agnostic. Next is the external

@@ -83,9 +83,9 @@ Adversarial-grade **for governed egress** under these stated assumptions — nev
 
 This closes the *cooperative → adversarial* gap for governed egress. Syscall/file observation (eBPF/Tetragon) remains a separate future `observed` source, out of scope here.
 
-## 6. Relationship to #32 (FQDN egress)
+## 6. Relationship to #32 (FQDN egress) — ✅ delivered
 
-Envoy is the shared substrate. #8 delivers the non-bypassable per-session Envoy chokepoint + trust boundary; [#32](https://github.com/grantbarry29/scrutineer/issues/32) implements the richer FQDN allow/deny **as Envoy policy config** at that chokepoint. Build the boundary first so #32's policy is enforced where the agent can't route around it.
+Envoy is the shared substrate. #8 delivered the non-bypassable per-session Envoy chokepoint + trust boundary; [#32](https://github.com/grantbarry29/scrutineer/issues/32) then implemented FQDN allow/deny **as Envoy RBAC config** at that chokepoint. As built: the effective `allowedDomains`/`deniedDomains` render into an HTTP RBAC filter chain (deny-list before allow-list/default-deny) matching the request `:authority` — so it covers plain HTTP and HTTPS `CONNECT` (host-level; HTTPS is CONNECT-tunnelled, so no path/method matching). Matching is shared with the dns-proxy via `enforcement.MatchDomain` (exact + `*.` wildcard, apex-excluded, port-insensitive). The egress-reporter classifies each observed authority against the same policy, so evidence records allow/deny (enforced) or dry-run (audit) as `observed`. Policy changes re-render the ConfigMap and recreate the Envoy pod (config-hash drift). CIDR-level egress remains the NetworkPolicy/backstop layer's job, not Envoy RBAC.
 
 ## 7. Increment plan
 

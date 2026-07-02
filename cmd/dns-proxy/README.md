@@ -17,7 +17,8 @@ reports.
 - **Does:** terminate the agent's outbound HTTP/HTTPS (incl. `CONNECT` tunnels),
   evaluate destination host/port against allowed/denied domains and CIDRs, block
   denied egress (`403`), forward allowed egress, and report non-allow decisions to the
-  reporter.
+  reporter. Domain matching uses the shared `enforcement.MatchDomain` semantics (exact or
+  `*.` wildcard), so it agrees with the out-of-pod Envoy egress path (#32).
 - **Does not:** decide policy (the controller propagates it via env), persist state,
   authenticate the agent, or provide adversarial-grade isolation (see Invariants).
 

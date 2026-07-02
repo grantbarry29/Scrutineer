@@ -14,6 +14,10 @@ domain and is stamped **`observed`** by the reporter (Slice C,
   shared emptyDir written by the Envoy bootstrap) every 2s, parses JSON lines
   (`envoy.ParseAccessLogLine`), and POSTs batches (≤128) of `type: network` runtime
   decisions to `POST /v1/report`.
+- Classifies each observed authority against the effective FQDN policy (`AGENT_POLICY_*`
+  env, shared `enforcement.MatchDomain`), so decisions carry allow / deny (enforced) /
+  dry-run (audit) + reason — the same policy the Envoy RBAC enforces, so evidence and
+  enforcement agree (#32).
 - Delivery is **at-least-once**: offsets are in-memory, so a restart re-reads the file;
   the controller's status merge dedups (times are pinned from Envoy's `%START_TIME%`).
   Failed submits retry next poll; the pending queue is bounded (oldest dropped + logged).
@@ -38,6 +42,8 @@ domain and is stamped **`observed`** by the reporter (Slice C,
 | `SCRUTINEER_REPORTER_URL` | Reporter base URL |
 | `SCRUTINEER_REPORTER_TOKEN_PATH` | Projected SA token file |
 | `SCRUTINEER_ACCESS_LOG_PATH` | Optional; defaults to `/var/log/envoy/access.json` |
+| `AGENT_POLICY_MODE` | `enforced` ⇒ denials classified `deny`; otherwise `dry-run` |
+| `AGENT_POLICY_ALLOWED_DOMAINS` / `AGENT_POLICY_DENIED_DOMAINS` | CSV FQDN policy (exact or `*.` wildcard) classified per observed authority |
 
 ## Files that change together
 
