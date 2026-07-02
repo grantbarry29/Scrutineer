@@ -214,6 +214,51 @@ var _ = Describe("Per-session Envoy egress proxy", func() {
 		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 	})
 
+	It("renders the effective FQDN policy into the Envoy config and propagates policy drift (#32)", func() {
+		ns := newTestNamespace()
+		envoyProfile(ns, "egress")
+		Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.AgentPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "fqdn", Namespace: ns},
+			Spec: scrutineerv1alpha1.AgentPolicySpec{
+				Mode:        scrutineerv1alpha1.PolicyModeEnforced,
+				PolicyRules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
+			},
+		})).To(Succeed())
+
+		session := minimalAgentSession(ns, "egress-fqdn")
+		session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "egress"}
+		session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "fqdn"}}
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		waitForJob(ns, session)
+
+		cmKey := types.NamespacedName{Namespace: ns, Name: envoy.ResourceName(session.Name)}
+
+		By("the ConfigMap carrying an RBAC deny for the denied domain")
+		var initialHash string
+		Eventually(func(g Gomega) {
+			var cm corev1.ConfigMap
+			g.Expect(k8sClient.Get(testCtx, cmKey, &cm)).To(Succeed())
+			g.Expect(cm.Data["envoy.yaml"]).To(ContainSubstring("filters.http.rbac.v3.RBAC"))
+			g.Expect(cm.Data["envoy.yaml"]).To(ContainSubstring(`evil\.example`))
+			initialHash = cm.Annotations[envoy.ConfigHashAnnotation]
+			g.Expect(initialHash).NotTo(BeEmpty())
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		By("a policy change re-rendering the config (drift propagation)")
+		var ap scrutineerv1alpha1.AgentPolicy
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: "fqdn"}, &ap)).To(Succeed())
+		ap.Spec.PolicyRules.DeniedDomains = []string{"evil.example", "*.tracker.example"}
+		Expect(k8sClient.Update(testCtx, &ap)).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			var cm corev1.ConfigMap
+			g.Expect(k8sClient.Get(testCtx, cmKey, &cm)).To(Succeed())
+			g.Expect(cm.Data["envoy.yaml"]).To(ContainSubstring(`tracker\.example`))
+			g.Expect(cm.Annotations[envoy.ConfigHashAnnotation]).NotTo(Equal(initialHash),
+				"config hash must change when the policy changes")
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+	})
+
 	It("does not provision an egress proxy when no profile enables it", func() {
 		ns := newTestNamespace()
 		session := minimalAgentSession(ns, "egress-off")

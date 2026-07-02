@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 const (
@@ -62,14 +63,51 @@ func ParseAccessLogLine(line []byte) (AccessLogEntry, error) {
 	return e, nil
 }
 
-// Decision converts an observed access-log entry into a runtime network decision.
-//
-// Action is always allow in Slice C: the proxy forwards everything (FQDN policy is #32),
-// so each entry is evidence that egress happened (or was attempted — the response code and
-// flags carry the outcome). AssuranceLevel is deliberately left empty: the data plane never
+// Evidence reason codes for egress decisions (match the dns-proxy's values so status
+// filtering is consistent across both egress backends).
+const (
+	ReasonEgressObserved      = "EgressObserved"
+	ReasonDeniedDomains       = "DeniedDomains"
+	ReasonNotInAllowedDomains = "NotInAllowedDomains"
+)
+
+// EgressPolicy is the effective FQDN policy the egress-reporter classifies observed
+// authorities against. It mirrors the Envoy RBAC (same enforcement.MatchDomain semantics),
+// so evidence and enforcement always agree. Enforce reflects enforced mode: a would-be
+// denial is recorded as Deny when enforcing (Envoy also blocked it) or DryRun in audit
+// mode (Envoy let it through). An empty policy classifies everything as allow.
+type EgressPolicy struct {
+	Enforce        bool
+	AllowedDomains []string
+	DeniedDomains  []string
+}
+
+// classify returns the action + reason for an observed authority under this policy.
+// Deny wins over allow-list, matching the RBAC filter order and the dns-proxy.
+func (p EgressPolicy) classify(authority string) (scrutineerv1alpha1.PolicyDecisionAction, string) {
+	if enforcement.MatchDomain(p.DeniedDomains, authority) {
+		return p.deniedAction(), ReasonDeniedDomains
+	}
+	if len(p.AllowedDomains) > 0 && !enforcement.MatchDomain(p.AllowedDomains, authority) {
+		return p.deniedAction(), ReasonNotInAllowedDomains
+	}
+	return scrutineerv1alpha1.PolicyDecisionAllow, ReasonEgressObserved
+}
+
+func (p EgressPolicy) deniedAction() scrutineerv1alpha1.PolicyDecisionAction {
+	if p.Enforce {
+		return scrutineerv1alpha1.PolicyDecisionDeny
+	}
+	return scrutineerv1alpha1.PolicyDecisionDryRun
+}
+
+// Decision converts an observed access-log entry into a runtime network decision,
+// classified against the effective FQDN policy (#32). In enforced mode a denied authority
+// was already blocked by the Envoy RBAC (the log shows a 403); in audit mode it flowed and
+// is recorded as dry-run. AssuranceLevel is deliberately left empty: the data plane never
 // self-attests assurance; the reporter stamps it server-side from the caller's identity
 // (observed only for the Envoy pod's identity — see internal/reporter).
-func (e AccessLogEntry) Decision() scrutineerv1alpha1.PolicyDecision {
+func (e AccessLogEntry) Decision(policy EgressPolicy) scrutineerv1alpha1.PolicyDecision {
 	var ts metav1.Time
 	if t, err := time.Parse(accessLogTimeLayout, e.StartTime); err == nil {
 		ts = metav1.NewTime(t)
@@ -77,14 +115,15 @@ func (e AccessLogEntry) Decision() scrutineerv1alpha1.PolicyDecision {
 		ts = metav1.NewTime(t)
 	}
 
+	action, reason := policy.classify(e.Authority)
 	return scrutineerv1alpha1.PolicyDecision{
 		Time:   ts,
 		Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
 		Type:   "network",
-		Action: scrutineerv1alpha1.PolicyDecisionAllow,
+		Action: action,
 		Actor:  AccessLogActor,
 		Target: e.Authority,
-		Reason: "EgressObserved",
+		Reason: reason,
 		Message: fmt.Sprintf("egress %s %s -> %d (%s) tx=%dB rx=%dB %dms",
 			e.Method, e.Authority, e.ResponseCode, e.ResponseFlags, e.BytesSent, e.BytesReceived, e.DurationMS),
 	}

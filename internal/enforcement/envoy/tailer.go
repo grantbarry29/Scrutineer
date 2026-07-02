@@ -51,6 +51,9 @@ type Tailer struct {
 	PollInterval time.Duration
 	// MaxPending bounds the undelivered-decision queue. Defaults to DefaultMaxPending.
 	MaxPending int
+	// Policy is the effective FQDN policy each observed authority is classified against
+	// (#32). Zero value classifies everything as allow.
+	Policy EgressPolicy
 
 	offset  int64
 	partial []byte
@@ -149,7 +152,7 @@ func (t *Tailer) readNew() error {
 			log.Printf("egress-reporter: skipping malformed access-log line: %v", err)
 			continue
 		}
-		t.queue(entry.Decision())
+		t.queue(entry.Decision(t.Policy))
 	}
 	t.partial = data
 	return nil

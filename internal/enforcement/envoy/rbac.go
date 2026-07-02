@@ -11,9 +11,41 @@ You may obtain a copy of the License at
 package envoy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
+	"sort"
 	"strings"
 )
+
+// ConfigHashAnnotation stamps the egress ConfigMap and Pod with a hash of the effective
+// FQDN policy, so the controller detects a policy change and re-renders/recreates them
+// (Envoy has no live reload of a mounted bootstrap). See egress_envoy.go.
+const ConfigHashAnnotation = "scrutineer.sh/egress-config-hash"
+
+// Hash is a stable digest of the policy-affecting fields (Port excluded — it is constant).
+// The same value stamped on the ConfigMap and the Pod lets the controller detect drift.
+func (c BootstrapConfig) Hash() string {
+	h := sha256.New()
+	if c.Enforce {
+		h.Write([]byte("enforce\n"))
+	}
+	writeSorted := func(tag string, in []string) {
+		vals := append([]string(nil), in...)
+		for i := range vals {
+			vals[i] = strings.ToLower(strings.TrimSpace(vals[i]))
+		}
+		sort.Strings(vals)
+		h.Write([]byte(tag))
+		for _, v := range vals {
+			h.Write([]byte(v))
+			h.Write([]byte{0})
+		}
+	}
+	writeSorted("allow\n", c.AllowedDomains)
+	writeSorted("deny\n", c.DeniedDomains)
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
 
 // BootstrapConfig parameterizes the rendered Envoy bootstrap. AllowedDomains/DeniedDomains
 // are the session's effective FQDN policy; Enforce is true only in enforced mode. In audit

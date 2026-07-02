@@ -96,9 +96,10 @@ func ConfigMap(sessionName, namespace string, cfg BootstrapConfig) *corev1.Confi
 	cfg.Port = ProxyPort
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ResourceName(sessionName),
-			Namespace: namespace,
-			Labels:    Labels(sessionName),
+			Name:        ResourceName(sessionName),
+			Namespace:   namespace,
+			Labels:      Labels(sessionName),
+			Annotations: map[string]string{ConfigHashAnnotation: cfg.Hash()},
 		},
 		Data: map[string]string{configFileName: BootstrapYAML(cfg)},
 	}
@@ -140,6 +141,10 @@ type PodConfig struct {
 	ReporterURL string
 	// ReporterAudience is the projected-token audience the reporter authenticates.
 	ReporterAudience string
+	// Bootstrap is the session's egress config (FQDN policy + mode). The same value
+	// drives the Envoy RBAC (ConfigMap) and the egress-reporter's evidence
+	// classification env, so enforcement and evidence agree (#32).
+	Bootstrap BootstrapConfig
 }
 
 // hardenedSecurityContext is the shared container hardening for every container in the
@@ -232,9 +237,10 @@ func Pod(sessionName, namespace string, cfg PodConfig) *corev1.Pod {
 
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ResourceName(sessionName),
-			Namespace: namespace,
-			Labels:    Labels(sessionName),
+			Name:        ResourceName(sessionName),
+			Namespace:   namespace,
+			Labels:      Labels(sessionName),
+			Annotations: map[string]string{ConfigHashAnnotation: cfg.Bootstrap.Hash()},
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName:           cfg.ServiceAccount,
@@ -258,12 +264,12 @@ func egressReporterContainer(sessionName, namespace string, cfg PodConfig) corev
 		Name:            reporterContainerName,
 		Image:           cfg.ReporterImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Env: []corev1.EnvVar{
+		Env: append([]corev1.EnvVar{
 			{Name: sidecarenv.EnvSessionName, Value: sessionName},
 			{Name: sidecarenv.EnvSessionNamespace, Value: namespace},
 			{Name: sidecarenv.EnvReporterURL, Value: cfg.ReporterURL},
 			{Name: sidecarenv.EnvReporterToken, Value: reporterTokenMountPath + "/" + reporterTokenFileName},
-		},
+		}, policyEnv(cfg.Bootstrap)...),
 		SecurityContext: hardenedSecurityContext(),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: accessLogVolume, MountPath: AccessLogDir, ReadOnly: true},

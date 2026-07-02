@@ -50,7 +50,8 @@ func main() {
 	session := reporterclient.SessionRef{Namespace: base.SessionNamespace, Name: base.SessionName}
 
 	tailer := &envoy.Tailer{
-		Path: path,
+		Path:   path,
+		Policy: envoy.PolicyFromEnv(),
 		Submit: func(ctx context.Context, decisions []scrutineerv1alpha1.PolicyDecision) error {
 			return client.Submit(ctx, session, enforcement.RuntimeReport{Decisions: decisions})
 		},

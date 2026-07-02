@@ -32,7 +32,7 @@ func TestParseAccessLogLine_connect(t *testing.T) {
 		t.Fatalf("response code = %d", entry.ResponseCode)
 	}
 
-	d := entry.Decision()
+	d := entry.Decision(EgressPolicy{})
 	if d.Phase != scrutineerv1alpha1.PolicyDecisionPhaseRuntime {
 		t.Fatalf("phase = %q", d.Phase)
 	}
@@ -63,6 +63,36 @@ func TestParseAccessLogLine_connect(t *testing.T) {
 	}
 }
 
+func TestDecision_classifiesAgainstPolicy(t *testing.T) {
+	entry := func(authority string) AccessLogEntry {
+		return AccessLogEntry{Method: "CONNECT", Authority: authority, ResponseCode: 200, StartTime: "2026-07-01T05:00:00.000Z"}
+	}
+
+	// Enforced deny-list: a denied host is recorded as Deny (Envoy also blocked it).
+	enforced := EgressPolicy{Enforce: true, DeniedDomains: []string{"*.evil.example"}}
+	if d := entry("c2.evil.example:443").Decision(enforced); d.Action != scrutineerv1alpha1.PolicyDecisionDeny || d.Reason != ReasonDeniedDomains {
+		t.Fatalf("enforced deny: got action=%s reason=%s", d.Action, d.Reason)
+	}
+	if d := entry("good.example:443").Decision(enforced); d.Action != scrutineerv1alpha1.PolicyDecisionAllow {
+		t.Fatalf("enforced allow-through: got action=%s", d.Action)
+	}
+
+	// Audit mode: a would-be denial is recorded as DryRun (Envoy let it through).
+	audit := EgressPolicy{Enforce: false, DeniedDomains: []string{"evil.example"}}
+	if d := entry("evil.example:443").Decision(audit); d.Action != scrutineerv1alpha1.PolicyDecisionDryRun || d.Reason != ReasonDeniedDomains {
+		t.Fatalf("audit dry-run: got action=%s reason=%s", d.Action, d.Reason)
+	}
+
+	// Enforced allow-list: not-listed host is denied; listed subdomain allowed.
+	allow := EgressPolicy{Enforce: true, AllowedDomains: []string{"*.github.com"}}
+	if d := entry("api.github.com:443").Decision(allow); d.Action != scrutineerv1alpha1.PolicyDecisionAllow {
+		t.Fatalf("allow-list subdomain: got action=%s", d.Action)
+	}
+	if d := entry("api.gitlab.com:443").Decision(allow); d.Action != scrutineerv1alpha1.PolicyDecisionDeny || d.Reason != ReasonNotInAllowedDomains {
+		t.Fatalf("allow-list default-deny: got action=%s reason=%s", d.Action, d.Reason)
+	}
+}
+
 func TestParseAccessLogLine_httpAndUpstreamFailure(t *testing.T) {
 	// Plain-HTTP forward proxying with an upstream connection failure: still observed
 	// egress *intent* — recorded with the response detail in the message.
@@ -72,7 +102,7 @@ func TestParseAccessLogLine_httpAndUpstreamFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseAccessLogLine: %v", err)
 	}
-	d := entry.Decision()
+	d := entry.Decision(EgressPolicy{})
 	if d.Target != "downloads.example.org" {
 		t.Fatalf("target = %q", d.Target)
 	}
@@ -101,7 +131,7 @@ func TestParseAccessLogLine_badStartTimeFallsBackToZero(t *testing.T) {
 		t.Fatalf("ParseAccessLogLine: %v", err)
 	}
 	// A zero time is pinned to receipt time by the reporter's normalization.
-	d := entry.Decision()
+	d := entry.Decision(EgressPolicy{})
 	if !d.Time.IsZero() {
 		t.Fatal("unparseable start_time should yield a zero decision time")
 	}
@@ -129,7 +159,7 @@ func TestParseAccessLogLine_realEnvoyFixture(t *testing.T) {
 	if get.Method != "GET" || get.Authority != "example.com" || get.ResponseCode != 200 {
 		t.Fatalf("GET entry = %+v", get)
 	}
-	if d := get.Decision(); d.Time.IsZero() {
+	if d := get.Decision(EgressPolicy{}); d.Time.IsZero() {
 		t.Fatal("real %START_TIME% must parse into the decision time")
 	}
 
@@ -140,7 +170,7 @@ func TestParseAccessLogLine_realEnvoyFixture(t *testing.T) {
 	if connect.Method != "CONNECT" || connect.Authority != "example.com:443" {
 		t.Fatalf("CONNECT entry = %+v", connect)
 	}
-	if d := connect.Decision(); d.Target != "example.com:443" || d.Time.IsZero() {
+	if d := connect.Decision(EgressPolicy{}); d.Target != "example.com:443" || d.Time.IsZero() {
 		t.Fatalf("CONNECT decision = %+v", d)
 	}
 }

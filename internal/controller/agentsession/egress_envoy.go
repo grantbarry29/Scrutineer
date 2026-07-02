@@ -75,6 +75,7 @@ func (explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.Age
 			ReporterImage:    envoy.DefaultEgressReporterImage,
 			ReporterURL:      scrutineerjob.DefaultReporterURL,
 			ReporterAudience: scrutineerjob.ReporterTokenAudience,
+			Bootstrap:        bootstrap,
 		}),
 	}
 }
@@ -167,9 +168,12 @@ func (r *AgentSessionReconciler) resolveEgressProxyEndpoint(ctx context.Context,
 }
 
 // ensureEgressObject creates obj (owner-referenced to the session) if it does not yet
-// exist. Envoy pods and their config are effectively immutable per session, so an existing,
-// session-owned object is left untouched. An object of the same name not owned by the
-// session is a hard conflict.
+// exist, and reconciles FQDN-policy drift (#32). An existing, session-owned object whose
+// egress-config hash still matches is left untouched. On a hash change: the ConfigMap is
+// updated in place, and the Pod is deleted so it is recreated with the new config on the
+// next reconcile (Envoy reads its bootstrap once at start; a mounted ConfigMap does not hot
+// reload). Service/ServiceAccount carry no policy, so their hash never changes. An object of
+// the same name not owned by the session is a hard conflict.
 func (r *AgentSessionReconciler) ensureEgressObject(ctx context.Context, session *scrutineerv1alpha1.AgentSession, obj client.Object) error {
 	existing, ok := obj.DeepCopyObject().(client.Object)
 	if !ok {
@@ -181,7 +185,10 @@ func (r *AgentSessionReconciler) ensureEgressObject(ctx context.Context, session
 			return fmt.Errorf("egress-proxy %T %q is not owned by AgentSession %q",
 				obj, obj.GetName(), session.Name)
 		}
-		return nil
+		if egressConfigHash(existing) == egressConfigHash(obj) {
+			return nil
+		}
+		return r.reconcileEgressDrift(ctx, session, obj, existing)
 	}
 	if !apierrors.IsNotFound(err) {
 		return fmt.Errorf("get egress-proxy object %q: %w", obj.GetName(), err)
@@ -202,6 +209,41 @@ func (r *AgentSessionReconciler) ensureEgressObject(ctx context.Context, session
 	r.recordNormal(session, EventReasonEgressProxySynced,
 		fmt.Sprintf("Created egress proxy %T %q", obj, obj.GetName()))
 	return nil
+}
+
+// egressConfigHash returns the FQDN-policy hash annotation, or "" if absent.
+func egressConfigHash(obj client.Object) string {
+	return obj.GetAnnotations()[envoy.ConfigHashAnnotation]
+}
+
+// reconcileEgressDrift propagates an FQDN-policy change to an existing egress object. The
+// ConfigMap is updated in place; the Pod is deleted so a subsequent reconcile recreates it
+// with the new bootstrap/env (the Owns(Pod) watch triggers that reconcile). Other kinds
+// carry no policy and never reach here.
+func (r *AgentSessionReconciler) reconcileEgressDrift(ctx context.Context, session *scrutineerv1alpha1.AgentSession, desired, existing client.Object) error {
+	switch existing.(type) {
+	case *corev1.ConfigMap:
+		desiredCM := desired.(*corev1.ConfigMap)
+		cm := existing.(*corev1.ConfigMap)
+		cm.Data = desiredCM.Data
+		cm.Annotations = desiredCM.Annotations
+		if err := r.Update(ctx, cm); err != nil {
+			return fmt.Errorf("update egress-proxy ConfigMap %q: %w", cm.Name, err)
+		}
+		r.recordNormal(session, EventReasonEgressProxySynced,
+			fmt.Sprintf("Updated egress proxy config %q for policy change", cm.Name))
+		return nil
+	case *corev1.Pod:
+		if err := r.Delete(ctx, existing, client.GracePeriodSeconds(0)); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete egress-proxy Pod %q for policy change: %w", existing.GetName(), err)
+		}
+		r.recordNormal(session, EventReasonEgressProxySynced,
+			fmt.Sprintf("Recreating egress proxy pod %q for policy change", existing.GetName()))
+		return nil
+	default:
+		// Non-policy objects (Service/ServiceAccount) never drift; nothing to do.
+		return nil
+	}
 }
 
 // deleteEgressObjects removes the per-session egress objects. Idempotent; NotFound is
