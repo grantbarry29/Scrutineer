@@ -50,7 +50,7 @@ func TestServiceAccountIsPerSession(t *testing.T) {
 }
 
 func TestConfigMapCarriesBootstrap(t *testing.T) {
-	cm := ConfigMap("sess-a", "ns1")
+	cm := ConfigMap("sess-a", "ns1", BootstrapConfig{})
 	if cm.Name != ResourceName("sess-a") || cm.Namespace != "ns1" {
 		t.Fatalf("meta = %s/%s", cm.Namespace, cm.Name)
 	}

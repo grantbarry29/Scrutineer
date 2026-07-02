@@ -148,7 +148,7 @@ func TestParseAccessLogLine_realEnvoyFixture(t *testing.T) {
 // The bootstrap must write the same JSON schema the parser reads, into the shared
 // access-log volume, while keeping the human-readable stdout log.
 func TestBootstrapYAML_fileAccessLog(t *testing.T) {
-	cfg := BootstrapYAML(ProxyPort)
+	cfg := BootstrapYAML(BootstrapConfig{Port: ProxyPort})
 	for _, s := range []string{
 		"envoy.access_loggers.file",
 		AccessLogPath,

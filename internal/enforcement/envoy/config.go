@@ -27,9 +27,13 @@ import "fmt"
 // json_format renders numeric operators as JSON numbers/null, never "-" placeholders. The
 // `%%` are fmt escapes for Envoy command operators; the rendered config contains single `%`.
 //
+// When cfg enforces an FQDN policy, an RBAC filter chain is inserted before the forward
+// proxy so denied/not-allowed authorities are blocked at the chokepoint (#32); audit mode
+// generates none (the egress-reporter records dry-run instead).
+//
 // Validated with `envoy --mode validate` (Envoy 1.31). Full CONNECT/forward-proxy behavior
 // is proven by the Slice A e2e (issue #60, A4), not by unit tests.
-func BootstrapYAML(port int) string {
+func BootstrapYAML(cfg BootstrapConfig) string {
 	return fmt.Sprintf(`admin:
   address:
     socket_address:
@@ -41,7 +45,7 @@ static_resources:
     address:
       socket_address:
         address: 0.0.0.0
-        port_value: %d
+        port_value: %[1]d
     filter_chains:
     - filters:
       - name: envoy.filters.network.http_connection_manager
@@ -58,7 +62,7 @@ static_resources:
           - name: envoy.access_loggers.file
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
-              path: %s
+              path: %[2]s
               log_format:
                 json_format:
                   method: "%%REQ(:METHOD)%%"
@@ -92,7 +96,7 @@ static_resources:
                 route:
                   cluster: dynamic_forward_proxy_cluster
           http_filters:
-          - name: envoy.filters.http.dynamic_forward_proxy
+%[3]s          - name: envoy.filters.http.dynamic_forward_proxy
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
               dns_cache_config:
@@ -111,5 +115,5 @@ static_resources:
         dns_cache_config:
           name: dynamic_forward_proxy_cache_config
           dns_lookup_family: V4_ONLY
-`, port, AccessLogPath)
+`, cfg.Port, AccessLogPath, rbacHTTPFilters(cfg))
 }

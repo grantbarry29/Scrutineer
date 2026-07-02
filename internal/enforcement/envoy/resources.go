@@ -89,15 +89,18 @@ func ServiceAccount(sessionName, namespace string) *corev1.ServiceAccount {
 	}
 }
 
-// ConfigMap holds the Envoy bootstrap for the session's proxy.
-func ConfigMap(sessionName, namespace string) *corev1.ConfigMap {
+// ConfigMap holds the Envoy bootstrap for the session's proxy. cfg carries the session's
+// effective FQDN policy (#32); pass a zero-value BootstrapConfig for a pure forward proxy.
+// The port is always ProxyPort — the caller need not set cfg.Port.
+func ConfigMap(sessionName, namespace string, cfg BootstrapConfig) *corev1.ConfigMap {
+	cfg.Port = ProxyPort
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ResourceName(sessionName),
 			Namespace: namespace,
 			Labels:    Labels(sessionName),
 		},
-		Data: map[string]string{configFileName: BootstrapYAML(ProxyPort)},
+		Data: map[string]string{configFileName: BootstrapYAML(cfg)},
 	}
 }
 

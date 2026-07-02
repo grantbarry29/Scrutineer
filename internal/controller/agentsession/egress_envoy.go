@@ -57,13 +57,17 @@ func (explicitProxyEgressBackend) manages(profile *scrutineerv1alpha1.RuntimePro
 func (explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.AgentSession) []client.Object {
 	ns := session.Namespace
 	name := session.Name
+	// The Envoy config carries the session's effective FQDN policy so denied/not-allowed
+	// domains are blocked at the chokepoint in enforced mode (#32). Read from
+	// status.effectivePolicy via the shared session context.
+	bootstrap := egressBootstrapConfig(session)
 	// The Pod runs as its dedicated per-session ServiceAccount (envoy.ResourceName). The
 	// egress-reporter container beside Envoy submits observed evidence with that
 	// identity's projected token (Slice C, #62); URL/audience come from the job package
 	// because envoy cannot import it back.
 	return []client.Object{
 		envoy.ServiceAccount(name, ns),
-		envoy.ConfigMap(name, ns),
+		envoy.ConfigMap(name, ns, bootstrap),
 		envoy.Service(name, ns),
 		envoy.Pod(name, ns, envoy.PodConfig{
 			ServiceAccount:   envoy.ResourceName(name),
@@ -73,6 +77,21 @@ func (explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.Age
 			ReporterAudience: scrutineerjob.ReporterTokenAudience,
 		}),
 	}
+}
+
+// egressBootstrapConfig derives the Envoy bootstrap FQDN policy from the session's
+// effective policy in status. Enforcement is on only in enforced mode; audit/dry-run leave
+// Envoy forwarding freely (the egress-reporter records would-be-denials as dry-run, #32).
+func egressBootstrapConfig(session *scrutineerv1alpha1.AgentSession) envoy.BootstrapConfig {
+	cfg := envoy.BootstrapConfig{}
+	ep := session.Status.EffectivePolicy
+	if ep == nil {
+		return cfg
+	}
+	cfg.Enforce = ep.Mode == scrutineerv1alpha1.PolicyModeEnforced
+	cfg.AllowedDomains = ep.PolicyRules.AllowedDomains
+	cfg.DeniedDomains = ep.PolicyRules.DeniedDomains
+	return cfg
 }
 
 // profileEnablesEnvoy reports whether the RuntimeProfile opts the session into the
