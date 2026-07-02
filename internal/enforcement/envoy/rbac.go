@@ -87,7 +87,9 @@ func authorityRegex(patterns []string) string {
 	if len(alts) == 0 {
 		return ""
 	}
-	return `(?i)(` + strings.Join(alts, "|") + `)(:[0-9]+)?`
+	// `\.?` tolerates a trailing-dot (root) authority so "example.com." can't slip past a
+	// deny that "example.com" catches — matching enforcement.MatchDomain's normalization.
+	return `(?i)(` + strings.Join(alts, "|") + `)\.?(:[0-9]+)?`
 }
 
 // rbacHTTPFilters renders the http_filters RBAC block (already indented for the filter
