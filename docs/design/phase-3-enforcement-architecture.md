@@ -205,7 +205,7 @@ Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/scrut
 ## Open Questions
 
 - ~~Should runtime reporters patch `AgentSession.status` directly or write separate evidence CRDs?~~ **Decided:** controller-owned **PATCH callback** — sidecars report to a controller endpoint that PATCHes `AgentSession.status`; no new evidence CRD. Keeps status the single source of truth. Detailed contract: [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) (Phase 3b slice 1).
-- Should `RuntimeProfile.spec.sidecars[]` be enough for backend selection, or should Phase 3 introduce an `EnforcementProfile` / `ToolGateway` CRD first?
+- ~~Should `RuntimeProfile.spec.sidecars[]` be enough for backend selection, or should Phase 3 introduce an `EnforcementProfile` / `ToolGateway` CRD first?~~ **Decided:** the list on `RuntimeProfile` is enough — its entry `type` selects the backend. Renamed `spec.sidecars[]` → `spec.enforcement[]` in #65 (it now covers out-of-pod backends like the Envoy egress proxy, not just in-pod sidecars); no separate `EnforcementProfile`/`ToolGateway` CRD was introduced.
 - What is the minimal production-safe status cap for runtime decisions and violations?
 - How should active Job drift be handled for enforcement backend changes: deny mutation, set drift condition, or require session restart?
 - How much can NetworkPolicy cover before DNS/proxy enforcement is needed?
