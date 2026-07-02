@@ -141,8 +141,12 @@ is only used on the first attempt), so consistency is unchanged.
 ## Build / test / run / validate
 
 `make test` (unit/envtest); `make test-e2e-images && make test-e2e` for live evidence and
-approval specs (the in-cluster reporter runs as a separate Deployment/Service —
-TODO: verify the exact `config/` overlay path).
+approval specs. In production the reporter is served by the manager binary and exposed
+in-cluster by the `scrutineer-controller-reporter` Service
+([`config/manager/reporter_service.yaml`](../../config/manager/reporter_service.yaml),
+port `8088`, selecting the controller-manager pod). The e2e suite instead deploys a
+standalone test reporter (`deployInClusterReporter`) so specs don't depend on a running
+manager.
 
 ## Operability
 

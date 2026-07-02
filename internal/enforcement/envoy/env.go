@@ -12,6 +12,7 @@ package envoy
 
 import (
 	"os"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -49,18 +50,7 @@ func policyEnv(cfg BootstrapConfig) []corev1.EnvVar {
 	}
 	return []corev1.EnvVar{
 		{Name: EnvPolicyMode, Value: mode},
-		{Name: EnvPolicyAllowedDomains, Value: csvJoin(cfg.AllowedDomains)},
-		{Name: EnvPolicyDeniedDomains, Value: csvJoin(cfg.DeniedDomains)},
+		{Name: EnvPolicyAllowedDomains, Value: strings.Join(cfg.AllowedDomains, ",")},
+		{Name: EnvPolicyDeniedDomains, Value: strings.Join(cfg.DeniedDomains, ",")},
 	}
-}
-
-func csvJoin(in []string) string {
-	out := ""
-	for i, s := range in {
-		if i > 0 {
-			out += ","
-		}
-		out += s
-	}
-	return out
 }
