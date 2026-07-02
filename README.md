@@ -77,15 +77,59 @@ See [AgentSession controller reference](#agentsession-controller-reference) for 
 
 ### Current limitations
 
-- **Enforcement is cooperative, not adversarial-proof.** Sidecars share the agent
-  pod and ServiceAccount, so a fully compromised agent could tamper with or starve
-  the data plane. Runtime evidence is stamped `self-reported` to reflect this.
-  Adversarial-grade integrity (kernel/eBPF, out-of-pod observation) is future work.
+- **Tool and file enforcement is cooperative, not adversarial-proof.** The dns-proxy,
+  tool-gateway, and fs-gateway sidecars share the agent pod and ServiceAccount, so a
+  fully compromised agent could tamper with or starve them; their evidence is stamped
+  `self-reported`. **Egress is the exception** — it is enforced out-of-pod and its
+  evidence is `observed` (see [Egress enforcement](#egress-enforcement-guarantees--assumptions)).
+  Adversarial-grade integrity for syscalls/files (kernel/eBPF) remains future work.
 - **Two in-cluster orchestrators.** `runtime.orchestrator` accepts `kubernetes-job`
   (default) and `kubernetes-pod`; external backends (`tekton` / `argo` / `temporal` /
   `external`) remain reserved.
 - **No operational UI yet** (Phase 7), and **no per-session identity / multi-tenancy**
   hardening yet (Phase 8).
+
+### Egress enforcement: guarantees & assumptions
+
+When a `RuntimeProfile` enables the `envoy` enforcement backend, agent egress is
+governed **adversarial-grade** — the agent cannot bypass it or forge its record —
+**under the assumptions below**. This is deliberately narrower than "tamper-proof";
+we never claim more than these boundaries support. (Design:
+[`docs/design/evidence-integrity.md`](docs/design/evidence-integrity.md).)
+
+**What holds:**
+
+- **Egress goes only through the proxy.** A per-session Envoy runs in its **own pod**
+  (own identity/netns), and a default-deny egress `NetworkPolicy` on the agent pod
+  permits **only** that Envoy. The agent reaches it by ClusterIP, so **direct DNS is
+  denied** — no DNS-exfil path.
+- **The agent can't tamper with the enforcement point.** It lives outside the agent's
+  pod, so a compromised agent can't reconfigure, restart, or read the proxy's identity.
+- **Evidence is independent.** Egress is recorded as `observed` — stamped by the
+  reporter from the **proxy pod's authenticated identity**, never from the payload, so
+  the agent cannot forge `observed` records or suppress them by lying.
+- **Defense in depth.** Even the proxy pod is denied cloud-metadata (and operator-set
+  cluster) CIDRs, so a compromised Envoy still can't reach `169.254.169.254`.
+
+**What it assumes (and does not claim beyond):**
+
+- **The CNI enforces egress `NetworkPolicy`.** Required. Verified against a CNI matrix
+  (kindnet + Calico) by the networking e2e suite; operators on other CNIs must confirm
+  egress-policy support.
+- **The agent pod is unprivileged** (`drop ALL`, `seccomp: RuntimeDefault`, no
+  `CAP_NET_ADMIN`) and **the node/CNI is not compromised** — node-level escape is a
+  higher threat tier, explicitly out of scope.
+- **Coverage is HTTP/S + client-`CONNECT`-tunneled TCP.** Proxy-unaware or raw non-HTTP
+  tools **fail closed** (no leak; they need proxy config or the future transparent
+  node interceptor, [#64](https://github.com/grantbarry29/scrutineer/issues/64)).
+- **`observed` means "independent of the agent," not "tamper-proof."** It is only as
+  strong as the assumptions above.
+
+Agents that legitimately need the Kubernetes API can opt into
+`spec.pod.automountServiceAccountToken: true` (see
+[RuntimeProfile](#reusable-runtime-profile-runtimeprofile)); that traffic still transits
+the proxy. FQDN allow/deny in the proxy is tracked separately in
+[#32](https://github.com/grantbarry29/scrutineer/issues/32).
 
 ---
 
@@ -187,7 +231,9 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 |--------|------------------------|
 | Scrutineer baseline | Capability drops (`ALL`), `allowPrivilegeEscalation: false` (busybox-friendly; no forced `runAsNonRoot`) |
 | `RuntimeProfile.spec.container` | `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities` (profile wins when set) |
-| `RuntimeProfile.spec.pod` | `runtimeClassName`, `seccompProfile` |
+| `RuntimeProfile.spec.pod` | `runtimeClassName`, `seccompProfile`, `automountServiceAccountToken` |
+
+By default the agent pod's ServiceAccount token is **not** mounted, so a compromised agent gets no apiserver credential. Set `spec.pod.automountServiceAccountToken: true` **only** for agents that legitimately call the Kubernetes API, and pair it with a dedicated, minimally-scoped ServiceAccount via `spec.runtime.serviceAccountName` — the token grants whatever that SA's RBAC allows. Under the egress lock the agent's apiserver traffic still transits the session's Envoy proxy (and is recorded as `observed` evidence).
 
 **Status written on reconcile:**
 
@@ -784,7 +830,7 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/scrutineer_*.
 | Policy / profile change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
 | Enforcement backends (`spec.enforcement`) | Yes | First-party in-pod `dns-proxy` / `tool-gateway` / `fs-gateway`; out-of-pod `envoy` egress proxy with `observed` evidence |
-| **Network egress enforcement** | Yes (cooperative) | [dns-proxy](cmd/dns-proxy/): allow/deny domains + CIDRs |
+| **Network egress enforcement** | Yes | Out-of-pod `envoy` egress proxy + default-deny routing lock (`observed` evidence); or cooperative [dns-proxy](cmd/dns-proxy/) (allow/deny domains + CIDRs) |
 | **Tool-call enforcement** | Yes (cooperative) | [tool-gateway](cmd/tool-gateway/): allow/deny tools, caps, argument constraints |
 | **File-access enforcement** | Yes (cooperative) | [fs-gateway](cmd/fs-gateway/): allow/deny paths, size cap |
 | **Runtime evidence loop** | Yes | [reporter](internal/reporter/) merges `policyDecisions`/`violations`/`usage`/`events` from sidecars |
@@ -847,6 +893,12 @@ endpoint) and `SessionTemplate` (parameterized blueprints) remain future work.
 
 ### In progress / next
 
+- **Adversarial-grade egress (#8) — shipped.** The per-session out-of-pod Envoy proxy,
+  the default-deny routing lock (kindnet + Calico), and identity-authenticated `observed`
+  egress evidence are in place; agents can't bypass egress or forge its record (under the
+  documented assumptions). Next in this area: **FQDN allow/deny** in the proxy
+  ([#32](https://github.com/grantbarry29/scrutineer/issues/32)) and a transparent node
+  interceptor ([#64](https://github.com/grantbarry29/scrutineer/issues/64)).
 - **Phase 6 — orchestrator adapters.** The backend-neutral `runtimeBackend`
   interface, `status.runtimeRef`, and a second in-tree backend (`kubernetes-pod`)
   have shipped, proving Scrutineer is orchestrator-agnostic. Next is the external
@@ -855,10 +907,10 @@ endpoint) and `SessionTemplate` (parameterized blueprints) remain future work.
 
 ### Future
 
-- **Stronger runtime enforcement** — Envoy egress, generated `NetworkPolicy` /
-  `CiliumNetworkPolicy`, eBPF process/file/syscall observation, and sandbox
-  runtimes (gVisor / Kata / Firecracker). These also move enforcement from
-  *cooperative* toward *adversarial-grade* (out-of-pod / kernel observation).
+- **Stronger runtime enforcement** — building on the shipped out-of-pod Envoy egress +
+  `observed` evidence (#8): eBPF process/file/syscall observation and sandbox runtimes
+  (gVisor / Kata / Firecracker), extending *adversarial-grade* integrity from egress to
+  syscalls/files.
 - **Phase 7 — operational UI** — a governance/observability dashboard (session
   list/detail, timelines, approval inbox, runtime topology, audit/forensics).
 - **Phase 8 — enterprise platform** — per-session identity, `CredentialProfile`
