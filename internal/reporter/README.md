@@ -1,7 +1,8 @@
 # reporter
 
-Scrutineer's runtime-evidence and approval HTTP service. Ingests self-reported evidence from
-cooperative data-plane sidecars and serves the per-tool approval channel, turning
+Scrutineer's runtime-evidence and approval HTTP service. Ingests evidence from data-plane
+callers — `self-reported` from cooperative in-agent-pod sidecars, `observed` from the
+per-session out-of-pod egress proxy — and serves the per-tool approval channel, turning
 *propagated* governance into *observed* governance by writing `AgentSession.status`.
 Compiled into the manager binary ([`cmd/main.go`](../../cmd/main.go)); can run standalone
 via `--reporter-only`.
@@ -21,8 +22,12 @@ caller pod and merges only validated evidence into the session status owned by t
   creating runtime `ApprovalRequest`s idempotently and reporting controller-observed state;
   cap outstanding holds per session.
 - **Does not:** decide policy; **write `ApprovalRequest.status`** (the controller is the
-  sole writer); enforce anything. All ingested evidence is stamped `self-reported`
-  assurance — it is **cooperative**, not adversarial-proof.
+  sole writer); enforce anything. Evidence assurance is stamped **from the caller's
+  authenticated identity, never the payload**: in-agent-pod sidecars are `self-reported`
+  (cooperative, not adversarial-proof); only the session's egress-proxy pod identity
+  yields `observed` (Slice C, [#62](https://github.com/grantbarry29/scrutineer/issues/62) —
+  see [`docs/design/evidence-integrity.md`](../../docs/design/evidence-integrity.md) §4/§5
+  for what `observed` does and does not guarantee).
 
 ## Entry point & execution model
 
@@ -43,7 +48,9 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
 - `server.go` — `Options`, `NewRunnable`, mux/routes, RBAC markers.
 - `handler.go` — `POST /v1/report` pipeline + result/metrics/trace tagging.
 - `approvals.go` — approval channel (idempotent by `requestId`, outstanding-hold cap).
-- `auth.go` — `KubeIdentityVerifier`: TokenReview + pod→Job→session ownership.
+- `auth.go` — `KubeIdentityVerifier`: TokenReview + two authorization paths returning a
+  `CallerClass`: pod→Job→session ownership (`agent-sidecar`) or AgentSession-controller-
+  owned egress-proxy pod with the deterministic name + dedicated SA (`egress-proxy`).
 - `normalize.go` — payload validation/normalization; `ratelimit.go`,
   `reportid_cache.go` — abuse controls + dedup; `errors.go`, `types.go`.
 
@@ -65,8 +72,10 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   `GET /v1/approvals/{id}` (poll).
 - **Auth:** `Authorization: Bearer <projected SA token>` with audience `TokenAudience`;
   pod identity from the token's `pod-name` extra or the `X-Scrutineer-Pod` header; the pod's
-  ServiceAccount must match the token and the pod must be owned by the session's Job
-  (label `LabelSessionRef`).
+  ServiceAccount must match the token, and the pod must be either owned by the session's
+  Job (label `LabelSessionRef` → `self-reported`) or the session's egress-proxy pod
+  (AgentSession controller owner-ref + `envoy.ResourceName` name + dedicated SA →
+  `observed`).
 - **Limits:** `MaxReportBytes` / `MaxApprovalBodyBytes`; per-session rate limiting;
   `DefaultMaxOutstandingApprovals` undecided holds; reportId dedup TTL.
 - RBAC from `+kubebuilder:rbac` markers in `server.go` (`tokenreviews: create`;
@@ -120,7 +129,10 @@ is only used on the first attempt), so consistency is unchanged.
 
 - The **controller is the sole writer of `ApprovalRequest.status`**; this service only
   creates holds and reports observed state.
-- Evidence assurance is stamped **server-side** (`self-reported`), never client-settable.
+- Evidence assurance is stamped **server-side from `CallerIdentity.Assurance()`**, never
+  client-settable: `self-reported` for agent-sidecar callers, `observed` only for the
+  egress-proxy identity; an empty/unknown class degrades to `self-reported`. The audit
+  `RuntimeReport` record carries the same identity-derived assurance.
 - Unknown session / failed ownership check ⇒ fail closed (`404`/`401`/`403`).
 - Status-merge logic lives in `agentsession.PatchRuntimePolicyReport` — changes to status
   shape must stay consistent across the reporter and the controller; RBAC marker changes

@@ -54,8 +54,12 @@ against an unchanged cluster makes no API mutations.
 - `egress_envoy.go` — `egressBackend` seam + the interim `explicitProxyEgressBackend`,
   which provisions the per-session out-of-pod Envoy proxy (`ServiceAccount`/`ConfigMap`/
   `Service`/`Pod` from [`internal/enforcement/envoy`](../../enforcement/envoy)) when a
-  `RuntimeProfile` enables the `envoy` type, and tears it down on terminal. `Reconcile`
-  provisions it (and `resolveEgressProxyEndpoint` records the Envoy Service ClusterIP into
+  `RuntimeProfile` enables the `envoy` type, and tears it down on terminal. The Pod runs
+  two containers: Envoy and the **egress-reporter**
+  ([`cmd/egress-reporter`](../../../cmd/egress-reporter)), which tails Envoy's access log
+  and submits `observed` evidence with the pod's projected per-session SA token (Slice C,
+  #62; reporter URL/audience passed from the job package). `Reconcile` provisions it (and
+  `resolveEgressProxyEndpoint` records the Envoy Service ClusterIP into
   `status.egressProxyEndpoint`) **before** the agent runtime is built, so the agent is
   pointed at Envoy by ClusterIP — no DNS needed under the routing lock. A future node
   interceptor (#64) implements the same interface. (Distinct from `egress_proxy.go`,
