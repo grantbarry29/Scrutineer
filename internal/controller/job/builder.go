@@ -119,6 +119,12 @@ func applyRuntimeProfileToPodSpec(spec *corev1.PodSpec, profile *scrutineerv1alp
 		}
 		spec.SecurityContext.SeccompProfile = p.SeccompProfile.DeepCopy()
 	}
+	// SA-token automount opt-in (Slice D, #63): only an explicit true relaxes the
+	// hardened automount=false default set by BuildPodTemplateSpec.
+	if p.AutomountServiceAccountToken != nil && *p.AutomountServiceAccountToken {
+		yes := true
+		spec.AutomountServiceAccountToken = &yes
+	}
 }
 
 func buildWorkspaceVolumes(ws *scrutineerv1alpha1.WorkspaceSpec) ([]corev1.Volume, []corev1.VolumeMount) {

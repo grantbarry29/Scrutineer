@@ -78,6 +78,10 @@ func RuntimeProfileDrift(existing, desired *batchv1.Job) bool {
 	if !ptrStringEqual(ex.RuntimeClassName, want.RuntimeClassName) {
 		return true
 	}
+	// SA-token automount opt-in (Slice D, #63): a grant/revoke must replace a pending Job.
+	if !ptrBoolEqual(ex.AutomountServiceAccountToken, want.AutomountServiceAccountToken) {
+		return true
+	}
 	if !seccompProfilesEqual(podSeccompProfile(&ex), podSeccompProfile(&want)) {
 		return true
 	}
@@ -129,6 +133,16 @@ func podSeccompProfile(spec *corev1.PodSpec) *corev1.SeccompProfile {
 		return nil
 	}
 	return spec.SecurityContext.SeccompProfile
+}
+
+func ptrBoolEqual(a, b *bool) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
 }
 
 func ptrStringEqual(a, b *string) bool {

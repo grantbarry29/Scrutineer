@@ -124,6 +124,17 @@ spec:
                 description: Pod holds pod-level runtime settings (sandbox class,
                   seccomp).
                 properties:
+                  automountServiceAccountToken:
+                    description: |-
+                      AutomountServiceAccountToken re-enables mounting the agent pod's ServiceAccount
+                      token when true. The default (nil or false) keeps Scrutineer's hardened behavior:
+                      no apiserver credential in the agent pod. Opt in only for agents that legitimately
+                      need the Kubernetes API, and pair it with a dedicated, minimally-scoped
+                      ServiceAccount via the session's spec.runtime.serviceAccountName — the token grants
+                      whatever RBAC that ServiceAccount has. Under the mandatory egress lock the agent's
+                      apiserver traffic transits the session's Envoy proxy like all other egress (and is
+                      recorded as observed evidence); see docs/design/evidence-integrity.md §5.
+                    type: boolean
                   runtimeClassName:
                     description: |-
                       RuntimeClassName selects a RuntimeClass (e.g. gVisor/Kata) when the cluster provides one.

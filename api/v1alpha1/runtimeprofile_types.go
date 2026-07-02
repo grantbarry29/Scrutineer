@@ -77,6 +77,17 @@ type RuntimeProfilePodSpec struct {
 	// SeccompProfile applies a seccomp profile at the pod level.
 	// +optional
 	SeccompProfile *corev1.SeccompProfile `json:"seccompProfile,omitempty"`
+
+	// AutomountServiceAccountToken re-enables mounting the agent pod's ServiceAccount
+	// token when true. The default (nil or false) keeps Scrutineer's hardened behavior:
+	// no apiserver credential in the agent pod. Opt in only for agents that legitimately
+	// need the Kubernetes API, and pair it with a dedicated, minimally-scoped
+	// ServiceAccount via the session's spec.runtime.serviceAccountName — the token grants
+	// whatever RBAC that ServiceAccount has. Under the mandatory egress lock the agent's
+	// apiserver traffic transits the session's Envoy proxy like all other egress (and is
+	// recorded as observed evidence); see docs/design/evidence-integrity.md §5.
+	// +optional
+	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
 }
 
 // RuntimeProfileEnforcement enables one data-plane enforcement backend for sessions

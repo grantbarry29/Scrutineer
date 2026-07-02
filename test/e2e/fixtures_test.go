@@ -473,6 +473,49 @@ func createRuntimeProfileWithEnvoy(ctx context.Context, namespace, name string) 
 	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
 }
 
+// createRuntimeProfileWithEnvoyAutomount is the envoy egress profile plus the Slice D
+// (#63) SA-token automount opt-in, for agents that legitimately need the Kubernetes API.
+func createRuntimeProfileWithEnvoyAutomount(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	enabled := true
+	rp := &scrutineerv1alpha1.RuntimeProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
+				SeccompProfile:               &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+				AutomountServiceAccountToken: boolPtr(true),
+			},
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
+				AllowPrivilegeEscalation: boolPtr(false),
+			},
+			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
+				Name:    "envoy",
+				Type:    scrutineerjob.EnforcementTypeEnvoy,
+				Enabled: &enabled,
+			}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
+}
+
+// withApiserverViaEnvoyProbe (Slice D, #63) proves an API-needing agent works under the
+// routing lock: it reports whether its SA token is mounted (TOKEN=present/absent) and
+// repeatedly CONNECTs to the apiserver by name *through* its Envoy proxy (Envoy resolves
+// the name and the lock permits only Envoy), so the apiserver authority shows up in
+// Envoy's access log — apiserver access transits the chokepoint like all other egress.
+func withApiserverViaEnvoyProbe() agentSessionOption {
+	return func(s *scrutineerv1alpha1.AgentSession) {
+		s.Spec.Runtime.Command = []string{"sh", "-c", `sleep 12
+if [ -s /var/run/secrets/kubernetes.io/serviceaccount/token ]; then echo TOKEN=present; else echo TOKEN=absent; fi
+ENVOY_IP=$(printf '%s' "${http_proxy:-$HTTP_PROXY}" | sed 's|^http://||; s|:.*$||')
+for i in $(seq 1 40); do
+  printf 'CONNECT kubernetes.default.svc:443 HTTP/1.1\r\nHost: kubernetes.default.svc:443\r\n\r\n' | nc -w 3 "$ENVOY_IP" 15001 2>/dev/null || true
+  sleep 2
+done
+sleep 120`}
+	}
+}
+
 func createRuntimeProfileWithFSGateway(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	enabled := true

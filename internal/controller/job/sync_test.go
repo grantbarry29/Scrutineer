@@ -90,6 +90,24 @@ func TestRuntimeProfileDrift_runtimeClassAndSecurity(t *testing.T) {
 	}
 }
 
+// Flipping the SA-token automount opt-in (Slice D, #63) must count as profile drift so a
+// pending Job is replaced — otherwise a token grant/revoke would silently not apply.
+func TestRuntimeProfileDrift_automountOptIn(t *testing.T) {
+	base := Build(minimalSession(), &Task{}, nil, nil)
+	yes := true
+	withToken := Build(minimalSession(), &Task{}, nil, &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{AutomountServiceAccountToken: &yes},
+		},
+	})
+	if !RuntimeProfileDrift(base, withToken) {
+		t.Fatal("expected drift when automount opt-in differs")
+	}
+	if RuntimeProfileDrift(withToken, withToken) {
+		t.Fatal("no drift for identical automount setting")
+	}
+}
+
 func TestRuntimeProfileDrift_sidecarEnv(t *testing.T) {
 	dns := Build(minimalSession(), &Task{}, &policy.Resolved{
 		Mode:  scrutineerv1alpha1.PolicyModeEnforced,

@@ -146,6 +146,41 @@ func TestBuild_disablesServiceAccountTokenAutomount(t *testing.T) {
 	}
 }
 
+// The RuntimeProfile automount opt-in (Slice D, #63) re-enables the SA token for agents
+// that legitimately need the Kubernetes API. Only an explicit true flips it; nil and
+// false both keep the hardened default.
+func TestBuild_profileAutomountOptIn(t *testing.T) {
+	tr := true
+	fa := false
+	cases := []struct {
+		name string
+		val  *bool
+		want bool
+	}{
+		{"opt-in true", &tr, true},
+		{"explicit false", &fa, false},
+		{"nil keeps default", nil, false},
+	}
+	for _, tc := range cases {
+		profile := &scrutineerv1alpha1.RuntimeProfile{
+			Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+				Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
+					AutomountServiceAccountToken: tc.val,
+				},
+			},
+		}
+		spec := Build(minimalSession(), &Task{}, nil, profile).Spec.Template.Spec
+		if spec.AutomountServiceAccountToken == nil || *spec.AutomountServiceAccountToken != tc.want {
+			t.Fatalf("%s: automount = %v, want %v", tc.name, spec.AutomountServiceAccountToken, tc.want)
+		}
+	}
+	// No Pod section at all keeps the hardened default.
+	spec := Build(minimalSession(), &Task{}, nil, &scrutineerv1alpha1.RuntimeProfile{}).Spec.Template.Spec
+	if spec.AutomountServiceAccountToken == nil || *spec.AutomountServiceAccountToken {
+		t.Fatal("empty profile must keep automount=false")
+	}
+}
+
 func TestBuild_modelBaseURLEnv(t *testing.T) {
 	session := minimalSession()
 	session.Spec.Model.BaseURL = "https://openrouter.ai/api/v1"
