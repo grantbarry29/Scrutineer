@@ -51,10 +51,14 @@ func TestKubeIdentityVerifier_authorizePodForSession(t *testing.T) {
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(job, pod).Build()
 
 	v := &KubeIdentityVerifier{Client: cl, Reader: cl, Audience: TokenAudience}
-	if err := v.authorizePodForSession(context.Background(), "ns1", "pod-a", "sess-a", "system:serviceaccount:ns1:default"); err != nil {
+	class, err := v.authorizePodForSession(context.Background(), "ns1", "pod-a", "sess-a", "system:serviceaccount:ns1:default")
+	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	if err := v.authorizePodForSession(context.Background(), "ns1", "pod-a", "other-session", "system:serviceaccount:ns1:default"); err == nil {
+	if class != CallerAgentSidecar {
+		t.Fatalf("class = %q, want %q", class, CallerAgentSidecar)
+	}
+	if _, err := v.authorizePodForSession(context.Background(), "ns1", "pod-a", "other-session", "system:serviceaccount:ns1:default"); err == nil {
 		t.Fatal("expected forbidden for wrong session")
 	} else if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected ErrForbidden, got %v", err)

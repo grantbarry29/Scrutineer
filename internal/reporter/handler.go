@@ -92,7 +92,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.Verifier.Verify(r.Context(), r, req.Session); err != nil {
+	identity, err := h.Verifier.Verify(r.Context(), r, req.Session)
+	if err != nil {
 		status := http.StatusUnauthorized
 		result = "unauthorized"
 		if errors.Is(err, ErrForbidden) {
@@ -140,7 +141,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		effectiveMode = session.Status.EffectivePolicy.Mode
 	}
 
-	report, err := ValidateAndNormalizeReport(req, receivedAt, effectiveMode)
+	// Assurance is derived from the authenticated caller identity (observed only for
+	// the session's egress-proxy pod), never from the payload.
+	report, err := ValidateAndNormalizeReport(req, receivedAt, effectiveMode, identity.Assurance())
 	if err != nil {
 		result = "bad_request"
 		status := http.StatusBadRequest
@@ -194,9 +197,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result = "accepted"
-	// Runtime reports come from cooperative data-plane sidecars: self-reported assurance.
+	// The audit record carries the identity-derived assurance: self-reported for
+	// cooperative in-pod sidecars, observed for the session's egress proxy (#62).
 	audit.Emit(ctx, audit.RuntimeReport(sessionNamespace, sessionName, backend, len(report.Decisions),
-		string(scrutineerv1alpha1.EvidenceSelfReported), receivedAt))
+		string(identity.Assurance()), receivedAt))
 	w.WriteHeader(http.StatusAccepted)
 }
 

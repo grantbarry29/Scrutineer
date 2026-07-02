@@ -464,7 +464,7 @@ func TestValidateAndNormalizeReport_rejectsTooManyDecisions(t *testing.T) {
 		Session:   SessionRef{Namespace: "ns", Name: "s"},
 		Backend:   "egress-proxy",
 		Decisions: decisions,
-	}, time.Now(), scrutineerv1alpha1.PolicyModeEnforced)
+	}, time.Now(), scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.EvidenceSelfReported)
 	if err == nil {
 		t.Fatal("expected error")
 	}

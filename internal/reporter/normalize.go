@@ -24,7 +24,14 @@ import (
 const maxFutureSkew = 2 * time.Minute
 
 // ValidateAndNormalizeReport validates the wire payload and returns a RuntimeReport.
-func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effectiveMode scrutineerv1alpha1.PolicyMode) (enforcement.RuntimeReport, error) {
+// assurance is the level derived from the caller's authenticated identity
+// (CallerIdentity.Assurance) — it overrides whatever the payload claims on every
+// decision and violation, so no caller can self-attest a higher level. An empty
+// assurance defensively degrades to self-reported.
+func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effectiveMode scrutineerv1alpha1.PolicyMode, assurance scrutineerv1alpha1.EvidenceAssurance) (enforcement.RuntimeReport, error) {
+	if assurance == "" {
+		assurance = scrutineerv1alpha1.EvidenceSelfReported
+	}
 	if strings.TrimSpace(req.Session.Namespace) == "" || strings.TrimSpace(req.Session.Name) == "" {
 		return enforcement.RuntimeReport{}, fmt.Errorf("%w: session namespace and name are required", ErrBadRequest)
 	}
@@ -69,11 +76,11 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		if effectiveMode != "" {
 			d.Mode = effectiveMode
 		}
-		// Evidence from the cooperative reporter endpoint is always self-reported:
-		// the sidecar shares a pod/ServiceAccount with the agent, so a client must
-		// not be able to self-attest a higher assurance level. Override any value
-		// the caller supplied.
-		d.AssuranceLevel = scrutineerv1alpha1.EvidenceSelfReported
+		// Assurance comes from the caller's authenticated identity, never the payload:
+		// agent-adjacent sidecars share a pod/ServiceAccount with the agent and stay
+		// self-reported; only the out-of-pod egress proxy's identity yields observed
+		// (Slice C, #62). Override any value the caller supplied.
+		d.AssuranceLevel = assurance
 		decisions = append(decisions, d)
 	}
 
@@ -84,7 +91,7 @@ func ValidateAndNormalizeReport(req ReportRequest, receivedAt time.Time, effecti
 		} else {
 			violations[i].Time = violations[i].Time.Rfc3339Copy()
 		}
-		violations[i].AssuranceLevel = scrutineerv1alpha1.EvidenceSelfReported
+		violations[i].AssuranceLevel = assurance
 	}
 
 	events := make([]scrutineerv1alpha1.SessionEvent, 0, len(req.Events))

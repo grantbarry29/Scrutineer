@@ -20,10 +20,13 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 )
 
 const (
@@ -86,11 +89,12 @@ func (v *KubeIdentityVerifier) Verify(ctx context.Context, r *http.Request, sess
 		}
 	}
 
-	if err := v.authorizePodForSession(ctx, namespace, podName, session.Name, review.Status.User.Username); err != nil {
+	class, err := v.authorizePodForSession(ctx, namespace, podName, session.Name, review.Status.User.Username)
+	if err != nil {
 		return CallerIdentity{}, err
 	}
 
-	return CallerIdentity{Namespace: namespace, PodName: podName}, nil
+	return CallerIdentity{Namespace: namespace, PodName: podName, Class: class}, nil
 }
 
 func bearerToken(header string) (string, error) {
@@ -116,22 +120,46 @@ func podNameFromTokenReview(status authenticationv1.TokenReviewStatus) (string, 
 	return names[0], true
 }
 
-func (v *KubeIdentityVerifier) authorizePodForSession(ctx context.Context, namespace, podName, sessionName, tokenUsername string) error {
+// authorizePodForSession proves the caller pod is entitled to report for the session and
+// returns HOW it is entitled (its CallerClass, which decides evidence assurance):
+//
+//   - agent-sidecar: the pod is owned by the session's runtime Job (cooperative in-pod
+//     sidecars share the agent pod) → self-reported evidence.
+//   - egress-proxy: the pod is controller-owned by the AgentSession itself AND carries
+//     the deterministic egress-proxy name AND runs as the dedicated per-session
+//     ServiceAccount → observed evidence (Slice C, #62). All three must hold: a
+//     lookalike pod missing any one of them is rejected, and the TokenReview username
+//     check above pins the token to that SA, so an agent-adjacent caller cannot
+//     impersonate the proxy.
+func (v *KubeIdentityVerifier) authorizePodForSession(ctx context.Context, namespace, podName, sessionName, tokenUsername string) (CallerClass, error) {
 	var pod corev1.Pod
 	if err := v.Reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: podName}, &pod); err != nil {
 		if apierrors.IsNotFound(err) {
-			return fmt.Errorf("%w: pod %q not found", ErrForbidden, podName)
+			return "", fmt.Errorf("%w: pod %q not found", ErrForbidden, podName)
 		}
-		return fmt.Errorf("get pod: %w", err)
+		return "", fmt.Errorf("get pod: %w", err)
 	}
 
 	if pod.Namespace != namespace {
-		return fmt.Errorf("%w: pod namespace mismatch", ErrForbidden)
+		return "", fmt.Errorf("%w: pod namespace mismatch", ErrForbidden)
 	}
 
 	expectedSA := serviceAccountPrefix + namespace + ":" + pod.Spec.ServiceAccountName
 	if tokenUsername != "" && tokenUsername != expectedSA {
-		return fmt.Errorf("%w: token service account does not match pod", ErrForbidden)
+		return "", fmt.Errorf("%w: token service account does not match pod", ErrForbidden)
+	}
+
+	// Egress-proxy path: controller-owned by the AgentSession (not run under a Job).
+	if ref := metav1.GetControllerOf(&pod); ref != nil &&
+		ref.Kind == "AgentSession" && ref.APIVersion == scrutineerv1alpha1.GroupVersion.String() {
+		if ref.Name != sessionName {
+			return "", fmt.Errorf("%w: egress-proxy pod belongs to session %q, not %q", ErrForbidden, ref.Name, sessionName)
+		}
+		want := envoy.ResourceName(sessionName)
+		if podName != want || pod.Spec.ServiceAccountName != want {
+			return "", fmt.Errorf("%w: pod is not the session's egress proxy", ErrForbidden)
+		}
+		return CallerEgressProxy, nil
 	}
 
 	var jobName string
@@ -142,20 +170,20 @@ func (v *KubeIdentityVerifier) authorizePodForSession(ctx context.Context, names
 		}
 	}
 	if jobName == "" {
-		return fmt.Errorf("%w: pod is not owned by a Job", ErrForbidden)
+		return "", fmt.Errorf("%w: pod is not owned by a Job", ErrForbidden)
 	}
 
 	var job batchv1.Job
 	if err := v.Reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: jobName}, &job); err != nil {
 		if apierrors.IsNotFound(err) {
-			return fmt.Errorf("%w: owning Job not found", ErrForbidden)
+			return "", fmt.Errorf("%w: owning Job not found", ErrForbidden)
 		}
-		return fmt.Errorf("get Job: %w", err)
+		return "", fmt.Errorf("get Job: %w", err)
 	}
 
 	if job.Labels[scrutineerjob.LabelSessionRef] != sessionName {
-		return fmt.Errorf("%w: pod Job does not own session %q", ErrForbidden, sessionName)
+		return "", fmt.Errorf("%w: pod Job does not own session %q", ErrForbidden, sessionName)
 	}
 
-	return nil
+	return CallerAgentSidecar, nil
 }

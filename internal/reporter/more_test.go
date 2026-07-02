@@ -140,7 +140,7 @@ func TestValidateAndNormalizeReport_fillsAndValidates(t *testing.T) {
 			AssuranceLevel: scrutineerv1alpha1.EvidenceObserved,
 		}},
 		Violations: []scrutineerv1alpha1.PolicyViolation{{Type: "network", Message: "m"}},
-	}, now, scrutineerv1alpha1.PolicyModeEnforced)
+	}, now, scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.EvidenceSelfReported)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestValidateAndNormalizeReport_rejectsBadInput(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := ValidateAndNormalizeReport(tc.req, now, ""); err == nil {
+			if _, err := ValidateAndNormalizeReport(tc.req, now, "", scrutineerv1alpha1.EvidenceSelfReported); err == nil {
 				t.Fatal("expected error")
 			} else if !errors.Is(err, ErrBadRequest) {
 				t.Fatalf("want ErrBadRequest, got %v", err)
@@ -199,7 +199,7 @@ func TestValidateAndNormalizeReport_acceptsUsageOnlyReport(t *testing.T) {
 		Session: SessionRef{Namespace: "ns", Name: "s"},
 		Backend: "agent",
 		Usage:   &scrutineerv1alpha1.SessionUsage{InputTokens: 10, OutputTokens: 5},
-	}, now, "")
+	}, now, "", scrutineerv1alpha1.EvidenceSelfReported)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestValidateAndNormalizeReport_pinsTimesToSecondPrecision(t *testing.T) {
 		Backend:   "egress-proxy",
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{Type: "network", Action: scrutineerv1alpha1.PolicyDecisionDeny, Reason: "x"}},
 		Events:    []scrutineerv1alpha1.SessionEvent{{Type: scrutineerv1alpha1.SessionEventTypeNetwork}},
-	}, received, "")
+	}, received, "", scrutineerv1alpha1.EvidenceSelfReported)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -46,10 +46,37 @@ type ReportRequest struct {
 	Usage      *scrutineerv1alpha1.SessionUsage     `json:"usage,omitempty"`
 }
 
-// CallerIdentity is an authenticated sidecar pod authorized to report evidence.
+// CallerClass distinguishes where an authenticated reporter caller runs, which decides
+// the assurance stamped on its evidence (see docs/design/evidence-integrity.md §4).
+type CallerClass string
+
+const (
+	// CallerAgentSidecar is a cooperative in-agent-pod sidecar (dns-proxy, tool-gateway,
+	// fs-gateway): it shares the agent's pod, so its evidence is self-reported. The zero
+	// value of CallerClass maps here so an unset class can never over-claim.
+	CallerAgentSidecar CallerClass = "agent-sidecar"
+	// CallerEgressProxy is the session's out-of-pod Envoy egress-proxy pod (dedicated
+	// per-session identity, controller owner-ref) — outside the agent's trust domain,
+	// so its evidence is stamped observed (Slice C, #62).
+	CallerEgressProxy CallerClass = "egress-proxy"
+)
+
+// CallerIdentity is an authenticated pod authorized to report evidence for a session.
 type CallerIdentity struct {
 	Namespace string
 	PodName   string
+	// Class is how the caller was authorized (agent-sidecar vs egress-proxy). Empty
+	// means agent-sidecar.
+	Class CallerClass
+}
+
+// Assurance maps the caller's class to the evidence assurance the reporter stamps.
+// Identity — never the payload — is the sole source of assurance.
+func (c CallerIdentity) Assurance() scrutineerv1alpha1.EvidenceAssurance {
+	if c.Class == CallerEgressProxy {
+		return scrutineerv1alpha1.EvidenceObserved
+	}
+	return scrutineerv1alpha1.EvidenceSelfReported
 }
 
 // ApprovalRegisterRequest is the JSON body for POST /v1/approvals. A tool-gateway
