@@ -32,6 +32,11 @@ Each of these is a separately built/deployed component and keeps a README at its
   `Dockerfile.<x>` → the `docker-build-<x>` / `kind-load-<x>` Makefile targets (and
   `test-e2e-images`). Changing the contract usually touches several of these — keep
   the README and these sites consistent.
+- Adding/removing a binary also means updating the **release matrix** in
+  [`.github/workflows/release.yaml`](../.github/workflows/release.yaml) (publishes
+  every first-party image on a `v*` tag) and the image-default constant + Makefile
+  `VERSION` pair its `verify-version` guard checks — otherwise the new image is
+  pinned in code but never published.
 
 ## Validation
 
