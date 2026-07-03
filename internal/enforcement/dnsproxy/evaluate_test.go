@@ -79,6 +79,27 @@ func TestEvaluateEgress_wildcardDomains(t *testing.T) {
 	}
 }
 
+// #41 headline case, deny side: an exact deny entry covers only itself. Subdomain
+// coverage is opt-in via "*.evil.example" (add both entries to cover apex + subdomains) —
+// implicit suffix matching was rejected in the #32 semantics decision.
+func TestEvaluateEgress_exactDenyDoesNotCoverSubdomain(t *testing.T) {
+	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
+		DeniedDomains: []string{"evil.example"},
+	})
+	if auth := EvaluateEgress(ctx, EgressRequest{Host: "api.evil.example"}); !auth.Allowed {
+		t.Fatalf("exact deny entry must not cover subdomain: got %+v", auth)
+	}
+
+	bothCtx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
+		DeniedDomains: []string{"evil.example", "*.evil.example"},
+	})
+	for _, host := range []string{"evil.example", "api.evil.example"} {
+		if auth := EvaluateEgress(bothCtx, EgressRequest{Host: host}); auth.Allowed || auth.Reason != ReasonDeniedDomains {
+			t.Fatalf("apex+wildcard pair must deny %q: got %+v", host, auth)
+		}
+	}
+}
+
 func TestEvaluateEgress_allowlistDomain(t *testing.T) {
 	ctx := baseCtx(scrutineerv1alpha1.PolicyModeEnforced, scrutineerv1alpha1.PolicyRules{
 		AllowedDomains: []string{"github.com"},
