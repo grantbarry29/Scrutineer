@@ -1,0 +1,88 @@
+name: Release
+
+# Publishes the five first-party images to ghcr when a version tag is pushed.
+# The upstream Envoy image is not built here — it is pinned by digest in the
+# Makefile (ENVOY_IMG) and pulled from upstream at deploy time.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # The controller binary bakes in the sidecar/proxy image defaults
+  # (internal/enforcement/**), and the deploy overlays pin newTag. Publishing a
+  # tag that disagrees with those would ship a controller that injects images
+  # from a different (possibly unpublished) version — fail fast instead.
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Tag matches Makefile VERSION, image defaults, and overlays
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          fail=0
+          grep -q "^VERSION ?= ${tag}\$" Makefile \
+            || { echo "Makefile VERSION does not match tag ${tag}"; fail=1; }
+          for f in \
+            internal/enforcement/envoy/resources.go \
+            internal/enforcement/dnsproxy/runtime_env.go \
+            internal/enforcement/toolgateway/runtime_env.go \
+            internal/enforcement/workspace/types.go; do
+            grep -q ":${tag}\"" "$f" \
+              || { echo "$f image default does not match tag ${tag}"; fail=1; }
+          done
+          for f in \
+            config/manager/kustomization.yaml \
+            config/reporter-standalone/kustomization.yaml; do
+            grep -q "newTag: ${tag}\$" "$f" \
+              || { echo "$f newTag does not match tag ${tag}"; fail=1; }
+          done
+          exit "$fail"
+
+  publish:
+    needs: verify-version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: scrutineer
+            dockerfile: Dockerfile
+          - image: scrutineer-dns-proxy
+            dockerfile: Dockerfile.dns-proxy
+          - image: scrutineer-tool-gateway
+            dockerfile: Dockerfile.tool-gateway
+          - image: scrutineer-fs-gateway
+            dockerfile: Dockerfile.fs-gateway
+          - image: scrutineer-egress-reporter
+            dockerfile: Dockerfile.egress-reporter
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/grantbarry29/${{ matrix.image }}:${{ github.ref_name }}
+          # Keep the pushed artifact a plain two-arch OCI index (no provenance
+          # manifest) so digest pins and node image matching stay predictable.
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
