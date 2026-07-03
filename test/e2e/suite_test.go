@@ -37,6 +37,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -59,7 +60,16 @@ import (
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/lockverify"
 )
+
+// envLockVerify enables the verified-or-refused lock gate (#70) in the in-process
+// manager. Set by make test-e2e-net: the gate's behavior is CNI-dependent, so it is
+// exercised by the networking suite on both clusters. The standard suite keeps it off
+// until pivot Phase 2 retires the cooperative-era specs that predate the gate.
+const envLockVerify = "SCRUTINEER_E2E_LOCK_VERIFY"
+
+func lockVerifyEnabled() bool { return os.Getenv(envLockVerify) == "1" }
 
 // Suite-wide handles set up in BeforeSuite and used by every It block.
 var (
@@ -70,6 +80,10 @@ var (
 	// managerCancel stops the in-process controller manager goroutine.
 	managerCancel context.CancelFunc
 	managerDone   chan struct{}
+
+	// lockVerifier is the wired verifier when lockVerifyEnabled(); the suite waits for
+	// its first conclusive verdict before running enforced specs (see BeforeSuite).
+	lockVerifier *lockverify.Verifier
 )
 
 // Default deadlines used by helpers. Generous enough for kind on a laptop;
@@ -111,6 +125,18 @@ var _ = BeforeSuite(func() {
 
 	By("starting the controller manager in-process")
 	startControllerManager()
+
+	// The lock gate fails closed until the verifier reaches a conclusive verdict:
+	// running enforced specs before the first probe settles would (correctly) see them
+	// held. Wait for the settled verdict once, up front, so every spec runs against a
+	// stable gate — mirroring a controller that has completed its startup probe.
+	if lockVerifyEnabled() {
+		By("waiting for the first conclusive lock-verification verdict")
+		Eventually(func() lockverify.Verdict {
+			return lockVerifier.Current().Verdict
+		}, 4*time.Minute, 3*time.Second).ShouldNot(Equal(lockverify.VerdictUnknown),
+			"lock verifier produced no conclusive verdict — probe pods may be unschedulable")
+	}
 })
 
 var _ = AfterSuite(func() {
@@ -161,12 +187,28 @@ func startControllerManager() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	Expect((&agentsession.AgentSessionReconciler{
+	reconciler := &agentsession.AgentSessionReconciler{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
 		Recorder:  mgr.GetEventRecorderFor("scrutineer-e2e"),
-	}).SetupWithManager(mgr)).To(Succeed())
+	}
+	if lockVerifyEnabled() {
+		By("wiring the lock-verification gate (probe pods use the kind-loaded controller image)")
+		ensureScrutineerSystemNamespace(context.Background())
+		verifier := &lockverify.Verifier{
+			Client:    mgr.GetClient(),
+			Reader:    mgr.GetAPIReader(),
+			Namespace: scrutineerSystemNamespace,
+			Image:     scrutineerE2EImage(),
+			Interval:  30 * time.Second,
+			PodWait:   60 * time.Second,
+		}
+		Expect(mgr.Add(verifier)).To(Succeed())
+		reconciler.LockVerifier = verifier
+		lockVerifier = verifier
+	}
+	Expect(reconciler.SetupWithManager(mgr)).To(Succeed())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	managerCancel = cancel

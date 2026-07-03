@@ -74,20 +74,22 @@ test-e2e: manifests install ## Run the standard e2e suite (excludes networking) 
 .PHONY: test-e2e-net
 test-e2e-net: manifests ## Run the CNI-generic networking e2e suite against the CURRENT cluster (assumes it is prepped).
 	@echo ">> running networking e2e suite against $$(kubectl config current-context)"
-	go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='networking'
+	@# SCRUTINEER_E2E_LOCK_VERIFY wires the verified-or-refused lock gate (#70) into the
+	@# in-process manager; the gate spec asserts opposite outcomes per CNI.
+	SCRUTINEER_E2E_LOCK_VERIFY=1 go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='networking'
 
 .PHONY: test-e2e-net-kindnet
 test-e2e-net-kindnet: ## Run the networking e2e suite on the kindnet cluster.
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) .devcontainer/kind-attach.sh
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) $(MAKE) install
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) $(MAKE) kind-load-envoy
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) $(MAKE) kind-load kind-load-envoy kind-load-egress-reporter
 	$(MAKE) test-e2e-net
 
 .PHONY: test-e2e-net-calico
 test-e2e-net-calico: ## Run the networking e2e suite on the Calico cluster (run 'make kind-up-netpol' first).
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) .devcontainer/kind-attach.sh
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) $(MAKE) install
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) $(MAKE) kind-load-envoy
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) $(MAKE) kind-load kind-load-envoy kind-load-egress-reporter
 	$(MAKE) test-e2e-net
 
 .PHONY: test-e2e-net-all

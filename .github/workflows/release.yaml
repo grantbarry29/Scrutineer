@@ -32,7 +32,8 @@ jobs:
             internal/enforcement/envoy/resources.go \
             internal/enforcement/dnsproxy/runtime_env.go \
             internal/enforcement/toolgateway/runtime_env.go \
-            internal/enforcement/workspace/types.go; do
+            internal/enforcement/workspace/types.go \
+            internal/enforcement/lockverify/lockverify.go; do
             grep -q ":${tag}\"" "$f" \
               || { echo "$f image default does not match tag ${tag}"; fail=1; }
           done

@@ -51,8 +51,12 @@ type AgentSessionReconciler struct {
 	RESTConfig *rest.Config
 	// Notifier delivers approval-gate notifications to an external channel. When nil,
 	// notifications are disabled (the approval gate itself is unaffected).
-	Notifier  approval.Notifier
-	clientset kubernetes.Interface
+	Notifier approval.Notifier
+	// LockVerifier supplies the cached NetworkPolicy-enforcement verdict for the
+	// verified-or-refused gate (#70). When nil the gate is inert — production wiring
+	// in cmd/main.go always sets it for the controller role.
+	LockVerifier LockVerdictSource
+	clientset    kubernetes.Interface
 	// backends maps spec.runtime.orchestrator → runtime backend. Lazily built from the
 	// reconciler's client/scheme/recorder so direct (non-manager) test construction works.
 	backends backendRegistry
@@ -292,6 +296,18 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// this session (decision -> state -> audit) without gating the session phase.
 	if err := r.reconcileRuntimeApprovals(ctx, session); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconcile runtime approvals: %w", err)
+	}
+
+	// Verified-or-refused gate (#70): an enforced session whose enforcement substrate
+	// is the NetworkPolicy routing lock must not start its runtime until the lock's
+	// enforcement is empirically verified. The proxy/lock objects still converge (the
+	// hold path goes through patchStatusWithEnforcement); only runtime creation waits.
+	if r.egressLockGate(session, resolvedProfile) {
+		setReadyCondition(session)
+		if perr := r.patchStatusWithEnforcement(ctx, original, session, resolvedProfile); perr != nil {
+			return ctrl.Result{}, perr
+		}
+		return ctrl.Result{RequeueAfter: lockVerifyRecheckInterval}, nil
 	}
 
 	// Provision the per-session egress proxy before the agent runtime so the agent can be

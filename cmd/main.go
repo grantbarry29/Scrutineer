@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/grantbarry29/scrutineer/internal/approval"
 	"github.com/grantbarry29/scrutineer/internal/audit"
 	"github.com/grantbarry29/scrutineer/internal/controller/agentsession"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/lockverify"
 	"github.com/grantbarry29/scrutineer/internal/metrics"
 	"github.com/grantbarry29/scrutineer/internal/reporter"
 	"github.com/grantbarry29/scrutineer/internal/tracing"
@@ -74,6 +76,9 @@ func main() {
 		approvalWebhookURL   string
 		enableWebhooks       bool
 		egressBackstopCIDRs  string
+		lockProbeTarget      string
+		lockProbeImage       string
+		lockProbeNamespace   string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "Address the metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "Address the probe endpoint binds to.")
@@ -101,10 +106,26 @@ func main() {
 		"Serve admission webhooks (requires TLS certs mounted at the webhook server cert dir). Enables the ApprovalRequest identity-stamping webhook that captures the authenticated approver identity.")
 	flag.StringVar(&egressBackstopCIDRs, "egress-backstop-cidrs", "",
 		"Comma-separated CIDRs hard-denied to per-session Envoy egress-proxy pods (defense in depth even if Envoy is compromised). Empty uses the safe default (cloud metadata 169.254.0.0/16); add cluster/service/API CIDRs for your environment.")
+	flag.StringVar(&lockProbeTarget, "lock-probe-target", "",
+		"Probe mode: attempt one TCP connection to host:port and exit 0 (connected) or 1 (blocked). Used by the lock-verification canary pods; not a manager flag.")
+	flag.StringVar(&lockProbeImage, "lock-probe-image", lockverify.DefaultProbeImage,
+		"Image for the lock-verification probe pods (the controller's own image).")
+	flag.StringVar(&lockProbeNamespace, "lock-probe-namespace", "scrutineer-system",
+		"Namespace the lock-verification probe pods run in (the controller's namespace).")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	// Probe mode: this process IS a canary pod. No manager, no leader election —
+	// dial once and exit; the exit code is the differential probe's signal (#70).
+	if lockProbeTarget != "" {
+		if err := lockverify.RunProbe(lockProbeTarget, 0); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -162,12 +183,26 @@ func main() {
 			notifier = approval.NewWebhookNotifier(approvalWebhookURL)
 			setupLog.Info("approval notifications enabled", "webhook", approvalWebhookURL)
 		}
+		// Verified-or-refused (#70): the verifier empirically proves the CNI enforces
+		// NetworkPolicy; the reconciler gate holds enforced sessions until it does.
+		// Always wired in the controller role — there is no attestation override.
+		verifier := &lockverify.Verifier{
+			Client:    mgr.GetClient(),
+			Reader:    mgr.GetAPIReader(),
+			Namespace: lockProbeNamespace,
+			Image:     lockProbeImage,
+		}
+		if err := mgr.Add(verifier); err != nil {
+			setupLog.Error(err, "unable to set up lock verifier")
+			os.Exit(1)
+		}
 		if err := (&agentsession.AgentSessionReconciler{
 			Client:              mgr.GetClient(),
 			APIReader:           mgr.GetAPIReader(),
 			Scheme:              mgr.GetScheme(),
 			Recorder:            mgr.GetEventRecorderFor("agentsession-controller"),
 			Notifier:            notifier,
+			LockVerifier:        verifier,
 			EgressBackstopCIDRs: splitCSV(egressBackstopCIDRs),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "AgentSession")

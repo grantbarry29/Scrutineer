@@ -46,6 +46,10 @@ var _ = Describe("Live FQDN egress policy at Envoy", Label(labelNetworking), fun
 	const probeHost = "c2.tracker.scrutineer.invalid"
 
 	It("blocks a denied domain and records an observed deny (enforced)", func(ctx SpecContext) {
+		// Enforced-mode egress sessions require a verified routing lock (#70); on a
+		// non-enforcing CNI the gate correctly refuses them, so this spec is
+		// meaningful only where the lock is real.
+		requireEgressEnforcingCNI(ctx)
 		ns := newTestNamespace("scrutineer-e2e-fqdn-enf")
 		createRuntimeProfileWithEnvoy(ctx, ns, "envoy-egress")
 		createFQDNDenyPolicy(ctx, ns, "fqdn-deny", scrutineerv1alpha1.PolicyModeEnforced, "*.tracker.scrutineer.invalid")

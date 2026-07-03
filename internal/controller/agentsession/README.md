@@ -70,6 +70,17 @@ against an unchanged cluster makes no API mutations.
   the **egress backstop** (`networkpolicy.BuildEgressProxyBackstop`: allow DNS + internet
   EXCEPT `EgressBackstopCIDRs`, so even a compromised Envoy can't reach cloud metadata).
   Both are torn down on terminal.
+- `lock_gate.go` — the **verified-or-refused gate** (#70,
+  [`docs/design/untamperable-pivot.md`](../../../docs/design/untamperable-pivot.md) §4):
+  before runtime creation, enforced-mode sessions whose enforcement substrate is a
+  NetworkPolicy consult `LockVerifier`
+  ([`internal/enforcement/lockverify`](../../enforcement/lockverify) — differential
+  canary probe proving the CNI enforces NetworkPolicy). Unverified ⇒ the session holds
+  at `Pending` with condition `EgressLockVerified=False` (reason
+  `CNIDoesNotEnforceNetworkPolicy` / `ProbeInconclusive`) and a warning event on
+  transition; audit/dry-run sessions get the condition but run. Nil `LockVerifier`
+  (reporter-only, unit suites) disables the gate; `cmd/main.go` always wires it for
+  the controller role — there is no attestation override.
 - `validation.go`, `task.go`, `policy.go` / `policy_decisions.go`, `runtimeprofile.go` —
   spec validation and resolution.
 - `approval.go` / `approval_runtime.go` — pre-runtime gate + per-tool runtime approvals.

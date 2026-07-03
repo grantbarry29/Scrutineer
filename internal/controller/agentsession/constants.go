@@ -23,6 +23,17 @@ const (
 	ConditionApprovalRequired       = "ApprovalRequired"
 	ConditionCompleted              = "Completed"
 	ConditionReady                  = "Ready"
+	// ConditionEgressLockVerified — whether the differential probe has proven the
+	// CNI enforces NetworkPolicy (the routing lock's substrate). False holds
+	// enforced-mode sessions before runtime creation (verified-or-refused, #70).
+	ConditionEgressLockVerified = "EgressLockVerified"
+)
+
+// Reasons used on ConditionEgressLockVerified.
+const (
+	ReasonLockVerified          = "LockVerified"
+	ReasonCNINotEnforcing       = "CNIDoesNotEnforceNetworkPolicy"
+	ReasonLockProbeInconclusive = "ProbeInconclusive"
 )
 
 // Event reasons emitted by the controller (Kubernetes Events on AgentSession).
@@ -51,6 +62,9 @@ const (
 	EventReasonApprovalDenied = "ApprovalDenied"
 	// EventReasonApprovalNotified — approvers were notified of an open gate.
 	EventReasonApprovalNotified = "ApprovalNotified"
+	// EventReasonEgressLockUnverified — enforced session held: the NetworkPolicy
+	// routing lock's enforcement is unverified/refused on this cluster (warning).
+	EventReasonEgressLockUnverified = "EgressLockUnverified"
 	// EventReasonApprovalNotifyFailed — notification delivery failed (warning; will retry).
 	EventReasonApprovalNotifyFailed = "ApprovalNotifyFailed"
 	// EventReasonApprovalUnauthorized — a grant was set by a subject not in the policy's approvers (warning; not honored).
