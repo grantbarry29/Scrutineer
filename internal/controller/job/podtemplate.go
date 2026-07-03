@@ -61,7 +61,6 @@ func BuildPodTemplateSpec(session *scrutineerv1alpha1.AgentSession, task *Task, 
 		Tolerations:                  rt.Tolerations,
 	}
 	applyRuntimeProfileToPodSpec(&podSpec, profile)
-	injectSidecars(&podSpec, session, pol, profile)
 
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{

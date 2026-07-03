@@ -108,16 +108,7 @@ func TestRuntimeProfileDrift_automountOptIn(t *testing.T) {
 	}
 }
 
-func TestRuntimeProfileDrift_sidecarEnv(t *testing.T) {
-	dns := Build(minimalSession(), &Task{}, &policy.Resolved{
-		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
-		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
-	}, profileWithSidecar(EnforcementTypeDNSProxy))
-	dns2 := Build(minimalSession(), &Task{}, &policy.Resolved{
-		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
-		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"other.example"}},
-	}, profileWithSidecar(EnforcementTypeDNSProxy))
-	if !RuntimeProfileDrift(dns, dns2) {
-		t.Fatal("expected drift when sidecar policy env differs")
-	}
-}
+// Post-pivot the FQDN policy lives in the Envoy ConfigMap (a separate object), not the
+// agent pod template, so changing denied domains no longer drifts the Job template. The
+// agent-facing drift that remains — enabling the Envoy proxy env — is covered by
+// TestRuntimeProfileDrift_envoyProxyEnv in sidecars_test.go.

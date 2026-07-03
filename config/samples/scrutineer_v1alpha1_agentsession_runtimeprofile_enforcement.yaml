@@ -1,13 +1,13 @@
-# AgentSession using the enforced-sidecars RuntimeProfile (dns-proxy + tool-gateway in-pod sidecars).
+# AgentSession using the enforced-egress RuntimeProfile (per-session out-of-pod Envoy proxy).
 # Requires scrutineer-controller-reporter Service in scrutineer-system (make deploy).
 apiVersion: scrutineer.sh/v1alpha1
 kind: AgentSession
 metadata:
-  name: sidecar-demo
+  name: egress-demo
   namespace: default
 spec:
   task:
-    description: Demonstrate sidecar + reporter wiring
+    description: Demonstrate Envoy egress proxy + reporter wiring
     prompt: noop
   model:
     provider: openai
@@ -20,4 +20,4 @@ spec:
     - -c
     - echo ok; exit 0
   runtimeProfileRef:
-    name: enforced-sidecars
+    name: enforced-egress

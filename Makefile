@@ -58,7 +58,7 @@ verify-samples: manifests install ## Server-side dry-run of config/samples manif
 	done
 
 .PHONY: test-e2e-images
-test-e2e-images: kind-load kind-load-dns-proxy kind-load-tool-gateway kind-load-fs-gateway kind-load-envoy kind-load-egress-reporter ## Build and load controller + sidecar images into kind (e2e live-evidence prereq).
+test-e2e-images: kind-load kind-load-envoy kind-load-egress-reporter ## Build and load controller + Envoy egress-proxy images into kind (e2e prereq).
 
 # The e2e suite is split by Ginkgo label into two:
 #   - standard: controller logic, CRDs, evidence — everything NOT labeled "networking".
@@ -180,33 +180,6 @@ kind-down-netpol: ## Delete the Calico netpol kind cluster.
 .PHONY: kind-load
 kind-load: docker-build ## Build the controller image and load it into kind.
 	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
-
-.PHONY: docker-build-dns-proxy kind-load-dns-proxy
-DNS_PROXY_IMG ?= ghcr.io/grantbarry29/scrutineer-dns-proxy:$(VERSION)
-
-docker-build-dns-proxy: ## Build the dns-proxy sidecar image.
-	$(CONTAINER_TOOL) build -f Dockerfile.dns-proxy -t ${DNS_PROXY_IMG} .
-
-kind-load-dns-proxy: docker-build-dns-proxy ## Build and load dns-proxy image into kind.
-	kind load docker-image $(DNS_PROXY_IMG) --name $(KIND_CLUSTER_NAME)
-
-.PHONY: docker-build-tool-gateway kind-load-tool-gateway
-TOOL_GATEWAY_IMG ?= ghcr.io/grantbarry29/scrutineer-tool-gateway:$(VERSION)
-
-docker-build-tool-gateway: ## Build the tool-gateway sidecar image.
-	$(CONTAINER_TOOL) build -f Dockerfile.tool-gateway -t ${TOOL_GATEWAY_IMG} .
-
-kind-load-tool-gateway: docker-build-tool-gateway ## Build and load tool-gateway image into kind.
-	kind load docker-image $(TOOL_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
-
-.PHONY: docker-build-fs-gateway kind-load-fs-gateway
-FS_GATEWAY_IMG ?= ghcr.io/grantbarry29/scrutineer-fs-gateway:$(VERSION)
-
-docker-build-fs-gateway: ## Build the fs-gateway sidecar image.
-	$(CONTAINER_TOOL) build -f Dockerfile.fs-gateway -t ${FS_GATEWAY_IMG} .
-
-kind-load-fs-gateway: docker-build-fs-gateway ## Build and load fs-gateway image into kind.
-	kind load docker-image $(FS_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-egress-reporter kind-load-egress-reporter
 EGRESS_REPORTER_IMG ?= ghcr.io/grantbarry29/scrutineer-egress-reporter:$(VERSION)

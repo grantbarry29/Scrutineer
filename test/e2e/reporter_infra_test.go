@@ -29,9 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/grantbarry29/scrutineer/internal/enforcement/dnsproxy"
-	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
-	"github.com/grantbarry29/scrutineer/internal/enforcement/workspace"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 )
 
 const (
@@ -52,30 +50,16 @@ func scrutineerE2EImage() string {
 	return "ghcr.io/grantbarry29/scrutineer:v0.1.0"
 }
 
-// requireLiveEvidenceImages skips the spec when dns-proxy e2e images are not present in kind.
-func requireLiveEvidenceImages(ctx SpecContext) {
+// requireLiveEgressEvidenceImages skips the spec unless the Envoy egress-proxy images
+// (Envoy + egress-reporter) are present in kind — the observed-evidence path post-pivot.
+func requireLiveEgressEvidenceImages(ctx SpecContext) {
 	GinkgoHelper()
 	requireScrutineerE2EImage(ctx)
-	if !clusterImageRunnable(ctx, dnsproxy.DefaultDNSProxyImage) {
-		Skip("dns-proxy image not available in cluster — run: make kind-load-dns-proxy")
+	if !clusterImageRunnable(ctx, envoy.DefaultEnvoyImage) {
+		Skip("envoy image not available in cluster — run: make kind-load-envoy")
 	}
-}
-
-// requireLiveToolEvidenceImages skips the spec when tool-gateway e2e images are not present in kind.
-func requireLiveToolEvidenceImages(ctx SpecContext) {
-	GinkgoHelper()
-	requireScrutineerE2EImage(ctx)
-	if !clusterImageRunnable(ctx, toolgateway.DefaultToolGatewayImage) {
-		Skip("tool-gateway image not available in cluster — run: make kind-load-tool-gateway")
-	}
-}
-
-// requireLiveFileEvidenceImages skips the spec when fs-gateway e2e images are not present in kind.
-func requireLiveFileEvidenceImages(ctx SpecContext) {
-	GinkgoHelper()
-	requireScrutineerE2EImage(ctx)
-	if !clusterImageRunnable(ctx, workspace.DefaultFSGatewayImage) {
-		Skip("fs-gateway image not available in cluster — run: make kind-load-fs-gateway")
+	if !clusterImageRunnable(ctx, envoy.DefaultEgressReporterImage) {
+		Skip("egress-reporter image not available in cluster — run: make kind-load-egress-reporter")
 	}
 }
 

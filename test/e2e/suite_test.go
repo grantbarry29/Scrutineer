@@ -19,10 +19,10 @@ You may obtain a copy of the License at
 //   - fixtures_test.go  — namespaces, session builders, options
 //   - assertions_test.go — phase/job/condition wait helpers
 //   - agentsession_test.go — Ginkgo specs only
-//   - network_violation_test.go — live dns-proxy → reporter → status.violations
-//   - tool_violation_test.go — live tool-gateway → reporter → status.violations
 //   - egress_proxy_test.go — live per-session Envoy egress proxy: agent egress
 //     traverses Envoy (access log, incl. CONNECT) + teardown
+//   - fqdn_egress_test.go / observed_evidence_test.go — Envoy observed-evidence path
+//   - lock_gate_e2e_test.go — verified-or-refused NetworkPolicy lock gate (#70)
 //
 // Run with:   make test-e2e
 // Skipped by: `go test ./...` (build tag `e2e`).

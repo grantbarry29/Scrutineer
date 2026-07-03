@@ -27,7 +27,6 @@ import (
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	scrutineerjob "github.com/grantbarry29/scrutineer/internal/controller/job"
-	"github.com/grantbarry29/scrutineer/internal/enforcement/dnsproxy"
 )
 
 func testReconciler() *AgentSessionReconciler {
@@ -209,88 +208,44 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(job.Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
 		})
 
-		It("injects enabled RuntimeProfile sidecars into the Job pod template", func() {
+		It("keeps the agent pod sidecar-free and sets Envoy proxy env when the Envoy enforcement is enabled", func() {
 			ns := newTestNamespace()
 			enabled := true
 			disabled := false
 			rp := &scrutineerv1alpha1.RuntimeProfile{
-				ObjectMeta: metav1.ObjectMeta{Name: "with-sidecars", Namespace: ns},
+				ObjectMeta: metav1.ObjectMeta{Name: "with-envoy", Namespace: ns},
 				Spec: scrutineerv1alpha1.RuntimeProfileSpec{
 					Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
-						{Name: "egress-dns", Type: scrutineerjob.EnforcementTypeDNSProxy, Enabled: &enabled},
-						{Name: "tool-gw", Type: scrutineerjob.EnforcementTypeToolGateway, Enabled: &enabled},
+						{Name: "envoy", Type: scrutineerjob.EnforcementTypeEnvoy, Enabled: &enabled},
 						{Name: "envoy-off", Type: scrutineerjob.EnforcementTypeEnvoy, Enabled: &disabled},
-						{Name: "custom", Type: "unknown-sidecar", Enabled: &enabled},
+						{Name: "custom", Type: "unknown-enforcement", Enabled: &enabled},
 					},
 				},
 			}
 			Expect(k8sClient.Create(testCtx, rp)).To(Succeed())
 
-			session := minimalAgentSession(ns, "sidecar-inject")
-			session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "with-sidecars"}
+			session := minimalAgentSession(ns, "envoy-inject")
+			session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "with-envoy"}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 
 			waitForJob(ns, session)
 
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
-			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(3))
 
+			// The Envoy egress proxy is out-of-pod: the agent pod holds only the agent
+			// container (no cooperative in-pod sidecars post-pivot, #71).
+			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 			byName := map[string]corev1.Container{}
 			for _, c := range job.Spec.Template.Spec.Containers {
 				byName[c.Name] = c
 			}
 			Expect(byName).To(HaveKey(scrutineerjob.AgentContainerName))
-			Expect(byName).To(HaveKey("egress-dns"))
-			Expect(byName).To(HaveKey("tool-gw"))
-			Expect(byName).NotTo(HaveKey("envoy-off"))
-			Expect(byName).NotTo(HaveKey("custom"))
 
+			// The agent is pointed at its per-session Envoy via explicit-proxy env.
 			agentEnv := envMap(byName[scrutineerjob.AgentContainerName].Env)
-			Expect(agentEnv[scrutineerjob.EnvScrutineerToolGatewayURL]).To(Equal("http://127.0.0.1:19090"))
-		})
-
-		It("propagates egress policy env to dns-proxy sidecars", func() {
-			ns := newTestNamespace()
-			enabled := true
-			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.AgentPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "egress-policy", Namespace: ns},
-				Spec: scrutineerv1alpha1.AgentPolicySpec{
-					Mode: scrutineerv1alpha1.PolicyModeEnforced,
-					PolicyRules: scrutineerv1alpha1.PolicyRules{
-						DeniedDomains: []string{"evil.example"},
-					},
-				},
-			})).To(Succeed())
-			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.RuntimeProfile{
-				ObjectMeta: metav1.ObjectMeta{Name: "egress-profile", Namespace: ns},
-				Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-					Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
-						Name: "egress-dns", Type: scrutineerjob.EnforcementTypeDNSProxy, Enabled: &enabled,
-					}},
-				},
-			})).To(Succeed())
-
-			session := minimalAgentSession(ns, "dns-proxy-env")
-			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "egress-policy"}}
-			session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "egress-profile"}
-			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
-
-			waitForJob(ns, session)
-
-			var job batchv1.Job
-			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
-			byName := map[string]corev1.Container{}
-			for _, c := range job.Spec.Template.Spec.Containers {
-				byName[c.Name] = c
-			}
-			Expect(byName).To(HaveKey("egress-dns"))
-			proxyEnv := envMap(byName["egress-dns"].Env)
-			Expect(proxyEnv[dnsproxy.EnvPolicyDeniedDomains]).To(Equal("evil.example"))
-			Expect(proxyEnv[dnsproxy.EnvPolicyMode]).To(Equal("enforced"))
-
-			agentEnv := envMap(byName[scrutineerjob.AgentContainerName].Env)
-			Expect(agentEnv[scrutineerjob.EnvHTTPProxy]).To(Equal(dnsproxy.DefaultHTTPProxyURL))
+			Expect(agentEnv).To(HaveKey("HTTP_PROXY"))
+			Expect(agentEnv).To(HaveKey("http_proxy"))
 		})
 
 		It("keeps baseline Job security when no runtimeProfileRef is set", func() {

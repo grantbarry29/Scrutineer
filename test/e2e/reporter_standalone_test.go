@@ -105,12 +105,14 @@ var _ = Describe("standalone reporter overlay", func() {
 		deployShippedReporter(ctx)
 	})
 
-	// Full evidence path against the shipped artifact (#45 AC): the reporter Service is
-	// retargeted at the shipped pods exactly as the overlay's Service patch does, so the
-	// dns-proxy sidecar's POST /v1/report lands on the shipped reporter, which must
-	// merge the runtime decision into the session status.
-	It("merges runtime evidence posted through the shipped reporter into session status", func(ctx SpecContext) {
-		requireLiveEvidenceImages(ctx)
+	// Full observed-evidence path against the shipped artifact (#45 AC): the reporter
+	// Service is retargeted at the shipped pods exactly as the overlay's Service patch
+	// does, so the per-session Envoy's egress-reporter POST /v1/report lands on the
+	// shipped reporter, which must merge the observed runtime decision into the session
+	// status. Post-pivot the evidence source is the out-of-pod Envoy egress path (#71).
+	It("merges observed runtime evidence posted through the shipped reporter into session status", func(ctx SpecContext) {
+		requireEgressEnforcingCNI(ctx)
+		requireLiveEgressEvidenceImages(ctx)
 
 		DeferCleanup(func(ctx context.Context) {
 			// Delete the retargeted Service too; any later spec's
@@ -123,16 +125,15 @@ var _ = Describe("standalone reporter overlay", func() {
 		deployShippedReporter(ctx)
 		pointReporterServiceAtShippedPods(ctx)
 
-		const deniedDomain = "evil.example"
+		const deniedHost = "standalone.tracker.scrutineer.invalid"
 		ns := newTestNamespace("scrutineer-e2e-standalone")
-		const profileName = "dns-proxy-enforced"
-		createRuntimeProfileWithDNSProxy(ctx, ns, profileName)
-		createEnforcedDeniedDomainPolicy(ctx, ns, "deny-evil", deniedDomain)
+		createRuntimeProfileWithEnvoy(ctx, ns, "envoy-egress")
+		createFQDNDenyPolicy(ctx, ns, "deny-tracker", scrutineerv1alpha1.PolicyModeEnforced, deniedHost)
 
 		session := newAgentSession(ns, "standalone-evidence",
-			withRuntimeProfileRef(profileName),
-			withPolicyRef("AgentPolicy", "deny-evil"),
-			withDeniedDomainEgressProbe(deniedDomain),
+			withRuntimeProfileRef("envoy-egress"),
+			withPolicyRef("AgentPolicy", "deny-tracker"),
+			withEnvoyEgressProbe(deniedHost),
 		)
 		key := createAgentSession(ctx, session)
 
@@ -143,13 +144,13 @@ var _ = Describe("standalone reporter overlay", func() {
 			got := getSession(ctx, key)
 			var runtime []scrutineerv1alpha1.PolicyDecision
 			for _, d := range got.Status.PolicyDecisions {
-				if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == deniedDomain {
+				if d.Phase == scrutineerv1alpha1.PolicyDecisionPhaseRuntime && d.Target == deniedHost {
 					runtime = append(runtime, d)
 				}
 			}
 			g.Expect(runtime).NotTo(BeEmpty(),
-				"expected a runtime decision for %q merged via the shipped reporter; decisions=%+v",
-				deniedDomain, got.Status.PolicyDecisions)
+				"expected an observed runtime decision for %q merged via the shipped reporter; decisions=%+v",
+				deniedHost, got.Status.PolicyDecisions)
 		}, 90*time.Second, 2*time.Second).Should(Succeed())
 
 		requestCancellation(ctx, key)

@@ -93,13 +93,14 @@ type RuntimeProfilePodSpec struct {
 // RuntimeProfileEnforcement enables one data-plane enforcement backend for sessions
 // using the profile. Unknown types are ignored (forward compatibility for new backends).
 type RuntimeProfileEnforcement struct {
-	// Name is a unique identifier for this entry within the profile; it also names the
-	// injected container for in-pod types.
+	// Name is a unique identifier for this entry within the profile.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Type identifies the enforcement backend. Known values: dns-proxy, tool-gateway,
-	// fs-gateway (in-pod sidecars) and envoy (out-of-pod per-session egress proxy).
+	// Type identifies the enforcement backend. The only value today is "envoy": the
+	// out-of-pod per-session Envoy egress proxy. The cooperative in-pod backends
+	// (dns-proxy, tool-gateway, fs-gateway) were removed in the untamperable pivot
+	// (#71); future out-of-pod chokepoints (tools pod, arena pod) will add new types.
 	// +kubebuilder:validation:MinLength=1
 	Type string `json:"type"`
 

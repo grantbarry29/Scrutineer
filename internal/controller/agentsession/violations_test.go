@@ -18,7 +18,6 @@ import (
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
-	"github.com/grantbarry29/scrutineer/internal/enforcement/toolgateway"
 )
 
 func TestApplyRuntimePolicyReport_enforcedViolationFromDecision(t *testing.T) {
@@ -98,16 +97,21 @@ func TestApplyRuntimePolicyReport_explicitViolationsDeduped(t *testing.T) {
 	}
 }
 
-func TestApplyRuntimePolicyReport_toolGatewayReport(t *testing.T) {
+// A runtime report carrying a tool decision + violation must merge into session status.
+// (The tool decision is constructed directly: the cooperative tool-gateway was removed in
+// the untamperable pivot (#71); a future out-of-pod tools chokepoint will re-emit these.)
+func TestApplyRuntimePolicyReport_toolDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
-	ctx := enforcement.SessionContext{
-		SessionNamespace: "team-a",
-		SessionName:      "demo",
-		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
-		Policy:           scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
+	// The enforced deny decision auto-derives its violation; no explicit violation needed.
+	report := enforcement.RuntimeReport{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Time:   ts,
+			Type:   "tool",
+			Action: scrutineerv1alpha1.PolicyDecisionDeny,
+			Reason: "DeniedTools",
+			Target: "kubectl",
+		}},
 	}
-	auth := toolgateway.EvaluateTool(ctx, toolgateway.ToolRequest{Tool: "kubectl"})
-	report := toolgateway.RuntimeReport(ctx, toolgateway.ToolRequest{Tool: "kubectl"}, auth, ts.Time)
 
 	session := &scrutineerv1alpha1.AgentSession{}
 	ApplyRuntimePolicyReport(session, report)

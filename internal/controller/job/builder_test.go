@@ -37,7 +37,7 @@ func TestBuildPodTemplateSpec(t *testing.T) {
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
 			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{
-				{Name: "egress", Type: EnforcementTypeDNSProxy, Enabled: &enabled},
+				{Name: "envoy", Type: EnforcementTypeEnvoy, Enabled: &enabled},
 			},
 		},
 	}
@@ -58,8 +58,9 @@ func TestBuildPodTemplateSpec(t *testing.T) {
 	if _, ok := byName[AgentContainerName]; !ok {
 		t.Fatalf("expected agent container %q in template", AgentContainerName)
 	}
-	if _, ok := byName["egress"]; !ok {
-		t.Fatalf("expected injected dns-proxy sidecar 'egress' in template")
+	// The Envoy egress proxy is out-of-pod: the agent pod carries no injected sidecar.
+	if len(tmpl.Spec.Containers) != 1 {
+		t.Fatalf("expected agent-only pod template, got containers %+v", tmpl.Spec.Containers)
 	}
 
 	// Build must wrap the identical template (no behavior change from the extraction).

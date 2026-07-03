@@ -30,9 +30,6 @@ jobs:
             || { echo "Makefile VERSION does not match tag ${tag}"; fail=1; }
           for f in \
             internal/enforcement/envoy/resources.go \
-            internal/enforcement/dnsproxy/runtime_env.go \
-            internal/enforcement/toolgateway/runtime_env.go \
-            internal/enforcement/workspace/types.go \
             internal/enforcement/lockverify/lockverify.go; do
             grep -q ":${tag}\"" "$f" \
               || { echo "$f image default does not match tag ${tag}"; fail=1; }
@@ -53,12 +50,6 @@ jobs:
         include:
           - image: scrutineer
             dockerfile: Dockerfile
-          - image: scrutineer-dns-proxy
-            dockerfile: Dockerfile.dns-proxy
-          - image: scrutineer-tool-gateway
-            dockerfile: Dockerfile.tool-gateway
-          - image: scrutineer-fs-gateway
-            dockerfile: Dockerfile.fs-gateway
           - image: scrutineer-egress-reporter
             dockerfile: Dockerfile.egress-reporter
     steps:

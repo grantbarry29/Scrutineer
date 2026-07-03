@@ -134,7 +134,7 @@ var _ = Describe("Per-session Envoy egress proxy", func() {
 		}
 		Expect(byName).NotTo(HaveKey("envoy"))
 		agentEnv := envMap(byName[scrutineerjob.AgentContainerName].Env)
-		Expect(agentEnv[scrutineerjob.EnvHTTPSProxy]).To(Equal(wantEndpoint))
+		Expect(agentEnv["HTTPS_PROXY"]).To(Equal(wantEndpoint))
 	})
 
 	It("tears the egress proxy down when the session reaches a terminal phase", func() {

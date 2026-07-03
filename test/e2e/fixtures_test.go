@@ -103,54 +103,6 @@ func withSleepExceedingTimeout() agentSessionOption {
 	}
 }
 
-// withDeniedToolInvokeProbe waits for sidecars then POSTs denied tool invokes to SCRUTINEER_TOOL_GATEWAY_URL.
-func withDeniedToolInvokeProbe(tool string) agentSessionOption {
-	return func(s *scrutineerv1alpha1.AgentSession) {
-		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='{"tool":"%s"}' --header='Content-Type: application/json' "${SCRUTINEER_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 2; done; sleep 120`,
-			tool,
-		)}
-	}
-}
-
-// withArgumentDeniedToolInvokeProbe waits for sidecars then repeatedly POSTs a tool call
-// (with arguments) that an argument rule should deny. argsJSON is the raw JSON for the
-// "arguments" object, e.g. `{"path":"/etc/shadow"}`.
-func withArgumentDeniedToolInvokeProbe(tool, argsJSON string) agentSessionOption {
-	return func(s *scrutineerv1alpha1.AgentSession) {
-		body := fmt.Sprintf(`{"tool":"%s","arguments":%s}`, tool, argsJSON)
-		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='%s' --header='Content-Type: application/json' "${SCRUTINEER_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 2; done; sleep 120`,
-			body,
-		)}
-	}
-}
-
-// withApprovalHoldToolInvokeProbe waits for sidecars then repeatedly POSTs a tool call
-// that matches requireHumanApproval. Under enforced mode the gateway holds the call
-// (long-poll → 202) until a human grants it, so the probe re-invokes the SAME call
-// (stable requestId keeps the hold idempotent) until it is allowed/denied. argsJSON is
-// the raw JSON for the "arguments" object, e.g. `{"target":"prod"}`.
-func withApprovalHoldToolInvokeProbe(tool, argsJSON string) agentSessionOption {
-	return func(s *scrutineerv1alpha1.AgentSession) {
-		body := fmt.Sprintf(`{"tool":"%s","requestId":"e2e-approval-1","arguments":%s}`, tool, argsJSON)
-		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 90); do wget -q -O /dev/null --post-data='%s' --header='Content-Type: application/json' "${SCRUTINEER_TOOL_GATEWAY_URL}/v1/tools/invoke" 2>/dev/null || true; sleep 1; done; sleep 120`,
-			body,
-		)}
-	}
-}
-
-// withDeniedDomainEgressProbe waits for sidecars then probes a denied domain via HTTP_PROXY.
-func withDeniedDomainEgressProbe(domain string) agentSessionOption {
-	return func(s *scrutineerv1alpha1.AgentSession) {
-		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null http://%s/ 2>/dev/null || true; sleep 2; done; sleep 120`,
-			domain,
-		)}
-	}
-}
-
 // withEnvoyEgressProbe makes the busybox agent exercise its per-session Envoy egress
 // proxy after startup: an HTTP GET via the injected proxy env, plus a raw CONNECT sent
 // straight at the proxy (proves the HTTPS tunnel path deterministically — busybox's own
@@ -400,54 +352,6 @@ func createEnforcedDeniedPathPolicy(ctx context.Context, namespace, name, path s
 	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
 }
 
-func createRuntimeProfileWithToolGateway(ctx context.Context, namespace, name string) {
-	GinkgoHelper()
-	enabled := true
-	rp := &scrutineerv1alpha1.RuntimeProfile{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-			},
-			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
-				AllowPrivilegeEscalation: boolPtr(false),
-			},
-			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
-				Name:    "tools",
-				Type:    scrutineerjob.EnforcementTypeToolGateway,
-				Enabled: &enabled,
-			}},
-		},
-	}
-	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
-}
-
-func createRuntimeProfileWithDNSProxy(ctx context.Context, namespace, name string) {
-	GinkgoHelper()
-	enabled := true
-	rp := &scrutineerv1alpha1.RuntimeProfile{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-			},
-			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
-				AllowPrivilegeEscalation: boolPtr(false),
-			},
-			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
-				Name:    "egress",
-				Type:    scrutineerjob.EnforcementTypeDNSProxy,
-				Enabled: &enabled,
-			}},
-		},
-	}
-	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
-}
-
 // createRuntimeProfileWithEnvoy enables the out-of-pod per-session Envoy egress proxy.
 func createRuntimeProfileWithEnvoy(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
@@ -514,30 +418,6 @@ for i in $(seq 1 40); do
 done
 sleep 120`}
 	}
-}
-
-func createRuntimeProfileWithFSGateway(ctx context.Context, namespace, name string) {
-	GinkgoHelper()
-	enabled := true
-	rp := &scrutineerv1alpha1.RuntimeProfile{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
-			Pod: &scrutineerv1alpha1.RuntimeProfilePodSpec{
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-			},
-			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
-				AllowPrivilegeEscalation: boolPtr(false),
-			},
-			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
-				Name:    "files",
-				Type:    scrutineerjob.EnforcementTypeFSGateway,
-				Enabled: &enabled,
-			}},
-		},
-	}
-	Expect(k8sClient.Create(ctx, rp)).To(Succeed())
 }
 
 // createRuntimeProfile creates a RuntimeProfile in the test namespace.
