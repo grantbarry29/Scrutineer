@@ -15,12 +15,12 @@ Scrutineer keeps canonical architecture/design docs in [`docs/design/`](../docs/
 | Task area | Read |
 |-----------|------|
 | Anything non-trivial / orientation | [`docs/design/architecture.md`](../docs/design/architecture.md) (start here) |
-| Data-plane enforcement, `internal/enforcement` contract, any Phase 3/3b slice | [`docs/design/phase-3-enforcement-architecture.md`](../docs/design/phase-3-enforcement-architecture.md) |
+| **The enforcement pivot** (adversarial-grade-only, lock gate, removal) | [`docs/design/untamperable-pivot.md`](../docs/design/untamperable-pivot.md) |
+| Data-plane enforcement, `internal/enforcement` contract | [`docs/design/phase-3-enforcement-architecture.md`](../docs/design/phase-3-enforcement-architecture.md) |
 | Runtime reporter / writing runtime evidence into `status` | [`docs/design/phase-3-runtime-reporter-contract.md`](../docs/design/phase-3-runtime-reporter-contract.md) |
-| Egress / DNS governance, dns-proxy sidecar | [`docs/design/phase-3-dns-proxy-prototype.md`](../docs/design/phase-3-dns-proxy-prototype.md) |
-| Tool / MCP governance, tool-gateway sidecar | [`docs/design/phase-3-tool-gateway-contract.md`](../docs/design/phase-3-tool-gateway-contract.md) |
-| Argument-level tool/MCP governance (`ToolPolicy` argument rules, `ArgumentConstraint`, gateway per-call arg eval) | [`docs/design/phase-3-tool-argument-constraints.md`](../docs/design/phase-3-tool-argument-constraints.md) |
-| File / workspace governance | [`docs/design/phase-3-file-workspace-policy.md`](../docs/design/phase-3-file-workspace-policy.md) |
+| Out-of-pod egress chokepoint / observed-evidence trust boundary | [`docs/design/evidence-integrity.md`](../docs/design/evidence-integrity.md) |
+| Future tool governance (out-of-pod tools chokepoint, credential mediation) | [`docs/design/tools-pod-chokepoint.md`](../docs/design/tools-pod-chokepoint.md) |
+| Future file governance (network-POSIX arena workspace) | [`docs/design/arena-workspace.md`](../docs/design/arena-workspace.md) |
 | Structured session events / reporter event payloads | [`docs/design/phase-4-session-events.md`](../docs/design/phase-4-session-events.md) |
 | UI timeline projection over `status.events[]` (`internal/observability`) | [`docs/design/phase-4-session-timeline.md`](../docs/design/phase-4-session-timeline.md) |
 | Human approval gates / `ApprovalPolicy` / `ApprovalRequest` / `requireHumanApproval` enforcement | [`docs/design/phase-5-approval-workflows.md`](../docs/design/phase-5-approval-workflows.md) |

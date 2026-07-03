@@ -10,11 +10,12 @@ Each of these is a separately built/deployed component and keeps a README at its
 
 | Binary | Entry | Dockerfile | Image | Build / load | Core logic |
 |--------|-------|-----------|-------|--------------|------------|
-| manager (controller + webhook + reporter) | `cmd/main.go` | `Dockerfile` | `ghcr.io/grantbarry29/scrutineer` | `make docker-build` / `kind-load` | `internal/controller/...`, `internal/webhook/...`, `internal/reporter` |
-| dns-proxy sidecar | `cmd/dns-proxy` | `Dockerfile.dns-proxy` | `ghcr.io/grantbarry29/scrutineer-dns-proxy` | `make docker-build-dns-proxy` / `kind-load-dns-proxy` | `internal/enforcement/dnsproxy` |
-| tool-gateway sidecar | `cmd/tool-gateway` | `Dockerfile.tool-gateway` | `ghcr.io/grantbarry29/scrutineer-tool-gateway` | `make docker-build-tool-gateway` / `kind-load-tool-gateway` | `internal/enforcement/toolgateway` |
-| fs-gateway sidecar | `cmd/fs-gateway` | `Dockerfile.fs-gateway` | `ghcr.io/grantbarry29/scrutineer-fs-gateway` | `make docker-build-fs-gateway` / `kind-load-fs-gateway` | `internal/enforcement/workspace` |
-| egress-reporter (runs beside Envoy in the egress-proxy pod, NOT an in-agent-pod sidecar) | `cmd/egress-reporter` | `Dockerfile.egress-reporter` | `ghcr.io/grantbarry29/scrutineer-egress-reporter` | `make docker-build-egress-reporter` / `kind-load-egress-reporter` | `internal/enforcement/envoy` |
+| manager (controller + webhook + reporter + lock-probe) | `cmd/main.go` | `Dockerfile` | `ghcr.io/grantbarry29/scrutineer` | `make docker-build` / `kind-load` | `internal/controller/...`, `internal/webhook/...`, `internal/reporter`, `internal/enforcement/lockverify` |
+| egress-reporter (runs beside Envoy in the per-session egress-proxy pod, out-of-agent-pod) | `cmd/egress-reporter` | `Dockerfile.egress-reporter` | `ghcr.io/grantbarry29/scrutineer-egress-reporter` | `make docker-build-egress-reporter` / `kind-load-egress-reporter` | `internal/enforcement/envoy` |
+
+> The cooperative in-pod sidecars (dns-proxy, tool-gateway, fs-gateway) were removed in the
+> untamperable pivot (#71); enforcement is out-of-pod only. See
+> [`docs/design/untamperable-pivot.md`](../docs/design/untamperable-pivot.md).
 
 ## Conventions a binary README must capture
 
