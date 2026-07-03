@@ -29,7 +29,7 @@ const (
 )
 
 // DefaultDNSProxyImage is the first-party dns-proxy container image reference.
-const DefaultDNSProxyImage = "ghcr.io/grantbarry29/scrutineer-dns-proxy:latest"
+const DefaultDNSProxyImage = "ghcr.io/grantbarry29/scrutineer-dns-proxy:v0.1.0"
 
 // RuntimeEnv is configuration loaded from the sidecar container environment.
 type RuntimeEnv struct {

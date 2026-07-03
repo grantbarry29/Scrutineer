@@ -31,7 +31,7 @@ const (
 )
 
 // DefaultToolGatewayImage is the first-party tool-gateway container image reference.
-const DefaultToolGatewayImage = "ghcr.io/grantbarry29/scrutineer-tool-gateway:latest"
+const DefaultToolGatewayImage = "ghcr.io/grantbarry29/scrutineer-tool-gateway:v0.1.0"
 
 // RuntimeEnv is configuration loaded from the sidecar container environment.
 type RuntimeEnv struct {

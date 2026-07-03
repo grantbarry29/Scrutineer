@@ -1,6 +1,6 @@
 # Phase 3 Tool Gateway Contract
 
-Scrutineer governs MCP and tool calls through a **tool gateway** data-plane component. Phase 3 defines the contract in `internal/enforcement/toolgateway/`; the first-party sidecar image (`ghcr.io/grantbarry29/scrutineer-tool-gateway:latest`, `cmd/tool-gateway`, `Dockerfile.tool-gateway`) implements the MVP HTTP invoke API and reporter client.
+Scrutineer governs MCP and tool calls through a **tool gateway** data-plane component. Phase 3 defines the contract in `internal/enforcement/toolgateway/`; the first-party sidecar image (`ghcr.io/grantbarry29/scrutineer-tool-gateway`, `cmd/tool-gateway`, `Dockerfile.tool-gateway`) implements the MVP HTTP invoke API and reporter client.
 
 ## Role
 

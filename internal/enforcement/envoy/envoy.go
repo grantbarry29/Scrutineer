@@ -26,9 +26,12 @@ import (
 )
 
 const (
-	// DefaultEnvoyImage is the upstream distroless Envoy image for the egress proxy.
-	// NOTE: the exact tag must be pinned + e2e-validated before this ships.
-	DefaultEnvoyImage = "envoyproxy/envoy:distroless-v1.31-latest"
+	// DefaultEnvoyImage is the upstream distroless Envoy image for the egress proxy,
+	// pinned by digest for reproducibility (the tag stays for readability). The digest is
+	// the multi-arch OCI index (amd64 + arm64) for Envoy 1.31.10, validated with
+	// `envoy --mode validate` and the networking e2e. Keep in sync with ENVOY_IMG in the
+	// Makefile; bump both together on an intentional upgrade.
+	DefaultEnvoyImage = "envoyproxy/envoy:distroless-v1.31-latest@sha256:451ad9c42b4a706092455d524e836365d265760e3e6337c1f42980b18db4c247"
 
 	// ProxyPort is the port Envoy listens on as an HTTP forward proxy (plain HTTP and
 	// HTTPS via CONNECT). Agents reach it via the explicit-proxy env vars below.

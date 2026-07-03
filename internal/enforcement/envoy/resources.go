@@ -49,7 +49,7 @@ const (
 
 	// DefaultEgressReporterImage is the first-party egress-reporter image
 	// (cmd/egress-reporter, built by Dockerfile.egress-reporter).
-	DefaultEgressReporterImage = "ghcr.io/grantbarry29/scrutineer-egress-reporter:latest"
+	DefaultEgressReporterImage = "ghcr.io/grantbarry29/scrutineer-egress-reporter:v0.1.0"
 
 	labelName      = "app.kubernetes.io/name"
 	labelComponent = "app.kubernetes.io/component"

@@ -18,7 +18,7 @@ import "github.com/grantbarry29/scrutineer/internal/enforcement"
 const EnforcementType = "fs-gateway"
 
 // DefaultFSGatewayImage is the first-party fs-gateway container image reference.
-const DefaultFSGatewayImage = "ghcr.io/grantbarry29/scrutineer-fs-gateway:latest"
+const DefaultFSGatewayImage = "ghcr.io/grantbarry29/scrutineer-fs-gateway:v0.1.0"
 
 // DefaultBindAddr is the bind address for the fs-gateway HTTP server.
 const DefaultBindAddr = "127.0.0.1:19191"

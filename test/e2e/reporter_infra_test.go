@@ -49,7 +49,7 @@ func scrutineerE2EImage() string {
 	if img := os.Getenv("SCRUTINEER_E2E_IMG"); img != "" {
 		return img
 	}
-	return "ghcr.io/grantbarry29/scrutineer:latest"
+	return "ghcr.io/grantbarry29/scrutineer:v0.1.0"
 }
 
 // requireLiveEvidenceImages skips the spec when dns-proxy e2e images are not present in kind.
@@ -96,11 +96,15 @@ func clusterImageRunnable(ctx context.Context, image string) bool {
 	if err := k8sClient.List(ctx, &nodes); err != nil {
 		return false
 	}
+	want := imageCandidates(image)
 	for i := range nodes.Items {
 		for _, img := range nodes.Items[i].Status.Images {
 			for _, name := range img.Names {
-				if normalizeImageRef(name) == normalizeImageRef(image) {
-					return true
+				n := normalizeImageRef(name)
+				for _, w := range want {
+					if n == w {
+						return true
+					}
 				}
 			}
 		}
@@ -116,6 +120,26 @@ func normalizeImageRef(ref string) string {
 		ref = strings.TrimPrefix(ref, prefix)
 	}
 	return ref
+}
+
+// imageCandidates expands an image ref into the equivalent forms a node may report in
+// status.images. A digest-pinned ref "repo:tag@sha256:D" is stored by the node as separate
+// "repo:tag" and "repo@sha256:D" entries, so a plain equality check on the combined ref
+// never matches — return all forms and match any.
+func imageCandidates(ref string) []string {
+	ref = normalizeImageRef(ref)
+	out := []string{ref}
+	base, digest, ok := strings.Cut(ref, "@")
+	if !ok {
+		return out
+	}
+	out = append(out, base) // repo:tag
+	repo := base
+	if i := strings.LastIndex(base, ":"); i >= 0 && !strings.Contains(base[i+1:], "/") {
+		repo = base[:i] // strip the tag → bare repo
+	}
+	out = append(out, repo+"@"+digest) // repo@sha256:D
+	return out
 }
 
 func deployInClusterReporter(ctx SpecContext) {

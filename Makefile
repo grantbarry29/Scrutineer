@@ -1,5 +1,10 @@
+# VERSION is the tag for all first-party images (controller + sidecars/proxy). Pinned
+# instead of :latest for reproducibility; keep in sync with the Default*Image constants in
+# internal/enforcement/** that the controller injects. Bump on a release.
+VERSION ?= v0.1.0
+
 # Image URL to use all building/pushing image targets
-IMG ?= ghcr.io/grantbarry29/scrutineer:latest
+IMG ?= ghcr.io/grantbarry29/scrutineer:$(VERSION)
 
 # CONTAINER_TOOL defines the container tool to be used for building images.
 CONTAINER_TOOL ?= docker
@@ -175,7 +180,7 @@ kind-load: docker-build ## Build the controller image and load it into kind.
 	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-dns-proxy kind-load-dns-proxy
-DNS_PROXY_IMG ?= ghcr.io/grantbarry29/scrutineer-dns-proxy:latest
+DNS_PROXY_IMG ?= ghcr.io/grantbarry29/scrutineer-dns-proxy:$(VERSION)
 
 docker-build-dns-proxy: ## Build the dns-proxy sidecar image.
 	$(CONTAINER_TOOL) build -f Dockerfile.dns-proxy -t ${DNS_PROXY_IMG} .
@@ -184,7 +189,7 @@ kind-load-dns-proxy: docker-build-dns-proxy ## Build and load dns-proxy image in
 	kind load docker-image $(DNS_PROXY_IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-tool-gateway kind-load-tool-gateway
-TOOL_GATEWAY_IMG ?= ghcr.io/grantbarry29/scrutineer-tool-gateway:latest
+TOOL_GATEWAY_IMG ?= ghcr.io/grantbarry29/scrutineer-tool-gateway:$(VERSION)
 
 docker-build-tool-gateway: ## Build the tool-gateway sidecar image.
 	$(CONTAINER_TOOL) build -f Dockerfile.tool-gateway -t ${TOOL_GATEWAY_IMG} .
@@ -193,7 +198,7 @@ kind-load-tool-gateway: docker-build-tool-gateway ## Build and load tool-gateway
 	kind load docker-image $(TOOL_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-fs-gateway kind-load-fs-gateway
-FS_GATEWAY_IMG ?= ghcr.io/grantbarry29/scrutineer-fs-gateway:latest
+FS_GATEWAY_IMG ?= ghcr.io/grantbarry29/scrutineer-fs-gateway:$(VERSION)
 
 docker-build-fs-gateway: ## Build the fs-gateway sidecar image.
 	$(CONTAINER_TOOL) build -f Dockerfile.fs-gateway -t ${FS_GATEWAY_IMG} .
@@ -202,7 +207,7 @@ kind-load-fs-gateway: docker-build-fs-gateway ## Build and load fs-gateway image
 	kind load docker-image $(FS_GATEWAY_IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-egress-reporter kind-load-egress-reporter
-EGRESS_REPORTER_IMG ?= ghcr.io/grantbarry29/scrutineer-egress-reporter:latest
+EGRESS_REPORTER_IMG ?= ghcr.io/grantbarry29/scrutineer-egress-reporter:$(VERSION)
 
 docker-build-egress-reporter: ## Build the egress-reporter image (runs beside Envoy in the egress-proxy pod).
 	$(CONTAINER_TOOL) build -f Dockerfile.egress-reporter -t ${EGRESS_REPORTER_IMG} .
@@ -213,7 +218,7 @@ kind-load-egress-reporter: docker-build-egress-reporter ## Build and load egress
 .PHONY: kind-load-envoy
 # The per-session egress proxy uses the upstream Envoy image (no first-party build);
 # keep this tag in sync with envoy.DefaultEnvoyImage.
-ENVOY_IMG ?= envoyproxy/envoy:distroless-v1.31-latest
+ENVOY_IMG ?= envoyproxy/envoy:distroless-v1.31-latest@sha256:451ad9c42b4a706092455d524e836365d265760e3e6337c1f42980b18db4c247
 
 kind-load-envoy: ## Pull the upstream Envoy egress-proxy image and load it into kind.
 	$(CONTAINER_TOOL) pull $(ENVOY_IMG)
