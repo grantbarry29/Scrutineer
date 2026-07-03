@@ -9,16 +9,19 @@ For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://git
 | Doc | Read when… |
 |-----|-----------|
 | [`architecture.md`](architecture.md) | **Start here.** Whole-project architecture: control/data-plane split, CRD model, lifecycle, reconciliation, policy/evidence model, code map, invariants. |
+| [`untamperable-pivot.md`](untamperable-pivot.md) | **The pivot.** Read before any enforcement work: adversarial-grade-only doctrine, verified-or-refused lock gate, removal of the cooperative in-pod tier, sequencing, and which docs below are historical. |
+| [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) | Draft/deferred: out-of-pod successor to the tool gateway — tools pod, credential mediation, ext_authz, approval holds at the chokepoint. |
+| [`arena-workspace.md`](arena-workspace.md) | Draft/deferred: out-of-pod successor to file governance — network-POSIX arena pod (FUSE/9p analysis). |
 | [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) | Working on data-plane enforcement, the `internal/enforcement` contract, or any Phase 3/3b slice. |
 | [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) | Implementing the runtime reporter (sidecar → controller evidence loop) or anything that writes runtime evidence into status. |
-| [`phase-3-dns-proxy-prototype.md`](phase-3-dns-proxy-prototype.md) | Working on egress/DNS governance or the dns-proxy sidecar. |
-| [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md) | Working on tool/MCP governance or the tool-gateway sidecar. |
-| [`phase-3-tool-argument-constraints.md`](phase-3-tool-argument-constraints.md) | Working on argument-level tool/MCP governance — `ToolPolicy` argument rules, the `ArgumentConstraint` schema, or gateway per-call argument evaluation. |
-| [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-policy.md) | Working on file/workspace governance (mount strategy, FS gateway, path rules). |
+| [`phase-3-dns-proxy-prototype.md`](phase-3-dns-proxy-prototype.md) | **Historical** (cooperative tier, removed by the pivot). Egress governance lives at the Envoy chokepoint — see `evidence-integrity.md`. |
+| [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md) | **Historical** (cooperative tier, removed by the pivot). Successor: `tools-pod-chokepoint.md`. |
+| [`phase-3-tool-argument-constraints.md`](phase-3-tool-argument-constraints.md) | **Historical** placement; the `ArgumentConstraint` semantics are inherited by `tools-pod-chokepoint.md`. |
+| [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-policy.md) | **Historical** (cooperative tier, removed by the pivot). Successor: `arena-workspace.md`. |
 | [`phase-4-session-events.md`](phase-4-session-events.md) | Working on `status.events[]`, timeline ingestion, or reporter event payloads. |
 | [`phase-4-session-timeline.md`](phase-4-session-timeline.md) | Working on UI timeline projection over `status.events[]` (`internal/observability`). |
 | [`phase-5-approval-workflows.md`](phase-5-approval-workflows.md) | Working on human approval gates — `ApprovalPolicy` / `ApprovalRequest` CRDs, the controller gate/resume state machine, or `requireHumanApproval` enforcement. |
-| [`phase-5-runtime-tool-approval.md`](phase-5-runtime-tool-approval.md) | Working on **mid-execution** per-tool approval — holding a running agent's tool/MCP call for a scoped, time-bounded human grant (runtime `ApprovalRequest`, reporter approval channel, gateway hold-and-ask). |
+| [`phase-5-runtime-tool-approval.md`](phase-5-runtime-tool-approval.md) | Hold protocol + `ApprovalRequest`/reporter approval channel (these survive the pivot, dormant); the in-pod gateway placement is **historical** — the hold moves to `tools-pod-chokepoint.md`. |
 | [`phase-4-observability-export.md`](phase-4-observability-export.md) | Working on exported telemetry — Prometheus metrics, OTel trace spans, or OTLP audit logs (names, labels, attributes, flags, propagation). |
 | [`evidence-integrity.md`](evidence-integrity.md) | Working on runtime-evidence integrity — the *cooperative → adversarial* trust boundary, mandatory out-of-pod egress, and `observed`-assurance evidence. Read before touching egress trust boundaries or #8/#32 enforcement placement. |
 | [`phase-6-orchestrator-interface.md`](phase-6-orchestrator-interface.md) | Decoupling the reconciler from Kubernetes Jobs — the `RuntimeBackend` interface, `spec.runtime.orchestrator` selection, or adding an orchestrator adapter (Tekton/Argo/Temporal). |

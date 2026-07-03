@@ -2,6 +2,8 @@
 
 > **Canonical architecture reference for Scrutineer.** Read this before implementing anything non-trivial.
 > **Companion docs:** product vision (`.cursor/rules/scrutineer-product-vision.mdc`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)), workflow rules (`.cursor/scrutineer-cursor-workflow.md`), and the phase-specific design docs in this folder.
+>
+> ⚠️ **Pivot in progress:** enforcement is moving to **adversarial-grade only** — the cooperative in-pod sidecar tier described in parts of this doc is being removed. Read [`untamperable-pivot.md`](untamperable-pivot.md) first; this doc describes the code as it exists today and gets its rewrite when the removal (pivot Phase 2) lands.
 
 This document describes **what Scrutineer is, how it is structured, and the invariants every change must preserve.** It is written to be precise enough that an implementer (human or model) can make a correct change without re-deriving the architecture.
 
