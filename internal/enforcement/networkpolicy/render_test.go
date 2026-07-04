@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package networkpolicy
 
 import (
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -276,6 +277,103 @@ func TestBuild_deniedCIDRs(t *testing.T) {
 	if len(np.Spec.Egress) != 2 { // DNS + default route except
 		t.Fatalf("egress rules = %d", len(np.Spec.Egress))
 	}
+	block := np.Spec.Egress[1].To[0].IPBlock
+	if block.CIDR != "0.0.0.0/0" || len(block.Except) != 1 || block.Except[0] != "10.0.0.0/8" {
+		t.Fatalf("ipBlock = %#v", block)
+	}
+}
+
+// requireNoIPv6Allow asserts the posture invariant (#66): no rule in the policy may allow
+// IPv6 destinations — neither a ::/0 (or any v6) ipBlock nor a v6 entry inside a v4 block's
+// except list (the apiserver rejects cross-family excepts outright).
+func requireNoIPv6Allow(t *testing.T, np *networkingv1.NetworkPolicy) {
+	t.Helper()
+	for _, r := range np.Spec.Egress {
+		for _, peer := range r.To {
+			if peer.IPBlock == nil {
+				continue
+			}
+			if strings.Contains(peer.IPBlock.CIDR, ":") {
+				t.Fatalf("posture is IPv4-only egress — no IPv6 ipBlock may be rendered: %#v", peer.IPBlock)
+			}
+			for _, ex := range peer.IPBlock.Except {
+				if strings.Contains(ex, ":") {
+					t.Fatalf("IPv6 except inside an IPv4 block is rejected by the apiserver: %#v", peer.IPBlock)
+				}
+			}
+		}
+	}
+}
+
+// Operator-supplied IPv6 backstop CIDRs must not land in the IPv4 block's except list
+// (the apiserver rejects the object, breaking enforcement provisioning). They are satisfied
+// wholesale instead: the policy's existence default-denies ALL IPv6 from the Envoy pod
+// because no rule allows any v6 destination (#66 posture: IPv4-only egress).
+func TestBuildEgressProxyBackstop_ipv6EntriesPartitioned(t *testing.T) {
+	ctx := enforcement.SessionContext{SessionNamespace: "team-a", SessionName: "demo"}
+	np := BuildEgressProxyBackstop(ctx, []string{"169.254.0.0/16", "fe80::/10", "fd00:ec2::254"})
+	if np == nil {
+		t.Fatal("expected a backstop NetworkPolicy")
+	}
+	requireNoIPv6Allow(t, np)
+	var block *networkingv1.IPBlock
+	for _, r := range np.Spec.Egress {
+		for _, peer := range r.To {
+			if peer.IPBlock != nil && peer.IPBlock.CIDR == "0.0.0.0/0" {
+				block = peer.IPBlock
+			}
+		}
+	}
+	if block == nil {
+		t.Fatalf("backstop must keep the IPv4 allow-all-except rule: %#v", np.Spec.Egress)
+	}
+	if len(block.Except) != 1 || block.Except[0] != "169.254.0.0/16" {
+		t.Fatalf("IPv4 except list must hold exactly the IPv4 backstops: %#v", block.Except)
+	}
+}
+
+// All-IPv6 backstop lists must still render a policy: dropping it would leave the Envoy
+// pod unrestricted in BOTH families, silently ignoring the operator's denies. Rendering it
+// denies all v6 (a superset of what was asked) while leaving v4 free.
+func TestBuildEgressProxyBackstop_onlyIPv6StillRenders(t *testing.T) {
+	ctx := enforcement.SessionContext{SessionNamespace: "team-a", SessionName: "demo"}
+	np := BuildEgressProxyBackstop(ctx, []string{"fe80::/10"})
+	if np == nil {
+		t.Fatal("an IPv6-only backstop list must still render (policy existence is what denies v6)")
+	}
+	requireNoIPv6Allow(t, np)
+	found := false
+	for _, r := range np.Spec.Egress {
+		for _, peer := range r.To {
+			if peer.IPBlock != nil && peer.IPBlock.CIDR == "0.0.0.0/0" {
+				found = true
+				if len(peer.IPBlock.Except) != 0 {
+					t.Fatalf("no IPv4 backstops were given; except must be empty: %#v", peer.IPBlock.Except)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("IPv4 egress must stay allowed (nothing IPv4 was denied): %#v", np.Spec.Egress)
+	}
+}
+
+// Same partitioning for the legacy denied-CIDR path: v6 denies never enter the v4 except
+// list; they are satisfied by the policy's default-deny of all v6.
+func TestBuild_deniedCIDRs_ipv6Partitioned(t *testing.T) {
+	ctx := enforcement.SessionContext{
+		SessionNamespace: "team-a",
+		SessionName:      "demo",
+		Mode:             scrutineerv1alpha1.PolicyModeEnforced,
+		Policy: scrutineerv1alpha1.PolicyRules{
+			DeniedCIDRs: []string{"10.0.0.0/8", "2001:db8::/32"},
+		},
+	}
+	np := Build(ctx)
+	if np == nil {
+		t.Fatal("expected NetworkPolicy")
+	}
+	requireNoIPv6Allow(t, np)
 	block := np.Spec.Egress[1].To[0].IPBlock
 	if block.CIDR != "0.0.0.0/0" || len(block.Except) != 1 || block.Except[0] != "10.0.0.0/8" {
 		t.Fatalf("ipBlock = %#v", block)

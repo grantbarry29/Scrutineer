@@ -33,6 +33,11 @@ import "fmt"
 //
 // Validated with `envoy --mode validate` (Envoy 1.31). Full CONNECT/forward-proxy behavior
 // is proven by the Slice A e2e (issue #60, A4), not by unit tests.
+//
+// dns_lookup_family is V4_ONLY by posture, not oversight (#66): the whole egress path is
+// IPv4-only — the backstop NetworkPolicy denies all IPv6 from this pod by construction,
+// so resolving AAAA records would only produce upstreams Envoy cannot reach. Changing
+// this requires the coupled posture change in internal/enforcement/networkpolicy.
 func BootstrapYAML(cfg BootstrapConfig) string {
 	return fmt.Sprintf(`admin:
   address:

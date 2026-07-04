@@ -92,10 +92,17 @@ test-e2e-net-calico: ## Run the networking e2e suite on the Calico cluster (run 
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_NETPOL) $(MAKE) kind-load kind-load-envoy kind-load-egress-reporter
 	$(MAKE) test-e2e-net
 
+.PHONY: test-e2e-net-dual
+test-e2e-net-dual: ## Run the networking e2e suite on the dual-stack cluster (run 'make kind-up-dual' first).
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_DUAL) .devcontainer/kind-attach.sh
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_DUAL) $(MAKE) install
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_DUAL) $(MAKE) kind-load kind-load-envoy kind-load-egress-reporter
+	$(MAKE) test-e2e-net
+
 .PHONY: test-e2e-net-all
-test-e2e-net-all: test-e2e-net-kindnet test-e2e-net-calico ## Run the networking e2e suite across all CNIs (kindnet + Calico).
+test-e2e-net-all: test-e2e-net-kindnet test-e2e-net-calico test-e2e-net-dual ## Run the networking e2e suite across all cluster flavors (kindnet + Calico + dual-stack).
 	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) .devcontainer/kind-attach.sh
-	@echo ">> networking e2e passed on kindnet + Calico; kubeconfig restored to $(KIND_CLUSTER_NAME)"
+	@echo ">> networking e2e passed on kindnet + Calico + dual-stack; kubeconfig restored to $(KIND_CLUSTER_NAME)"
 
 ##@ Build
 
@@ -164,8 +171,9 @@ kind-up: ## Create the local kind cluster if it does not exist.
 kind-down: ## Delete the local kind cluster.
 	@kind delete cluster --name $(KIND_CLUSTER_NAME)
 
-# Second cluster for NetworkPolicy-enforcement e2e (Slice B, #61): kindnet does not
-# enforce egress policy, so these specs need a Calico cluster.
+# Second cluster for NetworkPolicy-enforcement e2e (Slice B, #61): a second,
+# production-representative CNI (Calico) to cross-check enforcement details against
+# kindnet (which also enforces egress policy — see .devcontainer/kind-config-netpol.yaml).
 KIND_CLUSTER_NAME_NETPOL ?= scrutineer-netpol
 KIND_CONFIG_NETPOL ?= .devcontainer/kind-config-netpol.yaml
 
@@ -176,6 +184,19 @@ kind-up-netpol: ## Create the Calico (NetworkPolicy-enforcing) kind cluster for 
 .PHONY: kind-down-netpol
 kind-down-netpol: ## Delete the Calico netpol kind cluster.
 	@kind delete cluster --name $(KIND_CLUSTER_NAME_NETPOL)
+
+# Third cluster: dual-stack (IPv4+IPv6) for the egress-path posture e2e (#66) — proves
+# IPv6 is denied by construction on a cluster that actually assigns IPv6 pod addresses.
+KIND_CLUSTER_NAME_DUAL ?= scrutineer-dual
+KIND_CONFIG_DUAL ?= .devcontainer/kind-config-dual.yaml
+
+.PHONY: kind-up-dual
+kind-up-dual: ## Create the dual-stack kind cluster for the IPv6-posture e2e.
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_DUAL) KIND_CONFIG=$(KIND_CONFIG_DUAL) .devcontainer/kind-up.sh
+
+.PHONY: kind-down-dual
+kind-down-dual: ## Delete the dual-stack kind cluster.
+	@kind delete cluster --name $(KIND_CLUSTER_NAME_DUAL)
 
 .PHONY: kind-load
 kind-load: docker-build ## Build the controller image and load it into kind.
@@ -194,13 +215,18 @@ kind-load-egress-reporter: docker-build-egress-reporter ## Build and load egress
 # The per-session egress proxy uses the upstream Envoy image (no first-party build);
 # keep this tag in sync with envoy.DefaultEnvoyImage.
 ENVOY_IMG ?= envoyproxy/envoy:distroless-v1.31-latest@sha256:451ad9c42b4a706092455d524e836365d265760e3e6337c1f42980b18db4c247
+# The plain repo:tag form of ENVOY_IMG. `docker save` of a digest-qualified reference
+# exports NO RepoTags, so the image would land untagged in the node's containerd and
+# never match node.status.images (the e2e image-runnable guard) — save the tag instead.
+ENVOY_IMG_TAG = $(firstword $(subst @, ,$(ENVOY_IMG)))
 
 kind-load-envoy: ## Pull the upstream Envoy egress-proxy image and load it into kind.
 	$(CONTAINER_TOOL) pull $(ENVOY_IMG)
+	$(CONTAINER_TOOL) tag $(ENVOY_IMG) $(ENVOY_IMG_TAG)
 	@# `kind load docker-image` uses `ctr import --all-platforms`, which fails on the
 	@# multi-arch Envoy manifest when only the host platform was pulled. Import just the
 	@# local single-platform image into the (single-node dev) cluster's containerd instead.
-	$(CONTAINER_TOOL) save $(ENVOY_IMG) | $(CONTAINER_TOOL) exec -i $(KIND_CLUSTER_NAME)-control-plane ctr --namespace=k8s.io images import -
+	$(CONTAINER_TOOL) save $(ENVOY_IMG_TAG) | $(CONTAINER_TOOL) exec -i $(KIND_CLUSTER_NAME)-control-plane ctr --namespace=k8s.io images import -
 
 .PHONY: dev-up
 dev-up: kind-up install ## Bring up kind + install CRDs (controller runs locally via `make run`).

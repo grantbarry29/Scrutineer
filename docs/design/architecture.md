@@ -234,7 +234,7 @@ flowchart LR
 Effective policy reaches the runtime via:
 
 - **Env vars** on the agent container (`AGENT_POLICY_MODE`, `AGENT_POLICY_DENIED_DOMAINS`, etc.) — a *propagation hook*, not enforcement.
-- **NetworkPolicies** — the CIDR egress baseline, plus (when the `envoy` enforcement type is enabled) the agent-pod **routing lock** and the Envoy-pod **backstop**.
+- **NetworkPolicies** — the CIDR egress baseline, plus (when the `envoy` enforcement type is enabled) the agent-pod **routing lock** and the Envoy-pod **backstop**. Dual-stack posture (#66): the egress path is IPv4-only — no rendered policy contains an IPv6 allow, so on dual-stack clusters all v6 egress from locked/backstopped pods is denied by construction (proven by the `make test-e2e-net-dual` suite).
 - **Explicit-proxy env** (`HTTP_PROXY`/`HTTPS_PROXY` → the session's Envoy ClusterIP) and the **rendered Envoy RBAC config** (effective FQDN policy → ConfigMap) when a RuntimeProfile enables the `envoy` type.
 
 ### 6.3 Status as source of truth & the merge-patch hazard

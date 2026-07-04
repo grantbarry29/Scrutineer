@@ -88,7 +88,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 | File/workspace governance | Same — workspace is an ungoverned volume | [`arena-workspace.md`](arena-workspace.md) |
 | Bypass *attempts* leave no evidence (CNI drops direct connects silently; Envoy only sees traffic that arrived) | Documented; deny evidence exists only at the chokepoint | #64 node interceptor (unforgeable node-observed attempts); nearer-term design note welcome |
 | TLS egress is CONNECT-opaque (authority-only filtering) | Documented; L7 body visibility only for plain HTTP / in-cluster hops | tools-pod hop is plain HTTP via proxy; external TLS stays authority-filtered |
-| IPv6 / dual-stack lock coverage | Tracked | #66 |
+| IPv6 / dual-stack lock coverage | **Closed (#66)** — posture decided: the egress path is IPv4-only and IPv6 is denied *by construction* (no rendered policy contains a v6 allow; the lock is selector-based and family-agnostic; Envoy resolves `V4_ONLY`). Proven on a dual-stack kind cluster (`make test-e2e-net-dual`). Opening v6 egress is a future posture change, not a knob | #66 (shipped) |
 
 ## 7. Sequencing
 
