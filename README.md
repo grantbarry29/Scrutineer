@@ -9,16 +9,20 @@ or [Temporal](https://temporal.io/) — those systems already run work.
 
 Scrutineer's job is different: it is the control plane that **governs** autonomous AI
 agents while they run inside enterprise environments. It wraps execution with
-policy, identity isolation, audit, observability, and (eventually) strong
-runtime enforcement, then delegates the actual *running* of the agent to one of
-the orchestrators above.
+policy, untamperable egress enforcement, audit, observability, and human approval,
+then delegates the actual *running* of the agent to one of the orchestrators above.
 
 This repository is a Kubebuilder-based Kubernetes operator built around the
-`AgentSession` CRD. Today it reconciles a session onto a Kubernetes `Job`,
-resolves and propagates reusable policy, **enforces** network / tool / file
-governance through cooperative in-pod data-plane sidecars, records the resulting
-runtime evidence back into status, exports observability and audit signals, and
-gates sensitive actions behind human approval workflows.
+`AgentSession` CRD. It is **bring-your-own-agent**: your image holds the reasoning
+loop, model calls, and tool use; Scrutineer schedules that workload (Job or bare Pod),
+resolves and propagates reusable policy, and **enforces network egress from outside
+the agent's trust domain** — a per-session, out-of-pod Envoy chokepoint plus a
+default-deny routing lock the agent cannot alter. Runtime evidence is recorded back
+into status stamped `observed`, observability and audit signals are exported, and
+sensitive actions gate behind human approval. Enforcement ships **untamperable or
+not at all** ([the pivot](docs/design/untamperable-pivot.md)): where a guarantee
+depends on cluster behavior, Scrutineer proves it empirically and refuses rather
+than degrading silently.
 
 ---
 
@@ -58,22 +62,29 @@ Tear down with `make demo-down` / `make quickstart-down`.
 Scrutineer aims to become the runtime control plane for safely running autonomous AI
 agents inside enterprise environments.
 
-**Shipped today** (Phases 0–5):
+**Shipped today:**
 
-- Runtime governance for AI agents (per-session policy)
-- Network egress policy (domain + CIDR allow/deny) — cooperative enforcement
-- Tool access policy (which tools/MCP servers an agent may invoke, incl. argument constraints)
-- File / workspace policy (what the agent may read/write)
-- First-class policy violations as cluster events and CRD status
-- Audit + observability (Prometheus metrics, OpenTelemetry traces, OTLP audit sink, structured run records)
-- Human approval gates for sensitive actions (incl. mid-execution per-tool holds)
-- Reconcile into Kubernetes Jobs **or** bare Pods behind a backend-neutral `runtimeBackend` interface
+- **Untamperable network egress governance** — per-session out-of-pod Envoy chokepoint
+  (FQDN allow/deny, enforce or dry-run) + default-deny routing lock; evidence stamped
+  `observed` from the proxy pod's own identity (never the agent's word)
+- **Verified-or-refused** — a differential canary probe proves the CNI actually enforces
+  NetworkPolicy; enforced sessions on an unverified cluster refuse to start, loudly
+- Reusable policy CRDs (`AgentPolicy`, `RuntimeProfile`) merged into per-session
+  effective policy, with first-class violations as cluster events and CRD status
+- Audit + observability (Prometheus metrics — control plane and egress data plane,
+  OpenTelemetry traces, OTLP audit sink, session events/timeline, log/artifact capture)
+- Human approval gates for sensitive actions
+- Kubernetes Jobs **or** bare Pods behind a backend-neutral `runtimeBackend` interface
 
-**Future** (Phase 6+):
+**Future** (tracked as epics):
 
+- Tool governance via an out-of-pod **tools-pod chokepoint** (#76) and model-call
+  governance via an **LLM gateway** (#77) — the tool/file policy surface was removed
+  with the cooperative in-pod tier ([the pivot](docs/design/untamperable-pivot.md))
+  and returns only with real enforcement backends
+- Node-level transparent interception, no CNI dependency (#64)
+- Identity and credential isolation / mediation (#25), sandboxes (gVisor / Kata) (#29)
 - Additional orchestrators behind the same interface: Tekton, Argo, Temporal
-- Identity and credential isolation (per-session SA, KMS-scoped secrets)
-- Stronger / adversarial-grade enforcement: Envoy sidecars, Cilium/eBPF, generated NetworkPolicy, and sandboxes (gVisor / Kata / Firecracker)
 - An operational governance/observability UI
 
 Live task state and the product roadmap are in
@@ -405,7 +416,7 @@ spec:
 | `jobName` / `podName` | Yes | `jobName`: owned Job name (**deprecated** alias of `runtimeRef.name`; empty for the `kubernetes-pod` backend). `podName`: the agent Pod (newest Job-owned Pod, or the Pod itself for `kubernetes-pod`). |
 | `matchedPolicies` | Yes | Policy CRDs that contributed to `effectivePolicy` |
 | `effectivePolicy` | Yes | Merged rules + mode propagated to the Job |
-| `policyDecisions` | Yes | Merge-time audit entries plus runtime decisions appended from sidecar reports (max 64) |
+| `policyDecisions` | Yes | Merge-time audit entries plus runtime decisions reported by the data plane (egress-reporter → reporter, max 64) |
 | `matchedRuntimeProfile` | Yes | Applied `RuntimeProfile` ref (when set) |
 | `result` | Yes | Terminal outcome / summary (on success, failure, timeout, cancel) |
 | `usage` | **Yes** (from runtime reports) | Network/tool decisions increment counters; optional `usage` delta in `POST /v1/report` for tokens |
@@ -441,7 +452,7 @@ Plus any `spec.runtime.env` entries the user adds.
 
 ## AgentSession controller reference
 
-The controller lives in [`internal/controller/agentsession/`](internal/controller/agentsession/) (reconcile loop, policy/runtime watches, validation) and delegates pod/Job construction to [`internal/controller/job/`](internal/controller/job/) (build, sidecar injection, drift detection, status helpers). Orchestrator-specific work goes through a backend-neutral `runtimeBackend` interface with two backends today — `kubernetes-job` and `kubernetes-pod`, both built from the shared `job.BuildPodTemplateSpec`; the reconciler maps each backend's normalized observation onto status, so governance semantics stay backend-independent. See the [package README](internal/controller/agentsession/README.md).
+The controller lives in [`internal/controller/agentsession/`](internal/controller/agentsession/) (reconcile loop, policy/runtime watches, validation) and delegates pod/Job construction to [`internal/controller/job/`](internal/controller/job/) (build, explicit-proxy env injection, drift detection, status helpers). Orchestrator-specific work goes through a backend-neutral `runtimeBackend` interface with two backends today — `kubernetes-job` and `kubernetes-pod`, both built from the shared `job.BuildPodTemplateSpec`; the reconciler maps each backend's normalized observation onto status, so governance semantics stay backend-independent. See the [package README](internal/controller/agentsession/README.md).
 
 ### Reconcile triggers
 
@@ -538,7 +549,7 @@ When a referenced policy changes:
 
 ### Runtime profile resolution
 
-When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` (same namespace) and merges container/pod security fields plus enabled `spec.enforcement[]` into the Job template (in-pod types as sidecar containers; the `envoy` type as an out-of-pod proxy). Profile drift (including enforcement changes) follows the same pending-Job-replace rules as policy env drift.
+When `spec.runtimeProfileRef` is set, the controller loads the `RuntimeProfile` (same namespace) and merges container/pod security fields plus enabled `spec.enforcement[]` into the Job template (`envoy` — the only type — provisions the out-of-pod proxy and points the agent at it). Profile drift (including enforcement changes) follows the same pending-Job-replace rules as policy env drift.
 
 ### Job lifecycle (`internal/controller/job`)
 
@@ -634,7 +645,7 @@ kubectl get pods -l scrutineer.sh/session=<name>
 
 ---
 
-## Quick start with the dev container (recommended)
+## Developing with the dev container (recommended for contributors)
 
 The repo ships with a `.devcontainer/` that gives you a fully wired Scrutineer dev
 environment with **zero host setup beyond Docker + Cursor/VS Code**.
