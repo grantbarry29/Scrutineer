@@ -22,6 +22,7 @@ For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://git
 | [`evidence-integrity.md`](evidence-integrity.md) | Working on runtime-evidence integrity — the *cooperative → adversarial* trust boundary, mandatory out-of-pod egress, and `observed`-assurance evidence. Read before touching egress trust boundaries or #8/#32 enforcement placement. |
 | [`bypass-attempt-evidence.md`](bypass-attempt-evidence.md) | Design note (decided): why bypass *attempts* against the routing lock leave no evidence today, the interim options compared, and the decision to defer wholly to the #64 node interceptor (Hubble-adapter contingency recorded). |
 | [`phase-6-orchestrator-interface.md`](phase-6-orchestrator-interface.md) | Decoupling the reconciler from Kubernetes Jobs — the `RuntimeBackend` interface, `spec.runtime.orchestrator` selection, or adding an orchestrator adapter (Tekton/Argo/Temporal). |
+| [`artifact-export.md`](artifact-export.md) | Design (not yet implemented, #2): pluggable object-store export for collected session outputs — S3 backend, digests in `status.artifacts`, fallback semantics, retention posture. |
 
 ## Conventions
 
