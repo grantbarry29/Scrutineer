@@ -248,6 +248,72 @@ dev-sample: ## Apply both sample AgentSessions to the kind cluster.
 .PHONY: dev-down
 dev-down: kind-down ## Tear down the local kind cluster.
 
+##@ Quickstart
+
+# The front-door experience (#78/#79): one command from a fresh clone to a running,
+# lock-verified Scrutineer on a dedicated kind cluster. Uses the released images when
+# pullable, falls back to local builds — either way images are kind-loaded, so the
+# cluster never pulls from a registry (probe pods use the controller image with
+# PullIfNotPresent; see internal/enforcement/lockverify).
+KIND_CLUSTER_NAME_QUICKSTART ?= scrutineer-quickstart
+# QUICKSTART_CNI=kindnet (default, fast) or calico (production-representative; use if
+# the default flavor's gate verdict comes back Refused on your kind/node versions).
+QUICKSTART_CNI ?= kindnet
+
+.PHONY: quickstart
+quickstart: ## One command: kind cluster + Scrutineer controller, lock-gate verdict printed.
+ifeq ($(QUICKSTART_CNI),calico)
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) KIND_CONFIG=$(KIND_CONFIG_NETPOL) KIND_CNI=calico .devcontainer/kind-up.sh
+else
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) $(MAKE) kind-up
+endif
+	$(MAKE) quickstart-images
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) $(MAKE) install deploy
+	kubectl -n scrutineer-system rollout status deployment/scrutineer-controller-manager --timeout=3m
+	$(MAKE) quickstart-verdict
+	@echo ""
+	@echo "Scrutineer is running on kind cluster '$(KIND_CLUSTER_NAME_QUICKSTART)'."
+	@echo "Try a sample session:   kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession.yaml"
+	@echo "Watch it:               kubectl get agentsessions -w"
+	@echo "Inspect evidence:       kubectl get agentsession github-readme-update -o yaml"
+	@echo "Tear down:              make quickstart-down"
+
+.PHONY: quickstart-images
+quickstart-images: ## Ensure controller + egress-reporter + Envoy images exist locally (pull released, else build) and load them into the quickstart cluster.
+	$(CONTAINER_TOOL) pull $(IMG) || $(MAKE) docker-build
+	$(CONTAINER_TOOL) pull $(EGRESS_REPORTER_IMG) || $(MAKE) docker-build-egress-reporter
+	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME_QUICKSTART)
+	kind load docker-image $(EGRESS_REPORTER_IMG) --name $(KIND_CLUSTER_NAME_QUICKSTART)
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) $(MAKE) kind-load-envoy
+
+.PHONY: quickstart-verdict
+quickstart-verdict: ## Wait for and print the routing-lock verification verdict (verified-or-refused gate).
+	@echo ">> waiting for the lock-verification probe (differential canary; see docs/design/untamperable-pivot.md §4)..."
+	@# The || true keeps the empty-grep iterations alive under this Makefile's
+	@# bash -e -o pipefail shell (no verdict line yet is the expected first state).
+	@verdict=""; \
+	for i in $$(seq 1 60); do \
+	  verdict=$$(kubectl -n scrutineer-system logs deployment/scrutineer-controller-manager 2>/dev/null \
+	    | grep 'lock probe verdict' | tail -1 | sed -n 's/.*"verdict"[": ]*\([A-Za-z]*\).*/\1/p' || true); \
+	  if [ -n "$$verdict" ]; then break; fi; \
+	  sleep 2; \
+	done; \
+	if [ "$$verdict" = "Verified" ]; then \
+	  echo ">> routing-lock enforcement VERIFIED on this cluster (enforced sessions will run)."; \
+	elif [ -z "$$verdict" ]; then \
+	  echo ">> no probe verdict yet (still Unknown). Check: kubectl -n scrutineer-system logs deployment/scrutineer-controller-manager"; \
+	  exit 1; \
+	else \
+	  echo ">> lock verdict: $$verdict — this cluster's CNI did not prove NetworkPolicy enforcement."; \
+	  echo ">> Enforced sessions will be REFUSED (loudly, by design: verified-or-refused)."; \
+	  echo ">> Retry on Calico: make quickstart-down && make quickstart QUICKSTART_CNI=calico"; \
+	  exit 1; \
+	fi
+
+.PHONY: quickstart-down
+quickstart-down: ## Delete the quickstart kind cluster.
+	@kind delete cluster --name $(KIND_CLUSTER_NAME_QUICKSTART)
+
 ##@ Dependencies
 
 LOCALBIN ?= $(shell pwd)/bin

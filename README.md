@@ -24,6 +24,34 @@ gates sensitive actions behind human approval workflows.
 
 > **Design docs:** architecture and per-phase design live in [`docs/design/`](docs/design/) — start with [`architecture.md`](docs/design/architecture.md). **Task tracking and the roadmap are in [GitHub Issues / Projects](https://github.com/grantbarry29/scrutineer/issues)**; durable technical context lives in `docs/design/` and component `README.md`s.
 
+## Quickstart
+
+One command from a fresh clone to a running Scrutineer on a local
+[kind](https://kind.sigs.k8s.io/) cluster (needs Docker, kind, kubectl; uses the
+released images when pullable, otherwise builds them locally):
+
+```sh
+make quickstart
+```
+
+This creates a dedicated `scrutineer-quickstart` cluster, loads the controller and
+egress-proxy images into it, installs the CRDs, deploys the controller, and prints the
+**routing-lock verification verdict** — Scrutineer empirically proves the cluster's CNI
+enforces NetworkPolicy before it will run enforced sessions (*verified-or-refused*; see
+[`docs/design/untamperable-pivot.md`](docs/design/untamperable-pivot.md)). If the verdict
+comes back `Refused` on your kind version, retry with
+`make quickstart-down && make quickstart QUICKSTART_CNI=calico`.
+
+Then try a session and watch the controller govern it:
+
+```sh
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession.yaml
+kubectl get agentsessions -w
+```
+
+Tear down with `make quickstart-down`. A guided demo of the untamperable egress path is
+tracked in [#78](https://github.com/grantbarry29/Scrutineer/issues/78).
+
 ## Long-term product vision
 
 Scrutineer aims to become the runtime control plane for safely running autonomous AI
