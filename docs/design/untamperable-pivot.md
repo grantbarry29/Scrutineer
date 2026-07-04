@@ -84,7 +84,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 
 | Gap | Posture until closed | Closed by |
 |---|---|---|
-| Tool-level governance (incl. approval holds) has no enforcement backend | No tool policy surface exists (removed, not unenforced-but-declared — #75) | [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) |
+| Tool-level governance (incl. approval holds) has no enforcement backend | No tool policy surface exists (removed, not unenforced-but-declared — #75) | [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) (epic #76, unscheduled) |
 | File/workspace governance | Same — workspace is an ungoverned volume | [`arena-workspace.md`](arena-workspace.md) |
 | Bypass *attempts* leave no evidence (CNI drops direct connects silently; Envoy only sees traffic that arrived) | Documented blind spot — decided (#72): defer wholly to #64; interim options compared and rejected/contingency-recorded in [`bypass-attempt-evidence.md`](bypass-attempt-evidence.md) | #64 node interceptor (unforgeable node-observed attempts) |
 | TLS egress is CONNECT-opaque (authority-only filtering) | Documented; L7 body visibility only for plain HTTP / in-cluster hops | tools-pod hop is plain HTTP via proxy; external TLS stays authority-filtered |
@@ -98,7 +98,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 | 1 | Lock-verification gate (§4) | shipped (#70, `cfdd9c0`) — verified on kindnet + Calico |
 | 2 | Removal (§5) | shipped (#71, `b9ceaa8`; residue purge #74; API clean-break completion #75) |
 | 3 | Hardening backlog | shipped — #66 IPv4-only dual-stack posture + dual-stack e2e flavor (`10eccc2`), #72 bypass-attempt evidence note → defer to #64 (`68bc838`), #55 egress-path metrics (`45c2123`); TLS CONNECT-opacity posture documented (§6 row + root README guarantees) |
-| deferred | Tools pod, arena pod, credential mediation (#25), sandboxes (#29), transparent interception (#64) | design docs / epics |
+| deferred | Tools pod (epic #76), arena pod, credential mediation (#25, absorbed by #76), sandboxes (#29), transparent interception (#64) | design docs / epics |
 
 ## 8. Superseded documents
 

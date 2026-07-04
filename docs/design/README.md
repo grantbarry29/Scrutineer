@@ -10,7 +10,7 @@ For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://git
 |-----|-----------|
 | [`architecture.md`](architecture.md) | **Start here.** Whole-project architecture: control/data-plane split, CRD model, lifecycle, reconciliation, policy/evidence model, code map, invariants. |
 | [`untamperable-pivot.md`](untamperable-pivot.md) | **The pivot.** Read before any enforcement work: adversarial-grade-only doctrine, verified-or-refused lock gate, removal of the cooperative in-pod tier, sequencing, and which docs below are historical. |
-| [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) | Draft/deferred: out-of-pod successor to the removed cooperative tool tier — tools pod, credential mediation, ext_authz, approval holds at the chokepoint. |
+| [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) | Draft/deferred (epic #76): out-of-pod successor to the removed cooperative tool tier — tools pod, credential mediation, ext_authz, approval holds at the chokepoint. |
 | [`arena-workspace.md`](arena-workspace.md) | Draft/deferred: out-of-pod successor to file governance — network-POSIX arena pod (FUSE/9p analysis). |
 | [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) | Working on data-plane enforcement, the `internal/enforcement` contract, or any Phase 3/3b slice. |
 | [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) | Implementing the runtime reporter (data-plane → controller evidence loop) or anything that writes runtime evidence into status. |
