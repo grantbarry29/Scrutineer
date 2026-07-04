@@ -97,7 +97,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 | 0 | This doc + vision rewrite + deferred-design drafts + board re-triage | shipped (`dfeab37`) |
 | 1 | Lock-verification gate (§4) | shipped (#70, `cfdd9c0`) — verified on kindnet + Calico |
 | 2 | Removal (§5) | shipped (#71, `b9ceaa8`; residue purge #74; API clean-break completion #75) |
-| 3 | Hardening backlog: #66, bypass-attempt evidence note (#72), #55 reshaped to egress metrics, TLS posture doc | issues |
+| 3 | Hardening backlog | shipped — #66 IPv4-only dual-stack posture + dual-stack e2e flavor (`10eccc2`), #72 bypass-attempt evidence note → defer to #64 (`68bc838`), #55 egress-path metrics (`45c2123`); TLS CONNECT-opacity posture documented (§6 row + root README guarantees) |
 | deferred | Tools pod, arena pod, credential mediation (#25), sandboxes (#29), transparent interception (#64) | design docs / epics |
 
 ## 8. Superseded documents
