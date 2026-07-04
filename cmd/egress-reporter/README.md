@@ -2,9 +2,8 @@
 
 Tails the per-session Envoy egress proxy's JSON access log and submits each entry as
 runtime egress evidence to the controller-owned reporter. It runs **beside Envoy in the
-egress-proxy pod** — *not* in the agent pod — so, unlike the cooperative in-pod sidecars
-(dns-proxy/tool-gateway/fs-gateway), its evidence originates outside the agent's trust
-domain and is stamped **`observed`** by the reporter (Slice C,
+egress-proxy pod** — *not* in the agent pod — so its evidence originates outside the
+agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
 [#62](https://github.com/grantbarry29/scrutineer/issues/62); design:
 [`docs/design/evidence-integrity.md`](../../docs/design/evidence-integrity.md)).
 

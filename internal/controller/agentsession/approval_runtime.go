@@ -34,9 +34,10 @@ import (
 // human decision (granted/denied), enforces the policy's approver allowlist and
 // allOf requirement, applies the decision deadline (onTimeout), and emits an
 // audit record for the human decision. Session-level runtime evidence
-// (status.policyDecisions, self-reported) is populated later by the tool-gateway
-// via the reporter, not here — the controller only records the authoritative
-// human decision into the audit sink and the ApprovalRequest status.
+// (status.policyDecisions) is populated via the reporter by whichever data-plane
+// component holds the call (dormant until the out-of-pod tools chokepoint lands;
+// see docs/design/tools-pod-chokepoint.md), not here — the controller only records
+// the authoritative human decision into the audit sink and the ApprovalRequest status.
 func (r *AgentSessionReconciler) reconcileRuntimeApprovals(ctx context.Context, session *scrutineerv1alpha1.AgentSession) error {
 	var list scrutineerv1alpha1.ApprovalRequestList
 	if err := r.List(ctx, &list, client.InNamespace(session.Namespace)); err != nil {

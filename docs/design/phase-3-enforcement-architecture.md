@@ -1,5 +1,7 @@
 # Phase 3 Enforcement Architecture
 
+> **Post-pivot note:** the cooperative in-pod enforcement slices this phase shipped (5–8 below) were **removed** in the untamperable pivot ([`untamperable-pivot.md`](untamperable-pivot.md), #71); their sections are kept as condensed historical stubs. What survives of Phase 3 is the enforcement contract (`internal/enforcement`), the NetworkPolicy baseline, the runtime-evidence loop, and the out-of-pod Envoy egress path.
+
 Scrutineer Phase 3 moves from policy declaration and propagation to data-plane enforcement. The goal is not to turn Scrutineer into an orchestrator or agent framework. The controller should keep declaring desired governance state; enforcement backends should observe, enforce, and report evidence.
 
 ## Goals
@@ -15,7 +17,7 @@ Scrutineer Phase 3 moves from policy declaration and propagation to data-plane e
 - Do not build a workflow engine.
 - Do not implement a full UI, audit warehouse, or SIEM sink in Phase 3.
 - Do not implement every enforcement backend at once.
-- Do not require Envoy, Cilium, gVisor, or a tool gateway for the first slice.
+- Do not require Envoy, Cilium, gVisor, or a tool-execution chokepoint for the first slice.
 - Do not make `AGENT_POLICY_*` env vars the enforcement boundary. They remain propagation hooks.
 
 ## Existing Control-Plane Inputs
@@ -39,12 +41,11 @@ Use a narrow contract between the reconciler and data-plane components:
 3. Data-plane components enforce at runtime.
 4. Data-plane components report decisions and violations through a bounded status update path.
 
-Backends should be replaceable:
+Backends should be replaceable (post-pivot: every backend is out-of-pod):
 
-- NetworkPolicy baseline for coarse CIDR/namespace egress.
-- DNS or egress proxy sidecar for FQDN allow/deny.
-- Envoy sidecar for richer L7 egress policy.
-- Tool gateway for MCP/tool-call authorization and logging.
+- NetworkPolicy baseline for coarse CIDR/namespace egress + the routing lock.
+- Per-session out-of-pod Envoy egress proxy for FQDN/L7 allow/deny (shipped).
+- Future out-of-pod chokepoints: tools pod ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md)), arena workspace ([`arena-workspace.md`](arena-workspace.md)).
 - Sandbox/runtime profile for kernel/process isolation.
 
 ## Policy Modes
@@ -57,7 +58,7 @@ Phase 3 must define how modes affect runtime decisions:
 | `dry-run` | Allow action, record what would have been denied |
 | `enforced` | Deny action when policy says deny, record runtime decision/violation |
 
-Mode handling must be backend-neutral. A network backend and a tool gateway should use the same mode semantics.
+Mode handling must be backend-neutral. A network backend and a tool-execution chokepoint should use the same mode semantics.
 
 ## Runtime Reporting Contract
 
@@ -135,58 +136,16 @@ Acceptance:
 - Status list is bounded.
 - README documents what is and is not populated.
 
-### Slice 5: RuntimeProfile Sidecar Injection — done
+### Slices 5–8: the cooperative in-pod tier — shipped, then removed (pivot #71)
 
-Implemented in `internal/controller/job/sidecars.go`:
-
-- Injects enabled `dns-proxy`, `tool-gateway`, and `fs-gateway` sidecars from `RuntimeProfile.spec.enforcement[]` (formerly `spec.sidecars[]`; the `envoy` type became an out-of-pod proxy — see evidence-integrity.md)
-- Skips disabled and unknown types; placeholder `busybox` images until data-plane images ship
-- Sets `SCRUTINEER_TOOL_GATEWAY_URL` on the agent when tool-gateway is enabled
-- `RuntimeProfileDrift` detects sidecar template changes
-
-Acceptance:
-
-- Only inject known enabled sidecar types.
-- Pending Job replace behavior handles profile drift.
-- No external proxy implementation required yet.
-
-### Slice 6: Tool Gateway Contract — done
-
-Implemented in `internal/enforcement/toolgateway/`; see [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md).
-
-- `ToolRequest` — tool identity and correlation metadata
-- `EvaluateTool` — allow/deny using shared mode semantics
-- `RuntimeReport` — decisions + violations for `ApplyRuntimePolicyReport`
-- `GatewayConfig` + `Backend` — desired config for future sidecar injection
-
-Acceptance:
-
-- Document tool identity, request metadata, allow/deny result, and decision reporting.
-- Do not require a production gateway implementation in this slice.
-
-### Slice 7: DNS/Egress Proxy Prototype — done
-
-Implemented in `internal/enforcement/dnsproxy/`; see [`phase-3-dns-proxy-prototype.md`](phase-3-dns-proxy-prototype.md).
-
-- `EvaluateEgress` — domain + CIDR policy with mode semantics
-- `BuildConfig` / `EnvForConfig` — sidecar env propagation from effective policy
-- `RuntimeReportFromEvent` — decisions + violations via `ApplyRuntimePolicyReport`
-- `ApplyEgressProxyRuntimeEvent` — controller entry point for sidecar reports
-- Job builder sets `HTTP_PROXY` on agent when dns-proxy enabled
-
-Acceptance:
-
-- Uses effective domain/CIDR policy.
-- Honors policy modes.
-- Reports runtime decisions and violations.
-
-### Slice 8: File/Workspace Policy Design — done
-
-Design only. See [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-policy.md).
-
-- **Recommendation:** mount strategy + RuntimeProfile hardening as MVP; defer path-level `PolicyRules` and FS gateway.
-- **Stubs:** `internal/enforcement/workspace/types.go` for future backend kinds.
-- **Deferred:** FS proxy sidecar, `allowedPaths`/`deniedPaths` CRD fields, real file enforcement.
+Slices 5–8 delivered in-pod sidecar injection, a tool-call evaluation contract, a
+DNS/egress proxy prototype, and a file/workspace policy design. All of it was
+cooperative — it shared the agent's pod and trust domain — and was **removed** in the
+untamperable pivot ([`untamperable-pivot.md`](untamperable-pivot.md) §5). The original
+slice write-ups and their design docs live in git history (deleted in #74). Surviving
+descendants: the mode semantics and evidence contract (unchanged), the tool/argument and
+path policy schema (inert in `api/v1alpha1/policy_types.go`), and the successor designs
+([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)).
 
 ## Phase 3b — Runtime evidence loop (critical path)
 
@@ -197,14 +156,13 @@ Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/scrut
 1. **Runtime reporter mechanism design** — `docs/design/phase-3-runtime-reporter-contract.md`.
 2. **Runtime reporter loop (impl)** — controller-owned PATCH callback populates status.
 3. **Structured session events API** — durable, ordered `status.events[]` (the reporter's sink).
-4. **First-party dns-proxy image MVP** — first real producer.
-5. **First-party tool-gateway image MVP** — second real producer.
-6. **Live network violation population** — enforced NetworkPolicy blocks → violations.
-7. **File/workspace policy implementation** — deferred from slice 8.
+4. **First real producers** — shipped pre-pivot as cooperative in-pod images (removed in #71); the surviving producer is the **egress-reporter** in the out-of-pod egress-proxy pod.
+5. **Live network violation population** — enforced NetworkPolicy blocks → violations.
+6. **File/workspace policy implementation** — deferred to the arena design post-pivot.
 
 ## Open Questions
 
-- ~~Should runtime reporters patch `AgentSession.status` directly or write separate evidence CRDs?~~ **Decided:** controller-owned **PATCH callback** — sidecars report to a controller endpoint that PATCHes `AgentSession.status`; no new evidence CRD. Keeps status the single source of truth. Detailed contract: [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) (Phase 3b slice 1).
+- ~~Should runtime reporters patch `AgentSession.status` directly or write separate evidence CRDs?~~ **Decided:** controller-owned **PATCH callback** — data-plane producers report to a controller endpoint that PATCHes `AgentSession.status`; no new evidence CRD. Keeps status the single source of truth. Detailed contract: [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) (Phase 3b slice 1).
 - ~~Should `RuntimeProfile.spec.sidecars[]` be enough for backend selection, or should Phase 3 introduce an `EnforcementProfile` / `ToolGateway` CRD first?~~ **Decided:** the list on `RuntimeProfile` is enough — its entry `type` selects the backend. Renamed `spec.sidecars[]` → `spec.enforcement[]` in #65 (it now covers out-of-pod backends like the Envoy egress proxy, not just in-pod sidecars); no separate `EnforcementProfile`/`ToolGateway` CRD was introduced.
 - What is the minimal production-safe status cap for runtime decisions and violations?
 - How should active Job drift be handled for enforcement backend changes: deny mutation, set drift condition, or require session restart?

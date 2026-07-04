@@ -23,8 +23,7 @@ Scrutineer keeps canonical architecture/design docs in [`docs/design/`](../docs/
 | Future file governance (network-POSIX arena workspace) | [`docs/design/arena-workspace.md`](../docs/design/arena-workspace.md) |
 | Structured session events / reporter event payloads | [`docs/design/phase-4-session-events.md`](../docs/design/phase-4-session-events.md) |
 | UI timeline projection over `status.events[]` (`internal/observability`) | [`docs/design/phase-4-session-timeline.md`](../docs/design/phase-4-session-timeline.md) |
-| Human approval gates / `ApprovalPolicy` / `ApprovalRequest` / `requireHumanApproval` enforcement | [`docs/design/phase-5-approval-workflows.md`](../docs/design/phase-5-approval-workflows.md) |
-| Mid-execution per-tool approval (hold a running tool/MCP call for a scoped human grant) | [`docs/design/phase-5-runtime-tool-approval.md`](../docs/design/phase-5-runtime-tool-approval.md) |
+| Human approval gates / `ApprovalPolicy` / `ApprovalRequest` / `requireHumanApproval` enforcement (incl. the dormant per-tool runtime-approval surface) | [`docs/design/phase-5-approval-workflows.md`](../docs/design/phase-5-approval-workflows.md) |
 | Observability export (Prometheus / OTel traces / OTLP audit logs) | [`docs/design/phase-4-observability-export.md`](../docs/design/phase-4-observability-export.md) |
 | Orchestrator decoupling / `RuntimeBackend` interface / orchestrator adapters (Tekton/Argo/Temporal) | [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md) |
 

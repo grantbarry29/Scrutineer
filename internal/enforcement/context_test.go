@@ -35,7 +35,7 @@ func TestNewSessionContext_fromEffectivePolicyAndProfile(t *testing.T) {
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
 			Enforcement: []scrutineerv1alpha1.RuntimeProfileEnforcement{{
 				Name:    "egress",
-				Type:    "dns-proxy",
+				Type:    "envoy",
 				Enabled: &enabled,
 			}},
 		},
@@ -55,8 +55,8 @@ func TestNewSessionContext_fromEffectivePolicyAndProfile(t *testing.T) {
 	if len(ctx.Policy.DeniedDomains) != 1 || ctx.Policy.DeniedDomains[0] != "evil.example" {
 		t.Fatalf("policy = %+v", ctx.Policy)
 	}
-	if len(ctx.Enforcement) != 1 || ctx.Enforcement[0].Type != "dns-proxy" {
-		t.Fatalf("sidecars = %+v", ctx.Enforcement)
+	if len(ctx.Enforcement) != 1 || ctx.Enforcement[0].Type != "envoy" {
+		t.Fatalf("enforcement = %+v", ctx.Enforcement)
 	}
 }
 

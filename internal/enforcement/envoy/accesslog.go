@@ -63,8 +63,8 @@ func ParseAccessLogLine(line []byte) (AccessLogEntry, error) {
 	return e, nil
 }
 
-// Evidence reason codes for egress decisions (match the dns-proxy's values so status
-// filtering is consistent across both egress backends).
+// Evidence reason codes for egress decisions, shared by evidence classification and
+// status filtering.
 const (
 	ReasonEgressObserved      = "EgressObserved"
 	ReasonDeniedDomains       = "DeniedDomains"
@@ -83,7 +83,7 @@ type EgressPolicy struct {
 }
 
 // classify returns the action + reason for an observed authority under this policy.
-// Deny wins over allow-list, matching the RBAC filter order and the dns-proxy.
+// Deny wins over allow-list, matching the RBAC filter order.
 func (p EgressPolicy) classify(authority string) (scrutineerv1alpha1.PolicyDecisionAction, string) {
 	if enforcement.MatchDomain(p.DeniedDomains, authority) {
 		return p.deniedAction(), ReasonDeniedDomains

@@ -1,9 +1,9 @@
 # The Untamperable Pivot — Enforcement Only From Sources the Agent Cannot Alter
 
-**Status:** design, approved direction (Phase 0 docs; no code yet)
+**Status:** landed — Phases 0–2 shipped (#70 lock gate `cfdd9c0`, #71 removal `b9ceaa8`); Phase 3 hardening tracked under epic #69
 **Scope:** the product pivot to **adversarial-grade-only enforcement**: retire the cooperative in-pod enforcement tier entirely, make the untamperable L4/L7 egress path (per-session out-of-pod Envoy + default-deny routing lock) the sole enforcement plane, add the **verified-or-refused** lock gate, and defer tool/file governance to out-of-pod chokepoint designs ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)).
 **Non-goals:** implementing the tools pod or arena pod now (design-doc TODOs); node-level transparent interception (#64, unchanged); syscall/eBPF observation; node-compromise defense (same assumption as [`evidence-integrity.md`](evidence-integrity.md)); multi-arch UI/story changes.
-**Tracking:** pivot epic (to be filed after this doc is reviewed); builds on #8 (shipped) and #32 (shipped); absorbs #25/#33 as deferred designs; reshapes #55; #64/#66 unchanged.
+**Tracking:** pivot epic #69 (children: #70 gate, #71 removal, #74 residue purge); builds on #8 (shipped) and #32 (shipped); absorbs #25/#33 as deferred designs; reshapes #55; #64/#66 unchanged.
 
 ---
 
@@ -52,7 +52,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 
 **Design: probe-only — verified or refused. No attestation override.**
 
-- **Differential canary probe.** The controller creates two short-lived probe pods in its own namespace: one selected by a deny-all-egress NetworkPolicy, one not. Both attempt the same egress (e.g. TCP to the kube-dns ClusterIP). Expected: control pod **succeeds**, locked pod **fails**. Any other combination is conclusive: control-fails ⇒ broken network (indeterminate, keep last-known-good); both-succeed ⇒ CNI not enforcing ⇒ **refuse**.
+- **Differential canary probe.** The controller creates two short-lived probe pods in its own namespace: one selected by a deny-all-egress NetworkPolicy, one not. Both attempt the same egress (as shipped: TCP to a kube-dns **pod IP** — a pod-network target, because host-network endpoints like the apiserver are exempt from egress NetworkPolicy on many CNIs). Expected: control pod **succeeds**, locked pod **fails**. Any other combination is conclusive: control-fails ⇒ broken network (indeterminate, keep last-known-good); both-succeed ⇒ CNI not enforcing ⇒ **refuse**.
 - **Probe pods run the controller's own image** (already pullable wherever the controller runs — no extra registry/airgap surface) with a tiny probe subcommand, restricted-PSA-compliant (nonroot, no caps, read-only rootfs), predictable labels for admission allowlisting.
 - **Cadence & caching:** probe at controller startup, then periodically in the background; enforced-session admission consults the cached verdict (with TTL). Flakes degrade to last-known-good, never flap running sessions. Per-node probing is a follow-up hardening step (enforcement can be partial across nodes); start with cluster-level.
 - **Surface:** a controller-level readiness signal plus a per-session condition (e.g. `EgressLockVerified=True/False` with reason). An enforced-mode session on an unverified cluster does not start its runtime; it sits Pending/Blocked with the condition explaining exactly why and what to fix. Dry-run/audit-only sessions may run (they claim observation strength honestly via conditions, not enforcement).
@@ -68,7 +68,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 - `cmd/tool-gateway` + `internal/enforcement/toolgateway` — the *policy logic* (allow/deny, argument rules, approval holds) is inherited by the tools-pod design; the in-pod placement dies.
 - `cmd/fs-gateway` + `internal/enforcement/workspace` enforcement path — inherited by the arena design.
 
-**API surgery (clean break, per doctrine #1):** remove the tool/file rule fields from the policy CRDs and the corresponding `spec.enforcement[]` entry types; they return, likely reshaped, with the tools/arena designs. Regenerate CRDs, update samples and conversion-free (v1alpha1 in-place, consistent with #65 precedent).
+**API surgery (as shipped in #71 — a recorded deviation from the original clean-break plan):** `RuntimeProfile.spec.enforcement[]` keeps its generic shape with `envoy` as the only valid type; CRDs and samples regenerated. The tool/file *policy* fields (`ToolPolicy`, `PolicyRules` tool/path/argument rules) were **retained as inert declared data** — nothing enforces them, nothing claims to — pending the tools/arena chokepoint designs, which inherit their schema. This is in tension with doctrine #1 ("no CRD fields without an enforcement backend") and is tracked as an explicit open decision: remove the inert fields, or keep them as schema continuity for the successors (see §6).
 
 **Kept:**
 
@@ -84,7 +84,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 
 | Gap | Posture until closed | Closed by |
 |---|---|---|
-| Tool-level governance (incl. approval holds) has no enforcement backend | No tool policy surface exists (removed, not unenforced-but-declared) | [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) |
+| Tool-level governance (incl. approval holds) has no enforcement backend | Tool/file policy fields exist as **inert declared data** (kept in #71 for schema continuity; open decision: remove vs. keep) | [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) |
 | File/workspace governance | Same — workspace is an ungoverned volume | [`arena-workspace.md`](arena-workspace.md) |
 | Bypass *attempts* leave no evidence (CNI drops direct connects silently; Envoy only sees traffic that arrived) | Documented; deny evidence exists only at the chokepoint | #64 node interceptor (unforgeable node-observed attempts); nearer-term design note welcome |
 | TLS egress is CONNECT-opaque (authority-only filtering) | Documented; L7 body visibility only for plain HTTP / in-cluster hops | tools-pod hop is plain HTTP via proxy; external TLS stays authority-filtered |
@@ -94,12 +94,12 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 
 | Phase | Content | State |
 |---|---|---|
-| 0 | This doc + vision rewrite + deferred-design drafts + board re-triage | this change |
-| 1 | Lock-verification gate (§4) | next code slice |
-| 2 | Removal (§5) | after gate |
-| 3 | Hardening backlog: #66, bypass-attempt evidence note, #55 reshaped to egress metrics, TLS posture doc | issues |
+| 0 | This doc + vision rewrite + deferred-design drafts + board re-triage | shipped (`dfeab37`) |
+| 1 | Lock-verification gate (§4) | shipped (#70, `cfdd9c0`) — verified on kindnet + Calico |
+| 2 | Removal (§5) | shipped (#71, `b9ceaa8`; residue purge #74) |
+| 3 | Hardening backlog: #66, bypass-attempt evidence note (#72), #55 reshaped to egress metrics, TLS posture doc | issues |
 | deferred | Tools pod, arena pod, credential mediation (#25), sandboxes (#29), transparent interception (#64) | design docs / epics |
 
 ## 8. Superseded documents
 
-[`phase-3-dns-proxy-prototype.md`](phase-3-dns-proxy-prototype.md), [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md), [`phase-3-tool-argument-constraints.md`](phase-3-tool-argument-constraints.md), [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-policy.md), and [`phase-5-runtime-tool-approval.md`](phase-5-runtime-tool-approval.md) describe the cooperative tier and are **historical** after Phase 2: correct records of what was built and why, no longer descriptions of the product. Their policy-semantics content (argument constraint schema, approval hold protocol) is referenced by the successor designs rather than duplicated.
+The five cooperative-tier design docs (`phase-3-dns-proxy-prototype`, `phase-3-tool-gateway-contract`, `phase-3-tool-argument-constraints`, `phase-3-file-workspace-policy`, `phase-5-runtime-tool-approval`) were **deleted** in the post-pivot cleanup (#74); git history (pre-#74 `docs/design/`) is the record of what was built and why. Their surviving surfaces live in code and successor designs: the argument-constraint schema is the live (inert) `PolicyRules.argumentRules` API in `api/v1alpha1/policy_types.go`, the approval-hold protocol is the dormant `ApprovalRequest` runtime variant + reporter approval channel, and both are inherited by [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md).

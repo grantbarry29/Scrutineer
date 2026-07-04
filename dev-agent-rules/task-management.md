@@ -152,7 +152,7 @@ Full detail: [`dev-agent-rules/scrutineer-cursor-workflow.md`](scrutineer-cursor
    commit (don't push unless asked) → offer 2–4 selectable next-task options with a recommendation.
 
 Unless explicitly selected by the user, do **not** add new CRDs, webhooks, sidecars, policy engines,
-UI, Envoy, Cilium/eBPF, gVisor/Kata, tool gateways, real policy enforcement, approval workflows,
+UI, Envoy, Cilium/eBPF, gVisor/Kata, tool-execution chokepoints, real policy enforcement, approval workflows,
 multi-cluster support, a new orchestrator adapter, or a replacement for Kubernetes Job reconciliation.
 
 ## Relationship to other rules

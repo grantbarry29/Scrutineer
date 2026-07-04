@@ -1,10 +1,10 @@
 # Phase 3b Slice 1 — Runtime Reporter Contract (Design)
 
-> **Status:** Implemented (slice 2 — `internal/reporter/`, `agentsession.PatchRuntimePolicyReport`, `--reporter-bind-address`). Pod wiring (projected token + Service) is a follow-up task.
-> **Audience:** the engineer/agent implementing slice 2 and the data-plane sidecars.
-> **Read first:** [`architecture.md`](architecture.md) · [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md)
+> **Status:** Implemented (`internal/reporter/`, `agentsession.PatchRuntimePolicyReport`, `--reporter-bind-address`). Post-pivot (#71) the live caller is the **egress-reporter** in the per-session out-of-pod egress-proxy pod; historical sections written for the removed cooperative sidecars still describe the wire contract accurately.
+> **Audience:** the engineer/agent implementing a data-plane reporter component.
+> **Read first:** [`architecture.md`](architecture.md) · [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) · [`untamperable-pivot.md`](untamperable-pivot.md)
 
-This document specifies **how a running data-plane sidecar reports runtime evidence back to the Scrutineer controller**, so that `AgentSession.status.policyDecisions` and `AgentSession.status.violations` reflect what actually happened at runtime. It is the missing edge that turns *propagated* governance into *observed* governance.
+This document specifies **how a running data-plane component reports runtime evidence back to the Scrutineer controller**, so that `AgentSession.status.policyDecisions` and `AgentSession.status.violations` reflect what actually happened at runtime. It is the missing edge that turns *propagated* governance into *observed* governance.
 
 This is a **contract specification**, not an implementation. It is intentionally prescriptive so the implementation slice can follow it closely.
 
@@ -12,15 +12,14 @@ This is a **contract specification**, not an implementation. It is intentionally
 
 ## 1. Problem statement
 
-Today the enforcement evidence helpers exist but **nothing in-cluster calls them**:
+At the time this contract was written the enforcement evidence helpers existed but **nothing in-cluster called them**:
 
 - `enforcement.RuntimeReport` is the evidence payload type (decisions + violations).
 - `agentsession.ApplyRuntimePolicyReport(session, report)` merges a report into status (dedup, caps, derives violations from deny/dry-run decisions).
-- `agentsession.ApplyEgressProxyRuntimeEvent(...)` adapts a dns-proxy event into a report.
 
-All of these run **in-process inside the controller** and are only exercised by unit tests. A dns-proxy or tool-gateway sidecar running in the agent pod has **no path** to invoke them. As a result, `status.policyDecisions` only ever contains merge-time entries, and `status.violations` is always empty at runtime.
+Both ran **in-process inside the controller** and were only exercised by unit tests. A data-plane component observing traffic had **no path** to invoke them, so `status.policyDecisions` only ever contained merge-time entries and `status.violations` stayed empty at runtime.
 
-**Goal:** define a secure, idempotent, Kubernetes-native channel from sidecar → controller that ends in `ApplyRuntimePolicyReport` + a status patch.
+**Goal:** define a secure, idempotent, Kubernetes-native channel from data-plane component → controller that ends in `ApplyRuntimePolicyReport` + a status patch.
 
 ---
 
@@ -49,11 +48,11 @@ The enforcement *happens* in the data plane (a separate container/pod), not in t
 
 ```mermaid
 flowchart LR
-    subgraph pod["Agent Pod (session runtime)"]
-        agent["agent container"]
-        sidecar["dns-proxy / tool-gateway sidecar\n(enforces + observes)"]
+    subgraph pod["Per-session egress-proxy pod (out-of-pod, own identity)"]
+        envoy["Envoy\n(enforces)"]
+        sidecar["egress-reporter\n(observes access log)"]
         token["projected SA token\n(audience: scrutineer-reporter)"]
-        agent -- "egress / tool calls" --> sidecar
+        envoy -- "JSON access log" --> sidecar
         token -. mounted .-> sidecar
     end
 
@@ -108,7 +107,7 @@ Single endpoint for the MVP. Versioned path (`/v1/`) so the payload schema can e
     "namespace": "team-a",        // must match the caller's pod namespace
     "name": "nightly-crawl"        // AgentSession name
   },
-  "backend": "egress-proxy",       // enforcement.BackendKind: networkpolicy|egress-proxy|tool-gateway
+  "backend": "egress-proxy",       // enforcement.BackendKind: networkpolicy|egress-proxy
   "reportId": "f3c1...",           // optional client-generated idempotency key
   "decisions": [
     {
@@ -290,8 +289,8 @@ The reporter is itself an audited surface:
 
 **Explicitly out of scope (track as follow-ups, do not build):**
 
-- Real dns-proxy/tool-gateway images that *call* this endpoint (separate evidence-loop slices #4/#5).
-- Projected-token injection + reporter `Service` wiring into the sidecar/pod template (sidecar-injection follow-up).
+- Real data-plane images that *call* this endpoint (shipped later: the egress-reporter, `cmd/egress-reporter`).
+- Projected-token injection + reporter `Service` wiring into the pod template (follow-up, shipped with the egress path).
 - Structured `status.events[]` schema (evidence-loop slice #3) — the reporter is forward-compatible: an `events[]` block can be added to the request body later.
 - mTLS, signed reports, replay protection (§5.3 hardening).
 - Prometheus metric names (Phase 4).
@@ -313,5 +312,5 @@ Each out-of-scope item above must already be a GitHub Issue, or be filed as one 
 ## 12. Open questions (resolve during impl, not blocking the contract)
 
 - Bound-token `BoundObjectRef` availability vs. requiring an explicit `X-Scrutineer-Pod` header — pick based on the cluster K8s version floor (≥1.31 in CI).
-- Whether to expose the reporter via a headless `Service` + DNS name injected as `SCRUTINEER_REPORTER_URL`, mirroring `SCRUTINEER_TOOL_GATEWAY_URL`.
+- Whether to expose the reporter via a headless `Service` + DNS name injected as `SCRUTINEER_REPORTER_URL` (resolved: a ClusterIP `Service`, `scrutineer-controller-reporter`).
 - Whether a first runtime violation should also flip a `Ready`/new condition (likely a Phase 4 concern; keep status conditions stable for now).

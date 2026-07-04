@@ -9,10 +9,9 @@ You may obtain a copy of the License at
 */
 
 // Package enforcement defines the control-plane contract between Scrutineer and
-// replaceable data-plane enforcement backends (NetworkPolicy, egress proxy, tool gateway).
-//
-// Phase 3 slice 1: types, mode semantics, and reporting helpers only. Concrete backends
-// and reconciler wiring arrive in later slices. See docs/design/phase-3-enforcement-architecture.md.
+// replaceable data-plane enforcement backends (NetworkPolicy, out-of-pod egress proxy).
+// See docs/design/phase-3-enforcement-architecture.md and
+// docs/design/untamperable-pivot.md.
 package enforcement
 
 import scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
@@ -23,8 +22,6 @@ type BackendKind string
 const (
 	BackendNetworkPolicy BackendKind = "networkpolicy"
 	BackendEgressProxy   BackendKind = "egress-proxy"
-	BackendToolGateway   BackendKind = "tool-gateway"
-	BackendFSGateway     BackendKind = "fs-gateway"
 )
 
 // Capabilities reports what policy dimensions a backend can enforce.

@@ -42,9 +42,9 @@ type ToolPolicySpec struct {
 	MaxCallsPerMinute *int32 `json:"maxCallsPerMinute,omitempty"`
 
 	// ArgumentRules constrain tool calls by their arguments (e.g. restrict read_file to
-	// /workspace), applied only after name-level allow/deny. Declared and propagated
-	// policy; enforcement is Phase 3 (tool gateway). See
-	// docs/design/phase-3-tool-argument-constraints.md.
+	// /workspace), applied only after name-level allow/deny. Declared policy only: no
+	// enforcement backend until the out-of-pod tools chokepoint lands. See
+	// docs/design/tools-pod-chokepoint.md.
 	// +optional
 	ArgumentRules []ToolArgumentRule `json:"argumentRules,omitempty"`
 }
@@ -105,8 +105,8 @@ type ArgumentConstraint struct {
 }
 
 // ToolArgumentRule constrains the arguments of matching tool calls. It applies only to
-// calls that already passed name-level allow/deny. Enforcement is the tool gateway's job
-// (Phase 3); this models declared + propagated policy.
+// calls that already passed name-level allow/deny. This models declared policy; the
+// future out-of-pod tools chokepoint enforces it.
 type ToolArgumentRule struct {
 	// Tools lists tool identifiers this rule applies to. "*" matches any tool.
 	// +kubebuilder:validation:MinItems=1

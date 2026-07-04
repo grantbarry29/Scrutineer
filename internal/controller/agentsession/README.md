@@ -62,8 +62,7 @@ against an unchanged cluster makes no API mutations.
   `resolveEgressProxyEndpoint` records the Envoy Service ClusterIP into
   `status.egressProxyEndpoint`) **before** the agent runtime is built, so the agent is
   pointed at Envoy by ClusterIP — no DNS needed under the routing lock. A future node
-  interceptor (#64) implements the same interface. (Distinct from `egress_proxy.go`,
-  which merges dns-proxy runtime evidence into status.)
+  interceptor (#64) implements the same interface.
 - `networkpolicy.go` — reconciles **two** per-session egress policies via
   `reconcileOwnedNetworkPolicy`: the agent-pod **routing lock** (allow only the session's
   Envoy pod; deny DNS and everything else — the mandatory chokepoint) and, on the Envoy pod,
@@ -93,8 +92,9 @@ against an unchanged cluster makes no API mutations.
   [`internal/approval`](../../../internal/approval), [`internal/audit`](../../../internal/audit),
   [`internal/tracing`](../../../internal/tracing).
 - Related: the [reporter](../../reporter) writes observed evidence into the status this
-  controller owns; the data-plane sidecars ([`cmd/dns-proxy`](../../../cmd/dns-proxy),
-  [`cmd/tool-gateway`](../../../cmd/tool-gateway), [`cmd/fs-gateway`](../../../cmd/fs-gateway)).
+  controller owns; the data-plane producer is the egress-reporter
+  ([`cmd/egress-reporter`](../../../cmd/egress-reporter)) in the per-session
+  egress-proxy pod.
 - Design: [`docs/design/architecture.md`](../../../docs/design/architecture.md),
   [`docs/design/phase-6-orchestrator-interface.md`](../../../docs/design/phase-6-orchestrator-interface.md).
 

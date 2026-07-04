@@ -85,7 +85,7 @@ func BuildMergeDecisions(resolved Resolved, now time.Time) []scrutineerv1alpha1.
 			Actor:   mergeDecisionActor,
 			Target:  strconv.Itoa(n),
 			Reason:  "ArgumentRulesDeclared",
-			Message: fmt.Sprintf("Effective policy declares %d tool argument rule(s); enforced per-call by the tool gateway", n),
+			Message: fmt.Sprintf("Effective policy declares %d tool argument rule(s); declared only — no enforcement backend until the tools-pod chokepoint", n),
 			Mode:    mode,
 			Rule:    "argumentRules",
 		})

@@ -293,7 +293,7 @@ type SessionEvent struct {
 	// Type categorizes the event for filtering (policy, network, tool, lifecycle, system).
 	Type SessionEventType `json:"type"`
 
-	// Source is the reporting component (e.g. egress-proxy, tool-gateway).
+	// Source is the reporting component (e.g. egress-proxy).
 	// +optional
 	Source string `json:"source,omitempty"`
 

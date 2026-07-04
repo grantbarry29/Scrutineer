@@ -8,10 +8,11 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package sidecarenv holds the session/reporter/mode configuration every enforcement
-// sidecar (dns-proxy, tool-gateway, fs-gateway) loads from its container environment.
-// Each sidecar embeds Base in its own RuntimeEnv and adds its listen-address and policy
-// specifics, so a new shared env var is added in one place rather than three.
+// Package sidecarenv holds the session/reporter/mode configuration an enforcement
+// sidecar loads from its container environment. Today its one consumer is the
+// egress-reporter, which runs as a sidecar beside Envoy in the per-session out-of-pod
+// egress-proxy pod. A consumer embeds Base in its own RuntimeEnv and adds its
+// listen-address and policy specifics, so a new shared env var is added in one place.
 package sidecarenv
 
 import (

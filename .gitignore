@@ -10,9 +10,7 @@ testbin/*
 # Accidentally-built cmd binaries at the repo root (built via `go build ./cmd/<x>`)
 /manager
 /scrutineer
-/dns-proxy
-/tool-gateway
-/fs-gateway
+/egress-reporter
 
 # Test binary, build with `go test -c`
 *.test

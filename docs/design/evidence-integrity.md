@@ -1,6 +1,6 @@
 # Evidence Integrity — Per-Session Egress Chokepoint (Envoy)
 
-**Status:** design (no code yet)
+**Status:** shipped (#8/#32/#62: per-session Envoy chokepoint, FQDN RBAC, caller-class `observed` stamping); the cooperative tier this doc hardened against was removed entirely in the untamperable pivot ([`untamperable-pivot.md`](untamperable-pivot.md), #71)
 **Scope:** the remaining hardening of runtime-evidence integrity — moving egress governance from *cooperative* to *adversarial-grade* (`observed`) by routing all agent egress through a per-session **Envoy** proxy that lives outside the agent's trust domain and cannot be bypassed. **Interim routing mechanism: explicit proxy** (portable, zero cluster dependency). **Transparent interception is a separate future epic** ([#64](https://github.com/grantbarry29/scrutineer/issues/64)).
 **Non-goals:** transparent redirect / node data-plane now (future epic #64); a hard Cilium/CNI dependency as the baseline (optional backend only); full eBPF/syscall/file observation; node-compromise defense (see Assumptions); rich FQDN policy content (that is [#32](https://github.com/grantbarry29/scrutineer/issues/32), realized *at* this Envoy).
 **Tracking:** [#8](https://github.com/grantbarry29/scrutineer/issues/8) (slices 1–3 shipped; this doc covers the remaining "independent `observed` source" hardening).
@@ -11,7 +11,7 @@
 
 Scrutineer is only trustworthy if **the agent it governs cannot forge or suppress the evidence of what it did.** Everything else — audit, observability, the UI's credibility — leans on this.
 
-Today's egress governance is **cooperative**: the `dns-proxy` runs as a sidecar *inside the agent pod*, sharing its network namespace and (historically) ServiceAccount, reached via `HTTP_PROXY`. A compromised or prompt-injected agent can **bypass** it (raw socket to anywhere), **tamper/starve** it (adjacent process), or **forge** evidence (`self-reported` from within its own trust domain).
+When this doc was written, egress governance was **cooperative**: an in-pod proxy sidecar shared the agent's network namespace and (historically) ServiceAccount, reached via `HTTP_PROXY`. A compromised or prompt-injected agent could **bypass** it (raw socket to anywhere), **tamper/starve** it (adjacent process), or **forge** evidence (`self-reported` from within its own trust domain). The pivot (#71) removed that tier outright.
 
 Slices 1–3 (shipped) made this *honest and least-privilege* (`EvidenceAssurance` enum, `self-reported` stamping, SA-token isolation, audit assurance) but do not close the bypass/tamper gap. This doc does.
 
@@ -85,7 +85,7 @@ This closes the *cooperative → adversarial* gap for governed egress. Syscall/f
 
 ## 6. Relationship to #32 (FQDN egress) — ✅ delivered
 
-Envoy is the shared substrate. #8 delivered the non-bypassable per-session Envoy chokepoint + trust boundary; [#32](https://github.com/grantbarry29/scrutineer/issues/32) then implemented FQDN allow/deny **as Envoy RBAC config** at that chokepoint. As built: the effective `allowedDomains`/`deniedDomains` render into an HTTP RBAC filter chain (deny-list before allow-list/default-deny) matching the request `:authority` — so it covers plain HTTP and HTTPS `CONNECT` (host-level; HTTPS is CONNECT-tunnelled, so no path/method matching). Matching is shared with the dns-proxy via `enforcement.MatchDomain` (exact + `*.` wildcard, apex-excluded, port-insensitive). The egress-reporter classifies each observed authority against the same policy, so evidence records allow/deny (enforced) or dry-run (audit) as `observed`. Policy changes re-render the ConfigMap and recreate the Envoy pod (config-hash drift). CIDR-level egress remains the NetworkPolicy/backstop layer's job, not Envoy RBAC.
+Envoy is the shared substrate. #8 delivered the non-bypassable per-session Envoy chokepoint + trust boundary; [#32](https://github.com/grantbarry29/scrutineer/issues/32) then implemented FQDN allow/deny **as Envoy RBAC config** at that chokepoint. As built: the effective `allowedDomains`/`deniedDomains` render into an HTTP RBAC filter chain (deny-list before allow-list/default-deny) matching the request `:authority` — so it covers plain HTTP and HTTPS `CONNECT` (host-level; HTTPS is CONNECT-tunnelled, so no path/method matching). Matching uses `enforcement.MatchDomain` (exact + `*.` wildcard, apex-excluded, port-insensitive), shared with the egress-reporter's evidence classification. The egress-reporter classifies each observed authority against the same policy, so evidence records allow/deny (enforced) or dry-run (audit) as `observed`. Policy changes re-render the ConfigMap and recreate the Envoy pod (config-hash drift). CIDR-level egress remains the NetworkPolicy/backstop layer's job, not Envoy RBAC.
 
 ## 7. Increment plan
 

@@ -1,8 +1,8 @@
 # RuntimeProfile with data-plane enforcement. The only enforcement type is `envoy`:
-# a per-session out-of-pod Envoy egress proxy (its own pod/identity) whose observed
-# egress evidence is stamped `observed` -- see docs/design/evidence-integrity.md and
-# docs/design/untamperable-pivot.md. The cooperative in-pod backends (dns-proxy,
-# tool-gateway, fs-gateway) were removed in the untamperable pivot (#71).
+# a per-session out-of-pod Envoy egress proxy (its own pod/identity) whose egress
+# evidence is stamped `observed` -- see docs/design/evidence-integrity.md and
+# docs/design/untamperable-pivot.md. The cooperative in-pod backends were removed
+# in the untamperable pivot (#71).
 apiVersion: scrutineer.sh/v1alpha1
 kind: RuntimeProfile
 metadata:

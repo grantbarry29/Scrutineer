@@ -49,13 +49,13 @@ func TestSubmit_tagsBackendAndAuthenticates(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, writeTempToken(t, "test-token"), enforcement.BackendToolGateway, srv.Client())
+	c := New(srv.URL, writeTempToken(t, "test-token"), enforcement.BackendEgressProxy, srv.Client())
 	err := c.Submit(context.Background(), SessionRef{Namespace: "ns", Name: "s"}, enforcement.RuntimeReport{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Backend != string(enforcement.BackendToolGateway) {
-		t.Fatalf("backend = %q, want %q", got.Backend, enforcement.BackendToolGateway)
+	if got.Backend != string(enforcement.BackendEgressProxy) {
+		t.Fatalf("backend = %q, want %q", got.Backend, enforcement.BackendEgressProxy)
 	}
 	if got.Session.Namespace != "ns" || got.Session.Name != "s" {
 		t.Fatalf("session = %+v", got.Session)
@@ -75,7 +75,7 @@ func TestSubmit_nonAcceptedStatusErrors(t *testing.T) {
 }
 
 func TestNew_defaultsHTTPClientAndTrims(t *testing.T) {
-	c := New("  http://example/  ", writeTempToken(t, "x"), enforcement.BackendFSGateway, nil)
+	c := New("  http://example/  ", writeTempToken(t, "x"), enforcement.BackendEgressProxy, nil)
 	if c.HTTPClient == nil {
 		t.Fatal("expected default http client")
 	}

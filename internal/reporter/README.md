@@ -61,10 +61,11 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   (`PatchRuntimePolicyReport`), [`internal/controller/job`](../controller/job)
   (`LabelSessionRef`), [`internal/audit`](../audit), [`internal/metrics`](../metrics),
   [`internal/tracing`](../tracing).
-- Clients: the data-plane sidecars POST here; the controller reconciles the
-  `ApprovalRequest`s this service creates.
+- Clients: the egress-reporter (per-session egress-proxy pod) POSTs here; the
+  controller reconciles the `ApprovalRequest`s this service creates (the approval
+  channel is dormant until the tools-pod chokepoint lands).
 - Design: [`docs/design/phase-3-runtime-reporter-contract.md`](../../docs/design/phase-3-runtime-reporter-contract.md),
-  [`docs/design/phase-5-runtime-tool-approval.md`](../../docs/design/phase-5-runtime-tool-approval.md).
+  [`docs/design/phase-5-approval-workflows.md`](../../docs/design/phase-5-approval-workflows.md).
 
 ## Interfaces & artifacts
 

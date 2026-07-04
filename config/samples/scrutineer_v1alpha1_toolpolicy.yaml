@@ -13,7 +13,8 @@ spec:
   maxToolCalls: 30
   maxCallsPerMinute: 10
   # Argument-level rules apply only to calls that pass the name allow/deny above.
-  # Enforcement is the tool gateway's job (Phase 3); this declares + propagates intent.
+  # Declared intent only: no enforcement backend until the out-of-pod tools
+  # chokepoint lands (docs/design/tools-pod-chokepoint.md).
   argumentRules:
   # Constrain the github tool's path argument to the workspace; block path traversal.
   - tools:

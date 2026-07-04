@@ -51,9 +51,10 @@ type ReportRequest struct {
 type CallerClass string
 
 const (
-	// CallerAgentSidecar is a cooperative in-agent-pod sidecar (dns-proxy, tool-gateway,
-	// fs-gateway): it shares the agent's pod, so its evidence is self-reported. The zero
-	// value of CallerClass maps here so an unset class can never over-claim.
+	// CallerAgentSidecar is any caller inside the agent's trust domain (a container in
+	// the session's Job pod): it shares the agent's pod, so its evidence is
+	// self-reported. The zero value of CallerClass maps here so an unset class can
+	// never over-claim.
 	CallerAgentSidecar CallerClass = "agent-sidecar"
 	// CallerEgressProxy is the session's out-of-pod Envoy egress-proxy pod (dedicated
 	// per-session identity, controller owner-ref) — outside the agent's trust domain,
@@ -79,9 +80,11 @@ func (c CallerIdentity) Assurance() scrutineerv1alpha1.EvidenceAssurance {
 	return scrutineerv1alpha1.EvidenceSelfReported
 }
 
-// ApprovalRegisterRequest is the JSON body for POST /v1/approvals. A tool-gateway
-// sidecar posts it to register (or look up) a mid-execution hold for a single
-// tool call. It is idempotent per (session, requestId): repeated posts return the
+// ApprovalRegisterRequest is the JSON body for POST /v1/approvals. A data-plane
+// hold point posts it to register (or look up) a mid-execution hold for a single
+// tool call (dormant until the out-of-pod tools chokepoint lands; see
+// docs/design/tools-pod-chokepoint.md). It is idempotent per (session, requestId):
+// repeated posts return the
 // same approval without creating duplicates. It carries NO raw argument values —
 // only a redacted argDigest — so the control plane never ingests sensitive args.
 type ApprovalRegisterRequest struct {

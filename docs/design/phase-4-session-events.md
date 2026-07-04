@@ -18,7 +18,7 @@ Events are optimized for **operational visibility**: what happened, when, from w
 |-------|----------|-------------|
 | `time` | yes (server fills if missing) | Observation timestamp |
 | `type` | yes | `policy` \| `network` \| `tool` \| `lifecycle` \| `system` |
-| `source` | no (defaults to report `backend`) | e.g. `egress-proxy`, `tool-gateway` |
+| `source` | no (defaults to report `backend`) | e.g. `egress-proxy` |
 | `action` | no | Short verb: `allow`, `deny`, `call`, `block`, … |
 | `target` | no | Domain, tool name, path |
 | `message` | no | Human-readable detail |

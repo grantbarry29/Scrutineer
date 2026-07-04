@@ -150,16 +150,6 @@ sleep 120`, host)
 	}
 }
 
-// withDeniedPathAccessProbe waits for sidecars then POSTs denied file access to SCRUTINEER_FS_GATEWAY_URL.
-func withDeniedPathAccessProbe(path string) agentSessionOption {
-	return func(s *scrutineerv1alpha1.AgentSession) {
-		s.Spec.Runtime.Command = []string{"sh", "-c", fmt.Sprintf(
-			`sleep 15; for i in $(seq 1 25); do wget -q -O /dev/null --post-data='{"path":"%s","operation":"read"}' --header='Content-Type: application/json' "${SCRUTINEER_FS_GATEWAY_URL}/v1/files/access" 2>/dev/null || true; sleep 2; done; sleep 120`,
-			path,
-		)}
-	}
-}
-
 // newTestNamespace creates a uniquely-named namespace for one It block.
 func newTestNamespace(prefix string) string {
 	name := fmt.Sprintf("%s-%s", prefix, rand.String(5))
@@ -246,106 +236,6 @@ func createEnforcedDeniedDomainPolicy(ctx context.Context, namespace, name, doma
 			Mode: scrutineerv1alpha1.PolicyModeEnforced,
 			PolicyRules: scrutineerv1alpha1.PolicyRules{
 				DeniedDomains: []string{domain},
-			},
-		},
-	}
-	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
-}
-
-func createEnforcedDeniedToolPolicy(ctx context.Context, namespace, name, tool string) {
-	GinkgoHelper()
-	tp := &scrutineerv1alpha1.ToolPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: scrutineerv1alpha1.ToolPolicySpec{
-			Mode:        scrutineerv1alpha1.PolicyModeEnforced,
-			DeniedTools: []string{tool},
-		},
-	}
-	Expect(k8sClient.Create(ctx, tp)).To(Succeed())
-}
-
-// createEnforcedArgumentRuleToolPolicy creates an enforced ToolPolicy that allows the tool
-// by name but denies it when arg has the given prefix (an argument-level constraint).
-func createEnforcedArgumentRuleToolPolicy(ctx context.Context, namespace, name, tool, arg, denyPrefix string) {
-	GinkgoHelper()
-	tp := &scrutineerv1alpha1.ToolPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: scrutineerv1alpha1.ToolPolicySpec{
-			Mode:         scrutineerv1alpha1.PolicyModeEnforced,
-			AllowedTools: []string{tool},
-			ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
-				Tools: []string{tool},
-				Constraints: []scrutineerv1alpha1.ArgumentConstraint{{
-					Arg:    arg,
-					Op:     scrutineerv1alpha1.ArgOpHasPrefix,
-					Values: []string{denyPrefix},
-					Effect: scrutineerv1alpha1.ConstraintEffectDeny,
-				}},
-			}},
-		},
-	}
-	Expect(k8sClient.Create(ctx, tp)).To(Succeed())
-}
-
-// createEnforcedApprovalPolicy creates an enforced AgentPolicy that requires human
-// approval for the named tool. (requireHumanApproval lives in PolicyRules, not on
-// ToolPolicySpec, so this uses an AgentPolicy.) The strictest-mode merge makes the
-// effective tool-gateway mode enforced, so the gateway holds the call.
-func createEnforcedApprovalPolicy(ctx context.Context, namespace, name, tool string) {
-	GinkgoHelper()
-	ap := &scrutineerv1alpha1.AgentPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: scrutineerv1alpha1.AgentPolicySpec{
-			Mode: scrutineerv1alpha1.PolicyModeEnforced,
-			PolicyRules: scrutineerv1alpha1.PolicyRules{
-				RequireHumanApproval: []string{tool},
-			},
-		},
-	}
-	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
-}
-
-// waitForRuntimeApprovalRequest returns the name of the runtime ApprovalRequest the
-// tool-gateway registered for the session's held tool call (spec.trigger=runtime).
-func waitForRuntimeApprovalRequest(ctx context.Context, namespace, sessionName string) string {
-	GinkgoHelper()
-	var name string
-	Eventually(func(g Gomega) {
-		var list scrutineerv1alpha1.ApprovalRequestList
-		g.Expect(k8sClient.List(ctx, &list, client.InNamespace(namespace))).To(Succeed())
-		for i := range list.Items {
-			req := &list.Items[i]
-			if req.Spec.SessionRef.Name == sessionName && req.Spec.IsRuntime() {
-				name = req.Name
-				return
-			}
-		}
-		g.Expect(name).NotTo(BeEmpty(), "no runtime ApprovalRequest registered yet for session %q", sessionName)
-	}, 90*time.Second, 2*time.Second).Should(Succeed())
-	return name
-}
-
-// grantRuntimeApproval sets a granted decision on a runtime ApprovalRequest (the
-// human action; the controller turns this into status.state=Granted).
-func grantRuntimeApproval(ctx context.Context, namespace, name, approver string) {
-	GinkgoHelper()
-	Eventually(func(g Gomega) {
-		var req scrutineerv1alpha1.ApprovalRequest
-		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &req)).To(Succeed())
-		req.Spec.Decision = scrutineerv1alpha1.ApprovalDecisionGranted
-		req.Spec.DecidedBy = approver
-		g.Expect(k8sClient.Update(ctx, &req)).To(Succeed())
-	}, 30*time.Second, time.Second).Should(Succeed())
-}
-
-func createEnforcedDeniedPathPolicy(ctx context.Context, namespace, name, path string) {
-	GinkgoHelper()
-	ap := &scrutineerv1alpha1.AgentPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: scrutineerv1alpha1.AgentPolicySpec{
-			Mode: scrutineerv1alpha1.PolicyModeEnforced,
-			PolicyRules: scrutineerv1alpha1.PolicyRules{
-				DeniedPaths: []string{path},
 			},
 		},
 	}

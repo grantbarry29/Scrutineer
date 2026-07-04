@@ -63,8 +63,8 @@ func TestRecordBuilders(t *testing.T) {
 	if p.FromPhase != "Starting" || p.Phase != "Running" {
 		t.Fatalf("phase record = %+v", p)
 	}
-	r := RuntimeReport("ns", "s", "dns-proxy", 2, "self-reported", time.Time{})
-	if r.Backend != "dns-proxy" || r.Count != 2 || r.Assurance != "self-reported" {
+	r := RuntimeReport("ns", "s", "egress-proxy", 2, "observed", time.Time{})
+	if r.Backend != "egress-proxy" || r.Count != 2 || r.Assurance != "observed" {
 		t.Fatalf("report record = %+v", r)
 	}
 

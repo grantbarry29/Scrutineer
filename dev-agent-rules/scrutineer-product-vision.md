@@ -9,7 +9,7 @@ Scrutineer is a Kubernetes-native governance and runtime control plane for auton
 - Treat Kubernetes Jobs, Tekton, Argo Workflows, Temporal, and external orchestrators as execution backends Scrutineer can govern, not systems Scrutineer should replace.
 - Keep Scrutineer orchestrator-agnostic. Avoid coupling APIs or controllers permanently to Kubernetes Jobs.
 - Use Kubernetes-native patterns: CRDs, controllers, reconciliation, status subresources, declarative APIs, events, owner references, and idempotent behavior.
-- Prefer clean, extensible APIs over feature count. Preserve room for future CRDs such as AgentPolicy, ToolPolicy, ApprovalPolicy, RuntimeProfile, ToolGateway, CredentialProfile, and SessionTemplate.
+- Prefer clean, extensible APIs over feature count. Preserve room for future CRDs such as AgentPolicy, ToolPolicy, ApprovalPolicy, RuntimeProfile, CredentialProfile, and SessionTemplate.
 - Keep a clear control-plane / data-plane distinction. Scrutineer APIs and controllers declare policy and desired governance state; enforcement happens **only at out-of-trust-domain chokepoints** — per-session proxy pods, tool/workspace chokepoint pods, node-level interceptors, sandboxes — never through components the governed agent could tamper with or bypass (see `docs/design/untamperable-pivot.md`).
 
 ## MVP Scope
@@ -48,7 +48,7 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 - Leverage existing infrastructure such as Kubernetes, Envoy, Cilium/eBPF, gVisor/Kata/Firecracker, NetworkPolicy, network-served workspaces (FUSE/9p), and AI provider APIs.
 - Future enforcement extends the out-of-pod chokepoint pattern: per-session Envoy egress with FQDN policy (shipped), the tools-pod chokepoint with credential mediation, the arena workspace, node-level transparent interception (eBPF), process/syscall observation, and secure sandboxes.
 - Future observability should support timelines, network traces, tool call logs, policy violations, replayable sessions, audit trails, token/tool metrics, and runtime analytics.
-- Preserve extension points for orchestrator adapters, enforcement backends, policy engines, tool gateways, identity providers, audit sinks, and observability exporters.
+- Preserve extension points for orchestrator adapters, enforcement backends, policy engines, tool-execution chokepoints, identity providers, audit sinks, and observability exporters.
 - Scrutineer should feel closer to Kubernetes, Envoy, Cilium, Istio, Vault, Boundary, and Tailscale than chatbot frameworks, prompt wrappers, or consumer AI tooling.
 - Scrutineer is evolving toward a runtime governance platform, observability platform for AI agents, secure execution control plane, and Datadog/Splunk-like product for autonomous AI systems.
 
@@ -61,7 +61,7 @@ This file describes **product direction**, not permission to implement the full 
 - Follow **Out-of-Scope Future Work Handling** in `dev-agent-rules/scrutineer-cursor-workflow.md`: do not silently implement adjacent future work; **every** out-of-scope item must become a **GitHub Issue** (label `agent-discovered`) in the **same session** — chat-only notes are not tracking.
 - End implementation summaries with **### Out-of-scope future work noticed**; each bullet must cite the tracking issue or confirm the issue was created (see project-status rules).
 - **Do not** implement multiple roadmap phases in a single change. Do not bundle unrelated capabilities.
-- **Do not** add new CRDs, sidecars, webhooks, dashboards, policy engines, Envoy, Cilium, eBPF, gVisor/Kata, or tool gateways unless the user explicitly requests them.
+- **Do not** add new CRDs, sidecars, webhooks, dashboards, policy engines, Envoy, Cilium, eBPF, gVisor/Kata, or tool-execution chokepoints unless the user explicitly requests them.
 - Preserve **control-plane / data-plane separation**: controllers declare and propagate governance; enforcement belongs in future data-plane components.
 - Prefer **small, reviewable, incremental** diffs. A good change usually touches a few files and has a clear acceptance criterion.
 - **Do not** turn Scrutineer into a generic workflow engine, task runner, or agent framework.

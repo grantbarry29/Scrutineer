@@ -202,7 +202,7 @@ Unless the user explicitly asks for design work or the selected task requires it
 - add new CRDs
 - add a UI
 - add Envoy, Cilium/eBPF, NetworkPolicy generation, gVisor/Kata/Firecracker
-- add a tool gateway
+- add a tool-execution chokepoint (tools pod)
 - add real policy enforcement
 - add approval workflows
 - add multi-cluster support

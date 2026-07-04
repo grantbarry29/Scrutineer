@@ -169,8 +169,8 @@ type PolicyRules struct {
 
 	// ArgumentRules constrain tool calls by their arguments, applied after name-level tool
 	// allow/deny. Merged by concatenation across layers (constraints only tighten).
-	// Enforcement is Phase 3 (tool gateway). See
-	// docs/design/phase-3-tool-argument-constraints.md.
+	// Declared data only: no enforcement backend until the out-of-pod tools chokepoint
+	// lands. See docs/design/tools-pod-chokepoint.md.
 	// +optional
 	ArgumentRules []ToolArgumentRule `json:"argumentRules,omitempty"`
 
@@ -182,7 +182,8 @@ type PolicyRules struct {
 	// +optional
 	DeniedPaths []string `json:"deniedPaths,omitempty"`
 
-	// MaxWorkspaceBytes caps total workspace storage when enforced by a future FS gateway.
+	// MaxWorkspaceBytes caps total workspace storage when enforced by the future arena
+	// workspace (docs/design/arena-workspace.md).
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MaxWorkspaceBytes *int64 `json:"maxWorkspaceBytes,omitempty"`

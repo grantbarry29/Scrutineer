@@ -1,9 +1,9 @@
 # Arena Workspace — Untamperable File Governance via a Network-POSIX Workspace
 
 **Status:** draft / deferred (design TODO from the pivot; not scheduled)
-**Scope:** the out-of-pod successor to the removed in-pod fs-gateway: the agent's governed workspace ("arena" — repos, files, artifacts) lives in a separate per-session pod and is served over a per-operation network protocol, so every file operation crosses a boundary the agent cannot alter — mediated, policy-checked, and `observed`.
+**Scope:** the out-of-pod successor to the cooperative in-pod file tier removed in the pivot (#71): the agent's governed workspace ("arena" — repos, files, artifacts) lives in a separate per-session pod and is served over a per-operation network protocol, so every file operation crosses a boundary the agent cannot alter — mediated, policy-checked, and `observed`.
 **Non-goals:** governing the agent container's own rootfs or scratch space (ungoverned by design — a local tmpfs keeps hot paths fast); syscall-level interception (#29 sandboxes).
-**Tracking:** to be filed when scheduled; absorbs #33 (transparent/FUSE file interception); inherits path-rule semantics from the historical `phase-3-file-workspace-policy.md`.
+**Tracking:** to be filed when scheduled; absorbs #33 (transparent/FUSE file interception). The inherited path-rule schema is live (inert) in `api/v1alpha1/policy_types.go` (`allowedPaths`/`deniedPaths`); the pre-pivot cooperative-tier design it came from lives in git history (deleted in #74).
 
 ---
 
@@ -28,5 +28,5 @@ Key facts driving the recommendation: kubelet-performed mounts originate in the 
 
 1. FUSE client delivery: init-container installing the client + mount, or a purpose-built agent-pod base layer?
 2. Cache coherence needs for multi-writer arenas (agent + tools pod both writing)?
-3. Path-rule policy shape: inherit `phase-3-file-workspace-policy.md` rules or reshape around mount-time grants + per-op checks?
+3. Path-rule policy shape: inherit the (inert) `allowedPaths`/`deniedPaths` rules in `api/v1alpha1/policy_types.go` or reshape around mount-time grants + per-op checks?
 4. Snapshot/audit story: arena pod is perfectly placed for copy-on-write session diffs ("what changed") — in scope for v1 of this design?

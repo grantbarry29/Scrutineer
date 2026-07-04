@@ -40,10 +40,9 @@ type RuntimeProfileSpec struct {
 	Pod *RuntimeProfilePodSpec `json:"pod,omitempty"`
 
 	// Enforcement lists the data-plane enforcement backends enabled for sessions using
-	// this profile. Placement depends on the type: dns-proxy, tool-gateway, and
-	// fs-gateway are injected as cooperative in-pod sidecar containers (self-reported
-	// evidence), while envoy provisions a per-session out-of-pod egress proxy in its own
-	// pod and identity (observed evidence) — see docs/design/evidence-integrity.md.
+	// this profile. Every backend is out-of-pod (its own pod and identity, outside the
+	// agent's trust domain) and its evidence is stamped observed — see
+	// docs/design/evidence-integrity.md and docs/design/untamperable-pivot.md.
 	// +optional
 	Enforcement []RuntimeProfileEnforcement `json:"enforcement,omitempty"`
 }
@@ -98,9 +97,9 @@ type RuntimeProfileEnforcement struct {
 	Name string `json:"name"`
 
 	// Type identifies the enforcement backend. The only value today is "envoy": the
-	// out-of-pod per-session Envoy egress proxy. The cooperative in-pod backends
-	// (dns-proxy, tool-gateway, fs-gateway) were removed in the untamperable pivot
-	// (#71); future out-of-pod chokepoints (tools pod, arena pod) will add new types.
+	// out-of-pod per-session Envoy egress proxy. The cooperative in-pod backends were
+	// removed in the untamperable pivot (#71); future out-of-pod chokepoints (tools
+	// pod, arena pod) will add new types.
 	// +kubebuilder:validation:MinLength=1
 	Type string `json:"type"`
 

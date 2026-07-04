@@ -23,9 +23,9 @@ import (
 // Envoy egress proxy, provisioned by the controller as a separate out-of-pod pod (own
 // identity/netns) so a compromised agent cannot tamper with the enforcement point it
 // would otherwise share a pod with (evidence-integrity design, #8/#60; the untamperable
-// pivot, docs/design/untamperable-pivot.md). The cooperative in-pod sidecars (dns-proxy,
-// tool-gateway, fs-gateway) were removed in the pivot (#71): a control the agent could
-// bypass or starve is advisory, not enforcement. Enabling this type provisions the proxy
+// pivot, docs/design/untamperable-pivot.md). The cooperative in-pod sidecar tier was
+// removed in the pivot (#71): a control the agent could bypass or starve is advisory,
+// not enforcement. Enabling this type provisions the proxy
 // and points the agent at it via explicit-proxy env; see
 // internal/controller/agentsession/egress_envoy.go.
 const EnforcementTypeEnvoy = "envoy"

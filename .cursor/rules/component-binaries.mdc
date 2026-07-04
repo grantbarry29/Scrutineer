@@ -1,5 +1,5 @@
 ---
-description: Build/deploy conventions for Scrutineer's independently built binaries (manager + dns-proxy/tool-gateway/fs-gateway sidecars) and what their component READMEs must cover.
+description: Build/deploy conventions for Scrutineer's independently built binaries (manager + egress-reporter) and what their component READMEs must cover.
 globs: cmd/**,internal/enforcement/**,Dockerfile*
 alwaysApply: false
 ---

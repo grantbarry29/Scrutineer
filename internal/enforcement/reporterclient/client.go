@@ -8,11 +8,11 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package reporterclient is the shared data-plane transport the enforcement sidecars
-// (dns-proxy, tool-gateway, fs-gateway) use to POST runtime evidence to the
-// controller-owned reporter endpoint. Each sidecar wraps a *Client, parameterized by
-// its backend; tool-gateway composes it with an approval channel on top. Keeping this
-// on the sidecar side of the control-plane/data-plane split — see
+// Package reporterclient is the shared data-plane transport enforcement components use
+// to POST runtime evidence to the controller-owned reporter endpoint. Today its one
+// caller is the egress-reporter beside Envoy in the per-session egress-proxy pod; each
+// caller wraps a *Client parameterized by its backend kind. Keeping this on the
+// data-plane side of the control-plane/data-plane split — see
 // docs/design/architecture.md.
 package reporterclient
 
@@ -106,8 +106,8 @@ func (c *Client) Submit(ctx context.Context, session SessionRef, report enforcem
 }
 
 // NewRequest builds a request authenticated with the projected reporter token. Exported
-// so composed clients (e.g. tool-gateway's approval channel) reuse the same transport
-// and auth without re-reading the token themselves.
+// so composed clients (e.g. a future approval channel at an out-of-pod chokepoint)
+// reuse the same transport and auth without re-reading the token themselves.
 func (c *Client) NewRequest(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
 	if c == nil {
 		return nil, fmt.Errorf("reporter client is nil")

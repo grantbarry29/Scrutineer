@@ -26,7 +26,7 @@ func TestProjectTimeline_sortsAndProjects(t *testing.T) {
 		{
 			Time:    t2,
 			Type:    scrutineerv1alpha1.SessionEventTypeTool,
-			Source:  "tool-gateway",
+			Source:  "tools-pod",
 			Action:  "deny",
 			Target:  "kubectl",
 			Message: "tool denied",

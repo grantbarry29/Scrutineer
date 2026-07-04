@@ -3,7 +3,7 @@
 > **Canonical architecture reference for Scrutineer.** Read this before implementing anything non-trivial.
 > **Companion docs:** product vision (`.cursor/rules/scrutineer-product-vision.mdc`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)), workflow rules (`.cursor/scrutineer-cursor-workflow.md`), and the phase-specific design docs in this folder.
 >
-> ⚠️ **Pivot landed (Phase 2, #71):** enforcement is now **adversarial-grade only**. The cooperative in-pod sidecar tier (dns-proxy, tool-gateway, fs-gateway) has been **removed** — the sole enforcement plane is the per-session out-of-pod Envoy egress proxy + default-deny routing lock (verified by the lock gate, #70). Read [`untamperable-pivot.md`](untamperable-pivot.md) first. Sections below that still describe in-pod sidecars are **historical** pending a full refresh of this doc (tracked as a follow-up); the authoritative current design is untamperable-pivot.md.
+> **Enforcement doctrine (the pivot, #69–#71):** enforcement is **adversarial-grade only**. The cooperative in-pod sidecar tier was removed; the sole enforcement plane is the per-session out-of-pod Envoy egress proxy + default-deny routing lock, empirically verified by the lock gate (#70) before enforced sessions run. Doctrine and rationale: [`untamperable-pivot.md`](untamperable-pivot.md).
 
 This document describes **what Scrutineer is, how it is structured, and the invariants every change must preserve.** It is written to be precise enough that an implementer (human or model) can make a correct change without re-deriving the architecture.
 
@@ -26,7 +26,7 @@ Scrutineer is a **Kubernetes-native governance and runtime control plane for aut
 | Plane | Responsibility | Where it lives | Examples |
 |-------|----------------|----------------|----------|
 | **Control plane** | *Declare* and *propagate* desired governance state; aggregate evidence. | CRDs + controllers (this repo today). | AgentSession reconciler, policy merge, status, conditions, events. |
-| **Data plane** | *Enforce* policy and *report* what happened at runtime. | Sidecars, gateways, NetworkPolicy, future eBPF/sandboxes. | dns-proxy, tool-gateway, NetworkPolicy egress, future Envoy/Cilium. |
+| **Data plane** | *Enforce* policy and *report* what happened at runtime. | Out-of-pod chokepoint pods, NetworkPolicy, future eBPF/sandboxes. | Per-session Envoy egress proxy + egress-reporter, routing-lock/backstop NetworkPolicies, future tools/arena pods. |
 
 > **Invariant:** controllers declare and propagate; they do not enforce. Enforcement and runtime observation belong to replaceable data-plane backends. Keep this separation in every change.
 
@@ -37,7 +37,7 @@ Always distinguish these — conflating them is the most common design error:
 ```mermaid
 flowchart LR
     declared["DECLARED\nAgentPolicy / ToolPolicy / spec.policy"]
-    propagated["PROPAGATED\nenv vars, sidecar config, NetworkPolicy"]
+    propagated["PROPAGATED\nenv vars, Envoy config, NetworkPolicy"]
     observed["OBSERVED\nstatus.policyDecisions / violations"]
     enforced["ENFORCED\ndata-plane blocks the action"]
     declared --> propagated --> enforced
@@ -46,9 +46,9 @@ flowchart LR
 ```
 
 - **Declared:** what the policy says (CRDs / inline spec).
-- **Propagated:** how that policy reaches the runtime (env vars, sidecar config, generated NetworkPolicy). *Env vars are a propagation hook, not enforcement.*
+- **Propagated:** how that policy reaches the runtime (env vars, rendered Envoy RBAC config, generated NetworkPolicies). *Env vars are a propagation hook, not enforcement.*
 - **Enforced:** the data plane actually allows/denies.
-- **Observed:** runtime evidence recorded back into status (the **runtime evidence loop**, Phase 3b — currently the active gap).
+- **Observed:** runtime evidence recorded back into status (the **runtime evidence loop** — shipped: egress-reporter → reporter endpoint → status).
 
 ---
 
@@ -68,8 +68,9 @@ flowchart TB
 
         subgraph exec["Execution backend (governed)"]
             job["batch/v1 Job"]
-            pod["Agent Pod\n= agent container + enforcement sidecars"]
-            np["NetworkPolicy"]
+            pod["Agent Pod\n(capability-empty; egress locked)"]
+            envoy["Egress-proxy Pod\n(Envoy + egress-reporter,\nown identity/netns)"]
+            np["NetworkPolicies\n(routing lock + backstop)"]
             job --> pod
         end
 
@@ -78,15 +79,17 @@ flowchart TB
         api --- crds
         ctrl -- watch/reconcile --> api
         ctrl -- creates/owns --> job
+        ctrl -- creates/owns --> envoy
         ctrl -- creates/owns --> np
-        pod -- "runtime reports (Phase 3b)" --> ctrl
+        envoy -- "observed runtime reports" --> ctrl
     end
 
     provider["Model / tool / network endpoints\n(governed egress)"]
-    pod -- "egress via data-plane enforcement" --> provider
+    pod -- "only path (lock)" --> envoy
+    envoy -- "policy-filtered egress" --> provider
 ```
 
-Today everything in `cp` and `exec` is in this repo except the agent container image itself (user-provided) and the not-yet-built first-party sidecar images.
+Today everything in `cp` and `exec` is in this repo except the agent container image itself (user-provided); the first-party images are the manager and the egress-reporter.
 
 ---
 
@@ -132,10 +135,10 @@ classDiagram
     class PolicyRules {
       allowedDomains_deniedDomains
       allowedCIDRs_deniedCIDRs
-      allowedTools_deniedTools
+      allowedTools_deniedTools_inert
       maxCallsPerMinute
       requireHumanApproval
-      future_allowedPaths_deniedPaths
+      allowedPaths_deniedPaths_inert
     }
     AgentSession "1" --> "0..*" AgentPolicy : policyRefs
     AgentSession "1" --> "0..*" ToolPolicy : policyRefs
@@ -147,7 +150,7 @@ classDiagram
 
 **Reference rules (invariant):** all refs (`policyRefs`, `runtimeProfileRef`, `promptConfigMapRef`) are **same-namespace only** in the MVP. Cross-namespace references are a deliberate future feature, not an oversight.
 
-`PolicyRules` is the **shared** policy shape used by AgentPolicy, ToolPolicy, and inline `spec.policy`, so merge logic is uniform.
+`PolicyRules` is the **shared** policy shape used by AgentPolicy, ToolPolicy, and inline `spec.policy`, so merge logic is uniform. The tool/path/argument rule fields are **inert declared data** post-pivot — merged and recorded, but with no enforcement backend until the tools/arena chokepoints land (see [`untamperable-pivot.md`](untamperable-pivot.md) §5–6).
 
 ---
 
@@ -195,14 +198,15 @@ sequenceDiagram
     R->>R: resolvePolicy (merge refs + inline -> effectivePolicy, decisions)
     R->>R: resolveRuntimeProfile (optional)
     R->>R: approval gate (AwaitingApproval if a matching ApprovalPolicy applies)
+    R->>R: egress lock gate (verified-or-refused; enforced sessions hold at Pending until the CNI is proven to enforce NetworkPolicy)
     alt cancelRequested
         R->>API: delete owned Job, phase=Cancelled
     else terminal phase
         R->>R: skip Job creation
     else active
+        R->>NP: ensureEgressProxy (per-session Envoy pod/Service/ConfigMap/SA) + routing-lock/backstop NetworkPolicies
         R->>Job: ensureJob (build/owned-check/replace-on-drift)
         Job-->>R: Job
-        R->>NP: ensureNetworkPolicy (enforced CIDR egress)
         R->>R: syncStatusFromJob (phase from Job/Pod)
     end
     R->>API: patchStatusWithEnforcement (merge conditions/decisions/violations)
@@ -215,7 +219,7 @@ sequenceDiagram
 - Job pod template is **immutable** while active; policy/profile changes on a *pending* Job replace it, on an *active* Job set a `*Drift` condition instead.
 - The reconciler uses an uncached `APIReader` where stale reads are dangerous (deletion detection, status pre-read).
 
-**Runtime backends (Phase 6).** Runtime mechanics (create/observe/stop) are not hard-wired to Jobs: the reconciler routes `ensure`/`stop`/`runtimeGone`/`ownedType` through a `runtimeBackend` interface chosen from a registry keyed by `spec.runtime.orchestrator` (`runtime_backend.go`). Two in-tree backends ship today — `kubernetes-job` (default, `batchv1.Job`) and `kubernetes-pod` (a bare `corev1.Pod`, `backend_pod.go`) — both built from the shared `job.BuildPodTemplateSpec` so the data-plane/sidecar wiring is identical. Backends return a neutral `observation`; the reconciler owns all status mapping. `status.runtimeRef` (`apiVersion`/`kind`/`name`/`uid`) records the runtime object's identity for any backend; `status.jobName` is a deprecated alias of `runtimeRef.name` kept for the Job backend. The diagram above shows the Job path; the Pod path is identical with `Pod` substituted for `Job`.
+**Runtime backends (Phase 6).** Runtime mechanics (create/observe/stop) are not hard-wired to Jobs: the reconciler routes `ensure`/`stop`/`runtimeGone`/`ownedType` through a `runtimeBackend` interface chosen from a registry keyed by `spec.runtime.orchestrator` (`runtime_backend.go`). Two in-tree backends ship today — `kubernetes-job` (default, `batchv1.Job`) and `kubernetes-pod` (a bare `corev1.Pod`, `backend_pod.go`) — both built from the shared `job.BuildPodTemplateSpec` so the data-plane wiring is identical. Backends return a neutral `observation`; the reconciler owns all status mapping. `status.runtimeRef` (`apiVersion`/`kind`/`name`/`uid`) records the runtime object's identity for any backend; `status.jobName` is a deprecated alias of `runtimeRef.name` kept for the Job backend. The diagram above shows the Job path; the Pod path is identical with `Pod` substituted for `Job`.
 
 ---
 
@@ -240,8 +244,8 @@ flowchart LR
 Effective policy reaches the runtime via:
 
 - **Env vars** on the agent container (`AGENT_POLICY_MODE`, `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE`, etc.) — a *propagation hook*, not enforcement.
-- **NetworkPolicy** (enforced mode, CIDR egress) — real but coarse; FQDN not covered.
-- **Sidecar config** (env on injected `dns-proxy`/`tool-gateway`/`envoy` sidecars) when a RuntimeProfile enables them.
+- **NetworkPolicies** — the CIDR egress baseline, plus (when the `envoy` enforcement type is enabled) the agent-pod **routing lock** and the Envoy-pod **backstop**.
+- **Explicit-proxy env** (`HTTP_PROXY`/`HTTPS_PROXY` → the session's Envoy ClusterIP) and the **rendered Envoy RBAC config** (effective FQDN policy → ConfigMap) when a RuntimeProfile enables the `envoy` type.
 
 ### 6.3 Status as source of truth & the merge-patch hazard
 
@@ -272,12 +276,11 @@ flowchart TB
         rr["RuntimeReport\n(Decisions, Violations)"]
     end
     subgraph backends["backends (sub-packages)"]
-        npb["networkpolicy/\n(CIDR egress, enforced)"]
-        dns["dnsproxy/\n(domain+CIDR, sidecar)"]
-        tg["toolgateway/\n(tool allow/deny)"]
-        ws["workspace/\n(design stubs only)"]
+        npb["networkpolicy/\n(CIDR egress, routing lock, backstop)"]
+        env["envoy/\n(per-session egress proxy,\nRBAC config, access-log evidence)"]
+        lv["lockverify/\n(differential canary probe:\nverified-or-refused)"]
     end
-    subgraph loop["runtime evidence loop (Phase 3b)"]
+    subgraph loop["runtime evidence loop"]
         rep["reporter endpoint\n(controller-owned PATCH callback)"]
         apply["ApplyRuntimePolicyReport\n-> status"]
     end
@@ -285,11 +288,11 @@ flowchart TB
     backends -- "RuntimeReport" --> rep --> apply
 ```
 
-- **Today (post-pivot, #71):** the sole enforcement plane is the per-session **out-of-pod Envoy egress proxy** + the default-deny **routing lock**, whose enforcement is empirically verified before enforced sessions run (the lock gate, #70). Agent egress is forced through Envoy via `HTTP_PROXY`/`HTTPS_PROXY`; Envoy's access log is tailed by a co-located **egress-reporter** that submits **`observed`** evidence to the **reporter** (`cmd/main.go` → `mgr.Add(reporter.NewRunnable(...))`), which merges it into `status.policyDecisions`(runtime), `status.violations`, `status.usage`, and `status.events`. The cooperative in-pod sidecars (dns-proxy/tool-gateway/fs-gateway) were **removed** — a control the agent could bypass or starve is advisory, not enforcement.
+- **Today (post-pivot, #71):** the sole enforcement plane is the per-session **out-of-pod Envoy egress proxy** + the default-deny **routing lock**, whose enforcement is empirically verified before enforced sessions run (the lock gate, #70). Agent egress is forced through Envoy via `HTTP_PROXY`/`HTTPS_PROXY`; Envoy's access log is tailed by a co-located **egress-reporter** that submits **`observed`** evidence to the **reporter** (`cmd/main.go` → `mgr.Add(reporter.NewRunnable(...))`), which merges it into `status.policyDecisions`(runtime), `status.violations`, `status.usage`, and `status.events`. The cooperative in-pod sidecar tier was **removed** — a control the agent could bypass or starve is advisory, not enforcement.
 - **Trust model:** enforcement lives in a trust domain the agent cannot alter (separate pod/identity/netns) and is made mandatory by the CNI-enforced NetworkPolicy lock, so evidence is `observed`. Tool- and file-domain governance await their own out-of-pod chokepoints ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)); until then those domains have no policy surface (no unenforced fields).
 - **The direction:** isolate the data plane from the agent so integrity no longer depends on its cooperation — per-session identity / scoped ServiceAccount, out-of-pod or kernel/eBPF observation the agent cannot bypass, FQDN egress (Cilium/Envoy), and sandboxed runtimes (gVisor/Kata). See [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) for the evidence loop, and the *Runtime evidence integrity* track for the adversarial roadmap.
 
-Detailed per-backend designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md), [`phase-3-dns-proxy-prototype.md`](phase-3-dns-proxy-prototype.md), [`phase-3-tool-gateway-contract.md`](phase-3-tool-gateway-contract.md), [`phase-3-file-workspace-policy.md`](phase-3-file-workspace-policy.md).
+Detailed designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) (contract + history), [`evidence-integrity.md`](evidence-integrity.md) (egress chokepoint + trust boundary), [`untamperable-pivot.md`](untamperable-pivot.md) (doctrine + lock gate), [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md) (deferred successors).
 
 ---
 
@@ -298,12 +301,13 @@ Detailed per-backend designs: [`phase-3-enforcement-architecture.md`](phase-3-en
 | Path | Responsibility |
 |------|----------------|
 | `api/v1alpha1/` | CRD Go types + kubebuilder markers (`agentsession_types.go`, `agentpolicy_types.go`, `toolpolicy_types.go`, `runtimeprofile_types.go`, `policy_types.go`). Source of truth for generated CRDs. |
-| `internal/controller/agentsession/` | The reconciler and its helpers: `reconciler.go`, `status.go` (patch strategy), `runtime_backend.go` (backend interface + registry + `kubernetes-job`), `backend_pod.go` (`kubernetes-pod`), `policy.go`/`policy_decisions.go`, `violations.go`, `networkpolicy.go`, `egress_proxy.go`, `runtimeprofile*.go`, `pod*.go`, watches. |
-| `internal/controller/job/` | Pure Job/Pod template construction: `builder.go`, `sidecars.go`, `constants.go` (labels). No cluster I/O. |
+| `internal/controller/agentsession/` | The reconciler and its helpers: `reconciler.go`, `status.go` (patch strategy), `runtime_backend.go` (backend interface + registry + `kubernetes-job`), `backend_pod.go` (`kubernetes-pod`), `policy.go`/`policy_decisions.go`, `violations.go`, `networkpolicy.go`, `egress_envoy.go` (per-session proxy provisioning), `lock_gate.go` (verified-or-refused), `runtimeprofile*.go`, `pod*.go`, watches. |
+| `internal/controller/job/` | Pure Job/Pod template construction: `builder.go`, `sidecars.go` (envoy proxy-env wiring), `constants.go` (labels). No cluster I/O. |
 | `internal/policy/` | Policy layer loading, merge/resolve, status application. Backend-neutral. |
-| `internal/enforcement/` | Enforcement contract + mode semantics + report/violation helpers; sub-packages per backend (`networkpolicy/`, `dnsproxy/`, `toolgateway/`, `workspace/`). |
-| `internal/reporter/` | **(Phase 3b slice 2, not yet created)** runtime reporter HTTP endpoint. |
-| `cmd/main.go` | Manager setup, flags, `SetupWithManager`, health checks. |
+| `internal/enforcement/` | Enforcement contract + mode semantics + report/violation helpers; sub-packages: `networkpolicy/`, `envoy/`, `lockverify/`, `reporterclient/`, `sidecarenv/`. |
+| `internal/reporter/` | Runtime reporter HTTP endpoint (identity verification, caller-class assurance stamping, approval channel). |
+| `cmd/main.go` | Manager setup, flags (incl. `--lock-probe-*`), `SetupWithManager`, health checks. |
+| `cmd/egress-reporter/` | The out-of-pod evidence producer beside Envoy (own image). |
 | `config/` | Kustomize bases, CRDs (generated), RBAC, samples. |
 | `docs/design/` | This folder: architecture + phase design docs. |
 
@@ -331,8 +335,9 @@ Detailed per-backend designs: [`phase-3-enforcement-architecture.md`](phase-3-en
 Phases (tracked as GitHub Issues / epics — see <https://github.com/grantbarry29/scrutineer/issues>):
 
 - **0–2 (done):** MVP foundation, MVP hardening, reusable policy model + RuntimeProfile.
-- **3 (contracts done):** data-plane enforcement contracts, NetworkPolicy baseline, sidecar injection, gateway/proxy/file design.
-- **3b (active — critical path):** runtime evidence loop (reporter → events → real images → violations → file impl).
+- **3 (done, reshaped by the pivot):** enforcement contracts + NetworkPolicy baseline survive; the cooperative in-pod slices were removed (#71).
+- **3b (done):** runtime evidence loop — reporter endpoint, `status.events[]`, and the egress-reporter as the live `observed` producer.
+- **The pivot (#69, Phases 0–2 done):** adversarial-grade-only doctrine, verified-or-refused lock gate (#70), cooperative-tier removal (#71); Phase 3 hardening + deferred tools/arena chokepoints remain.
 - **4:** observability & audit (usage metrics, timeline model, Prometheus, OTel, audit sink, log/artifact collection) — consumes the evidence loop.
 - **5:** scoped human approval workflows.
 - **6 (in progress):** orchestrator-agnostic runtime backends. `runtimeBackend` interface + `status.runtimeRef` shipped; two in-tree backends (`kubernetes-job`, `kubernetes-pod`) done. Next: external adapter design (Tekton/Argo/Temporal) + SessionTemplate.

@@ -98,7 +98,7 @@ func TestApplyRuntimePolicyReport_explicitViolationsDeduped(t *testing.T) {
 }
 
 // A runtime report carrying a tool decision + violation must merge into session status.
-// (The tool decision is constructed directly: the cooperative tool-gateway was removed in
+// (The tool decision is constructed directly: the cooperative in-pod tier was removed in
 // the untamperable pivot (#71); a future out-of-pod tools chokepoint will re-emit these.)
 func TestApplyRuntimePolicyReport_toolDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))

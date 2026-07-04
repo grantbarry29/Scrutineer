@@ -90,7 +90,7 @@ func TestMergeEventsInPlace_preservesReporterEvents(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(3, 0))
 	dst := []scrutineerv1alpha1.SessionEvent{}
 	preserve := []scrutineerv1alpha1.SessionEvent{{
-		Time: ts, Type: scrutineerv1alpha1.SessionEventTypeTool, Source: "tool-gateway", EventID: "tool-1",
+		Time: ts, Type: scrutineerv1alpha1.SessionEventTypeTool, Source: "tools-pod", EventID: "tool-1",
 	}}
 	mergeEventsInPlace(&dst, preserve)
 	if len(dst) != 1 {

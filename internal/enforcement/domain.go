@@ -13,8 +13,8 @@ package enforcement
 import "strings"
 
 // MatchDomain reports whether host matches any pattern, using Scrutineer's shared FQDN
-// semantics (issue #32) so every egress backend agrees — the cooperative dns-proxy, the
-// out-of-pod Envoy's generated RBAC, and the egress-reporter's evidence classification:
+// semantics (issue #32) so every egress consumer agrees — the out-of-pod Envoy's
+// generated RBAC and the egress-reporter's evidence classification:
 //
 //   - exact:    "example.com" matches only "example.com"
 //   - wildcard: "*.example.com" matches any subdomain ("a.example.com", "a.b.example.com")

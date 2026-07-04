@@ -60,16 +60,15 @@ lives in [`docs/design/`](docs/design/) and component `README.md`s.
 1. Defines namespaced CRDs (`scrutineer.sh/v1alpha1`): `AgentSession`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`, `ApprovalRequest`.
 2. Reconciles each `AgentSession` into a runtime object named `scrutineer-session-<name>`, owned by the session, behind a backend-neutral `runtimeBackend` interface: a `batch/v1` Job (`kubernetes-job`, default) or a bare `v1` Pod (`kubernetes-pod`). `status.runtimeRef` records which object was created.
 3. Merges reusable policies (`spec.policyRefs`) with inline `spec.policy` overrides → `status.effectivePolicy`, `status.policyDecisions`, and `AGENT_POLICY_*` env vars.
-4. Applies optional `RuntimeProfile` hardening and enables data-plane enforcement backends via `spec.runtimeProfileRef` / `spec.enforcement[]` (in-pod sidecars injected into the Job pod template; the `envoy` type provisions a per-session out-of-pod egress proxy).
+4. Applies optional `RuntimeProfile` hardening and enables the data-plane egress backend via `spec.runtimeProfileRef` / `spec.enforcement[]` (the `envoy` type provisions a per-session **out-of-pod** egress proxy and locks the agent pod's egress to it).
 5. Tracks lifecycle in `status.phase` and structured `status.conditions` (including aggregate `Ready`), emits Kubernetes Events, supports cancellation and finalizer-gated deletion.
-6. Gates sensitive actions behind **human approval** (`ApprovalPolicy` → `AwaitingApproval` → grant/deny), including **mid-execution per-tool approval holds** and an opt-in mutating webhook that stamps the authenticated approver identity.
+6. Gates sensitive actions behind **human approval** (`ApprovalPolicy` → `AwaitingApproval` → grant/deny) with an opt-in mutating webhook that stamps the authenticated approver identity.
+7. **Verifies before it claims** (the lock gate): a differential canary probe proves the CNI actually enforces egress `NetworkPolicy`; enforced sessions on an unverified cluster **refuse to start** with condition `EgressLockVerified=False` instead of running unprotected.
 
-**Data plane (cooperative in-pod sidecars):**
+**Data plane (out-of-pod, agent-untamperable):**
 
-7. [dns-proxy](cmd/dns-proxy/) enforces network egress (allow/deny domains + CIDRs).
-8. [tool-gateway](cmd/tool-gateway/) enforces tool-call policy (allow/deny tools, rate/count caps, argument constraints, approval holds).
-9. [fs-gateway](cmd/fs-gateway/) enforces workspace file-access policy (allow/deny paths, size caps).
-10. Each sidecar reports runtime evidence to the in-manager [reporter](internal/reporter/), which merges `status.policyDecisions`, `status.violations`, `status.usage`, and `status.events` back onto the session (authenticated per-pod; evidence stamped `self-reported`).
+8. A per-session **Envoy egress proxy** (own pod/identity/netns) enforces FQDN allow/deny as RBAC config; a default-deny routing-lock `NetworkPolicy` makes it the agent's only egress path.
+9. The co-located [egress-reporter](cmd/egress-reporter/) tails Envoy's access log and reports runtime evidence to the in-manager [reporter](internal/reporter/), which merges `status.policyDecisions`, `status.violations`, `status.usage`, and `status.events` back onto the session — authenticated per-pod, stamped **`observed`** from the caller's identity (never the payload).
 
 **Observability & audit:** Prometheus metrics, OpenTelemetry reconcile/reporter traces, and an OTLP structured audit sink; optional log/artifact collection into `status.artifacts`.
 
@@ -77,12 +76,14 @@ See [AgentSession controller reference](#agentsession-controller-reference) for 
 
 ### Current limitations
 
-- **Tool and file enforcement is cooperative, not adversarial-proof.** The dns-proxy,
-  tool-gateway, and fs-gateway sidecars share the agent pod and ServiceAccount, so a
-  fully compromised agent could tamper with or starve them; their evidence is stamped
-  `self-reported`. **Egress is the exception** — it is enforced out-of-pod and its
-  evidence is `observed` (see [Egress enforcement](#egress-enforcement-guarantees--assumptions)).
-  Adversarial-grade integrity for syscalls/files (kernel/eBPF) remains future work.
+- **Tool and file governance is not enforced yet.** Scrutineer ships only enforcement
+  the agent cannot tamper with (the untamperable pivot,
+  [`docs/design/untamperable-pivot.md`](docs/design/untamperable-pivot.md)); the
+  cooperative in-pod tier was removed rather than presented as governance. Today that
+  means **egress is enforced and `observed`**
+  (see [Egress enforcement](#egress-enforcement-guarantees--assumptions)), while the
+  tool/path policy fields are inert declared data awaiting their out-of-pod chokepoints
+  (tools pod, arena workspace — deferred designs in [`docs/design/`](docs/design/)).
 - **Two in-cluster orchestrators.** `runtime.orchestrator` accepts `kubernetes-job`
   (default) and `kubernetes-pod`; external backends (`tekton` / `argo` / `temporal` /
   `external`) remain reserved.
@@ -109,7 +110,7 @@ we never claim more than these boundaries support. (Design:
   `deniedDomains` render into Envoy RBAC on the `:authority`, so denied (or not-allowed)
   hosts are blocked at the chokepoint for both plain HTTP and HTTPS `CONNECT` — not just
   recorded. Matching is exact or `*.`-wildcard (subdomains, apex excluded), shared with
-  the dns-proxy so both agree.
+  the egress-reporter's evidence classification so enforcement and evidence agree.
 - **Evidence is independent.** Egress is recorded as `observed` — stamped by the
   reporter from the **proxy pod's authenticated identity**, never from the payload, so
   the agent cannot forge `observed` records or suppress them by lying. In enforced mode a
@@ -148,14 +149,12 @@ the proxy.
 ├── .devcontainer/                # one-shot Cursor/VS Code dev env (kind + CRDs)
 ├── api/v1alpha1/                 # CRD types + deepcopy (6 kinds)
 ├── cmd/
-│   ├── main.go                   # manager: controller + reporter + optional webhook
-│   ├── dns-proxy/                # network-egress enforcement sidecar (README)
-│   ├── tool-gateway/             # tool-call enforcement sidecar (README)
-│   └── fs-gateway/               # file-access enforcement sidecar (README)
+│   ├── main.go                   # manager: controller + reporter + lock-probe + optional webhook
+│   └── egress-reporter/          # observed-evidence producer beside Envoy (README)
 ├── internal/
 │   ├── controller/agentsession/  # AgentSession reconciler + runtimeBackend (README)
-│   ├── controller/job/           # Job build, sidecar injection, drift detection
-│   ├── enforcement/              # backend-neutral contract + dnsproxy/toolgateway/workspace/networkpolicy
+│   ├── controller/job/           # Job build, proxy-env wiring, drift detection
+│   ├── enforcement/              # backend-neutral contract + networkpolicy/envoy/lockverify
 │   ├── reporter/                 # runtime-evidence + approval HTTP service (README)
 │   ├── approval/                 # approval gate helpers + notifier
 │   ├── policy/                   # policy merge + decision records
@@ -170,7 +169,7 @@ the proxy.
 │   ├── webhook/ · webhooks/ · certmanager/  # opt-in approver-identity webhook + TLS
 │   ├── reporter-standalone/      # opt-in overlay: reporter as its own Deployment + SA
 │   └── samples/                  # sample manifests (make verify-samples)
-├── Dockerfile · Dockerfile.dns-proxy · Dockerfile.tool-gateway · Dockerfile.fs-gateway
+├── Dockerfile · Dockerfile.egress-reporter
 ├── Makefile · PROJECT · go.mod · README.md
 ```
 
@@ -250,17 +249,17 @@ By default the agent pod's ServiceAccount token is **not** mounted, so a comprom
 | `status.matchedRuntimeProfile` | Which `RuntimeProfile` was applied (name, UID, resourceVersion) |
 | `RuntimeProfileResolved` condition | `ProfileApplied` when a ref resolves; `NoProfileRef` when unset |
 
-**Enforcement backends (`spec.enforcement[]`):** **dns-proxy** (`ghcr.io/grantbarry29/scrutineer-dns-proxy`), **tool-gateway** (`ghcr.io/grantbarry29/scrutineer-tool-gateway`), and **fs-gateway** (`ghcr.io/grantbarry29/scrutineer-fs-gateway`) are injected into the Job pod template as first-party in-pod sidecars (build: `make docker-build-<name>`; load into kind: `make kind-load-<name>`) enforcing network / tool / file policy respectively. **envoy** provisions a per-session out-of-pod egress proxy (upstream `envoyproxy/envoy` + the first-party `scrutineer-egress-reporter` for `observed` evidence) — see `docs/design/evidence-integrity.md`. Per-binary READMEs live under [`cmd/`](cmd/).
+**Enforcement backends (`spec.enforcement[]`):** the only type today is **envoy** — a per-session out-of-pod egress proxy (upstream `envoyproxy/envoy` + the first-party `scrutineer-egress-reporter` for `observed` evidence) plus the default-deny routing lock on the agent pod — see `docs/design/evidence-integrity.md` and `docs/design/untamperable-pivot.md`. Future out-of-pod chokepoints (tools pod, arena workspace) will add new types. Per-binary READMEs live under [`cmd/`](cmd/).
 
-**Runtime reporter wiring (Phase 3b):** when any enabled enforcement sidecar is present, the Job pod template also includes:
+**Runtime reporter wiring:** the egress-proxy pod (not the agent pod) carries:
 
-| Injected into sidecars | Value |
-|------------------------|-------|
+| Injected into the egress-reporter | Value |
+|-----------------------------------|-------|
 | `SCRUTINEER_REPORTER_URL` | `http://scrutineer-controller-reporter.scrutineer-system.svc:8088` (base URL; append `/v1/report`) |
 | `SCRUTINEER_REPORTER_TOKEN_PATH` | `/var/run/secrets/scrutineer/reporter-token/token` |
 | Projected volume | ServiceAccount token with audience `scrutineer-reporter` (600s expiry, kubelet-refreshed) |
 
-The agent container does **not** receive the reporter URL or token — only sidecars report runtime evidence. Deploy the controller with `make deploy` (or `make dev-deploy`) so the `scrutineer-controller-reporter` Service exposes port `:8088`. Contract: [`docs/design/phase-3-runtime-reporter-contract.md`](docs/design/phase-3-runtime-reporter-contract.md).
+The agent container does **not** receive the reporter URL or token — evidence comes only from outside its trust domain. Deploy the controller with `make deploy` (or `make dev-deploy`) so the `scrutineer-controller-reporter` Service exposes port `:8088`. Contract: [`docs/design/phase-3-runtime-reporter-contract.md`](docs/design/phase-3-runtime-reporter-contract.md).
 
 **Profile change behavior:**
 
@@ -273,8 +272,8 @@ The agent container does **not** receive the reporter URL or token — only side
 ```bash
 kubectl apply -f config/samples/scrutineer_v1alpha1_runtimeprofile.yaml
 kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_runtimeprofile_ref.yaml
-kubectl apply -f config/samples/scrutineer_v1alpha1_runtimeprofile_sidecars.yaml
-kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_runtimeprofile_sidecars.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_runtimeprofile_enforcement.yaml
+kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_runtimeprofile_enforcement.yaml
 ```
 
 ### Reusable policy (`AgentPolicy` + `ToolPolicy`)
@@ -288,7 +287,7 @@ Platform teams can publish baseline governance once; sessions reference policies
 3. List fields are unioned; numeric caps take the **minimum** (strictest); `argumentRules` are **concatenated** (constraints only tighten)
 4. Effective **mode** = strictest across matched policies (`enforced` > `dry-run` > `audit-only`)
 
-**Tool argument rules (`ToolPolicy.spec.argumentRules`):** constrain a tool call by its **arguments**, not just its name — applied only to calls that already pass `allowedTools`/`deniedTools`. Each rule binds tools (`"*"` = any) to `constraints` (dotted arg path + operator + `Allow`/`Deny` effect); a `Deny` match blocks, `Allow` constraints act as an allowlist. Merged and propagated to the [tool-gateway](cmd/tool-gateway/), which evaluates them per call and reports redacted evidence (argument values never leave the pod). See [`docs/design/phase-3-tool-argument-constraints.md`](docs/design/phase-3-tool-argument-constraints.md) and `config/samples/scrutineer_v1alpha1_toolpolicy.yaml`.
+**Tool argument rules (`ToolPolicy.spec.argumentRules`):** constrain a tool call by its **arguments**, not just its name — applied only to calls that already pass `allowedTools`/`deniedTools`. Each rule binds tools (`"*"` = any) to `constraints` (dotted arg path + operator + `Allow`/`Deny` effect); a `Deny` match blocks, `Allow` constraints act as an allowlist. **Post-pivot these are inert declared data** — merged into `status.effectivePolicy` and recorded, but with no enforcement backend until the tools-pod chokepoint lands ([`docs/design/tools-pod-chokepoint.md`](docs/design/tools-pod-chokepoint.md)). See `config/samples/scrutineer_v1alpha1_toolpolicy.yaml`.
 
 **Status written on reconcile:**
 
@@ -298,7 +297,7 @@ Platform teams can publish baseline governance once; sessions reference policies
 | `status.matchedPolicies` | Which policy CRDs contributed |
 | `status.policyDecisions` | Bounded merge-time audit log (max 64) |
 
-**Propagation today:** `AGENT_POLICY_*` and `AGENT_POLICY_MODE` env vars on the agent container, and into the enforcement sidecars that apply them. Network, tool, and file rules are **enforced** by the dns-proxy / tool-gateway / fs-gateway sidecars (cooperative data plane) when injected; `audit-only` / `dry-run` / `enforced` modes govern whether a matched rule blocks or only records.
+**Propagation today:** `AGENT_POLICY_*` and `AGENT_POLICY_MODE` env vars on the agent container (a propagation hook, not enforcement). Network FQDN rules are **enforced** at the per-session out-of-pod Envoy proxy when the `envoy` backend is enabled; `audit-only` / `dry-run` / `enforced` modes govern whether a matched rule blocks or only records. Tool and path rules are inert declared data pending their chokepoints.
 
 **Policy change behavior:**
 
@@ -417,7 +416,7 @@ AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE
 AGENT_POLICY_MODE
 ```
 
-`AGENT_POLICY_*` values are propagated from merged policy to the agent container and the enforcement sidecars; the sidecars (dns-proxy / tool-gateway / fs-gateway) apply rate limits and allow/deny rules per the effective mode.
+`AGENT_POLICY_*` values are propagated from merged policy to the agent container as a propagation/debugging hook. Enforcement happens out-of-pod: the session's Envoy proxy applies FQDN allow/deny per the effective mode.
 
 Plus any `spec.runtime.env` entries the user adds.
 
@@ -835,18 +834,18 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/scrutineer_*.
 | Reconcile to Kubernetes runtime | Yes | `runtime.orchestrator: kubernetes-job` (default) or `kubernetes-pod`, via the `runtimeBackend` interface; `status.runtimeRef` records the object created |
 | Task prompt / ConfigMap prompt | Yes | `spec.task` or `promptConfigMapRef` (same namespace) |
 | `AgentPolicy` / `ToolPolicy` + `spec.policyRefs` | Yes | Same-namespace merge → `status.effectivePolicy`; inline `spec.policy` overrides win |
-| Policy modes (`audit-only` / `dry-run` / `enforced`) | Yes | Strictest mode in status + `AGENT_POLICY_MODE`; **enforced** by sidecars |
+| Policy modes (`audit-only` / `dry-run` / `enforced`) | Yes | Strictest mode in status + `AGENT_POLICY_MODE`; **enforced** at the egress chokepoint |
 | `status.policyDecisions` | Yes | Merge-time + runtime decisions (max 64) |
 | Policy / profile change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
-| Enforcement backends (`spec.enforcement`) | Yes | First-party in-pod `dns-proxy` / `tool-gateway` / `fs-gateway`; out-of-pod `envoy` egress proxy with `observed` evidence |
-| **Network egress enforcement** | Yes | Out-of-pod `envoy` egress proxy + default-deny routing lock (`observed` evidence); or cooperative [dns-proxy](cmd/dns-proxy/) (allow/deny domains + CIDRs) |
-| **Tool-call enforcement** | Yes (cooperative) | [tool-gateway](cmd/tool-gateway/): allow/deny tools, caps, argument constraints |
-| **File-access enforcement** | Yes (cooperative) | [fs-gateway](cmd/fs-gateway/): allow/deny paths, size cap |
-| **Runtime evidence loop** | Yes | [reporter](internal/reporter/) merges `policyDecisions`/`violations`/`usage`/`events` from sidecars |
+| Enforcement backends (`spec.enforcement`) | Yes | Out-of-pod `envoy` egress proxy with `observed` evidence (the only type; the cooperative in-pod tier was removed in the pivot, #71) |
+| **Network egress enforcement** | Yes | Out-of-pod `envoy` egress proxy + default-deny routing lock, gated verified-or-refused by the lock probe (`observed` evidence) |
+| **Tool-call governance** | Declared only | Tool/argument policy fields are inert pending the tools-pod chokepoint (deferred design) |
+| **File-access governance** | Declared only | Path policy fields are inert pending the arena workspace (deferred design) |
+| **Runtime evidence loop** | Yes | [reporter](internal/reporter/) merges `policyDecisions`/`violations`/`usage`/`events` from the egress-reporter |
 | Human approval gate | Yes | `ApprovalPolicy` → `AwaitingApproval` → grant/deny; per-tool runtime holds; authenticated-approver webhook (opt-in) |
 | Observability & audit | Yes | Prometheus metrics, OTel traces, OTLP audit sink |
-| `status.usage` / `status.violations` / `status.events` | Yes (runtime) | Populated from sidecar reports — see [Status fields](#status-fields) |
+| `status.usage` / `status.violations` / `status.events` | Yes (runtime) | Populated from egress-reporter reports — see [Status fields](#status-fields) |
 | `status.artifacts` | Yes | Logs (ConfigMap) + workspace tar (Secret) when `spec.outputs` enabled |
 | Pod watch · `Ready` condition · finalizer cleanup · cancellation | Yes | See controller reference above |
 
@@ -889,8 +888,10 @@ After running the controller and applying the success sample:
 ## Roadmap
 
 Phases 0–5 have shipped (control-plane reconciliation, reusable policy + runtime
-profiles, data-plane enforcement for network/tool/file, the runtime-evidence loop,
-observability/audit export, and human approval workflows). Phase 6 is in progress.
+profiles, the runtime-evidence loop, observability/audit export, and human approval
+workflows), followed by the **untamperable pivot** (#69–#71): enforcement is now
+adversarial-grade only — the out-of-pod Envoy egress path with the verified-or-refused
+lock gate — and the cooperative in-pod tier was removed. Phase 6 is in progress.
 Live task state and the **roadmap** are in
 [GitHub Issues / Projects](https://github.com/grantbarry29/scrutineer/issues); durable technical context and
 design docs are in [`docs/design/`](docs/design/). Highlights of what remains:
@@ -898,8 +899,9 @@ design docs are in [`docs/design/`](docs/design/). Highlights of what remains:
 ### Shipped CRDs
 
 `AgentSession`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`,
-`ApprovalRequest` — all namespace-scoped. A `ToolGateway` CRD (managed broker
-endpoint) and `SessionTemplate` (parameterized blueprints) remain future work.
+`ApprovalRequest` — all namespace-scoped. A `CredentialProfile` (credential
+mediation at the tools-pod chokepoint) and `SessionTemplate` (parameterized
+blueprints) remain future work.
 
 ### In progress / next
 
