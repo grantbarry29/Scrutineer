@@ -17,11 +17,11 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
-func TestBuildMergeDecisions_matchedPolicyAndDenyTools(t *testing.T) {
+func TestBuildMergeDecisions_matchedPolicyAndDenyDomains(t *testing.T) {
 	resolved := Resolved{
 		Mode: scrutineerv1alpha1.PolicyModeDryRun,
 		Rules: scrutineerv1alpha1.PolicyRules{
-			DeniedTools: []string{"kubectl-prod"},
+			DeniedDomains: []string{"evil.example"},
 		},
 		Matched: []scrutineerv1alpha1.MatchedPolicyRef{{
 			Kind: "AgentPolicy",
@@ -38,7 +38,7 @@ func TestBuildMergeDecisions_matchedPolicyAndDenyTools(t *testing.T) {
 			mode = d
 		case d.Reason == "PolicyMatched":
 			matched = d
-		case d.Target == "kubectl-prod":
+		case d.Target == "evil.example":
 			denied = d
 		}
 	}
@@ -48,19 +48,19 @@ func TestBuildMergeDecisions_matchedPolicyAndDenyTools(t *testing.T) {
 	if matched == nil || matched.PolicyRef == nil || matched.PolicyRef.Name != "baseline" {
 		t.Fatalf("matched decision = %v", matched)
 	}
-	if denied == nil || denied.Action != scrutineerv1alpha1.PolicyDecisionDryRun || denied.Rule != "deniedTools" {
-		t.Fatalf("denied tool decision = %v", denied)
+	if denied == nil || denied.Action != scrutineerv1alpha1.PolicyDecisionDryRun || denied.Rule != "deniedDomains" {
+		t.Fatalf("denied domain decision = %v", denied)
 	}
 }
 
 func TestBuildMergeDecisions_truncates(t *testing.T) {
 	var targets []string
 	for i := 0; i < MaxMergePolicyDecisions; i++ {
-		targets = append(targets, "tool-"+string(rune('a'+i%26)))
+		targets = append(targets, "host-"+string(rune('a'+i%26))+".example")
 	}
 	resolved := Resolved{
 		Mode:  scrutineerv1alpha1.PolicyModeAuditOnly,
-		Rules: scrutineerv1alpha1.PolicyRules{DeniedTools: targets},
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: targets},
 	}
 	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
 	if len(decisions) != MaxMergePolicyDecisions {
@@ -72,66 +72,32 @@ func TestBuildMergeDecisions_truncates(t *testing.T) {
 	}
 }
 
-func TestBuildMergeDecisions_capsAndNetworkLists(t *testing.T) {
-	maxNet := int32(100)
-	maxTool := int32(50)
-	maxPerMin := int32(10)
+func TestBuildMergeDecisions_networkAndApprovalLists(t *testing.T) {
 	resolved := Resolved{
 		Mode: scrutineerv1alpha1.PolicyModeEnforced,
 		Rules: scrutineerv1alpha1.PolicyRules{
 			AllowedDomains:       []string{"github.com"},
 			DeniedCIDRs:          []string{"10.0.0.0/8"},
 			RequireHumanApproval: []string{"deploy"},
-			MaxNetworkRequests:   &maxNet,
-			MaxToolCalls:         &maxTool,
-			MaxCallsPerMinute:    &maxPerMin,
 		},
 	}
 	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
 
-	var capCount int
-	for _, d := range decisions {
-		if d.Type == "cap" {
-			capCount++
-		}
+	var approval *scrutineerv1alpha1.PolicyDecision
+	for i := range decisions {
+		d := &decisions[i]
 		if d.Target == "github.com" && d.Action != scrutineerv1alpha1.PolicyDecisionAllow {
 			t.Fatalf("allowed domain decision = %+v", d)
 		}
 		if d.Target == "10.0.0.0/8" && d.Action != scrutineerv1alpha1.PolicyDecisionDeny {
 			t.Fatalf("denied cidr decision = %+v", d)
 		}
-	}
-	if capCount != 3 {
-		t.Fatalf("cap decisions = %d", capCount)
-	}
-}
-
-func TestBuildMergeDecisions_argumentRulesSummary(t *testing.T) {
-	resolved := Resolved{
-		Mode: scrutineerv1alpha1.PolicyModeEnforced,
-		Rules: scrutineerv1alpha1.PolicyRules{
-			ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{
-				{Tools: []string{"read_file"}, Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: scrutineerv1alpha1.ConstraintEffectAllow}}},
-				{Tools: []string{"kubectl"}, Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "args[0]", Op: scrutineerv1alpha1.ArgOpIn, Values: []string{"delete"}}}},
-			},
-		},
-	}
-	decisions := BuildMergeDecisions(resolved, time.Unix(0, 0))
-
-	var summary *scrutineerv1alpha1.PolicyDecision
-	for i := range decisions {
-		if decisions[i].Reason == "ArgumentRulesDeclared" {
-			summary = &decisions[i]
+		if d.Target == "deploy" {
+			approval = d
 		}
 	}
-	if summary == nil {
-		t.Fatal("expected ArgumentRulesDeclared decision")
-	}
-	if summary.Rule != "argumentRules" || summary.Target != "2" || summary.Type != "tool" {
-		t.Fatalf("argument-rules decision = %+v", summary)
-	}
-	if summary.AssuranceLevel != scrutineerv1alpha1.EvidenceControllerComputed {
-		t.Fatalf("assurance = %q, want controller", summary.AssuranceLevel)
+	if approval == nil || approval.Rule != "requireHumanApproval" || approval.Action != scrutineerv1alpha1.PolicyDecisionAudit {
+		t.Fatalf("approval decision = %+v", approval)
 	}
 }
 
@@ -142,12 +108,10 @@ func TestNormalizeMode_emptyDefaultsAuditOnly(t *testing.T) {
 }
 
 func TestBuildMergeDecisions_stampsControllerAssurance(t *testing.T) {
-	maxTool := int32(5)
 	resolved := Resolved{
 		Mode: scrutineerv1alpha1.PolicyModeEnforced,
 		Rules: scrutineerv1alpha1.PolicyRules{
-			DeniedTools:  []string{"kubectl-prod"},
-			MaxToolCalls: &maxTool,
+			DeniedDomains: []string{"evil.example"},
 		},
 		Matched: []scrutineerv1alpha1.MatchedPolicyRef{{Kind: "AgentPolicy", Name: "baseline"}},
 	}

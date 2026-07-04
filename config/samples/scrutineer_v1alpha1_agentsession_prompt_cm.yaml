@@ -34,4 +34,3 @@ spec:
     timeoutSeconds: 900
   policy:
     allowedDomains: [github.com, api.github.com]
-    allowedTools: [shell, github]

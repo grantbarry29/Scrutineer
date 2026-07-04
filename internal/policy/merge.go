@@ -11,62 +11,18 @@ You may obtain a copy of the License at
 package policy
 
 import (
-	"fmt"
-
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
-// MergeRules combines base and overlay policy rules. List fields are unioned in order;
-// numeric caps take the minimum non-nil value (strictest wins). Argument rules are
-// concatenated (constraints only tighten; see docs/design/phase-3-tool-argument-constraints.md).
+// MergeRules combines base and overlay policy rules. List fields are unioned in order.
 func MergeRules(base, overlay scrutineerv1alpha1.PolicyRules) scrutineerv1alpha1.PolicyRules {
 	return scrutineerv1alpha1.PolicyRules{
 		AllowedDomains:       unionStrings(base.AllowedDomains, overlay.AllowedDomains),
 		DeniedDomains:        unionStrings(base.DeniedDomains, overlay.DeniedDomains),
 		AllowedCIDRs:         unionStrings(base.AllowedCIDRs, overlay.AllowedCIDRs),
 		DeniedCIDRs:          unionStrings(base.DeniedCIDRs, overlay.DeniedCIDRs),
-		AllowedTools:         unionStrings(base.AllowedTools, overlay.AllowedTools),
-		DeniedTools:          unionStrings(base.DeniedTools, overlay.DeniedTools),
 		RequireHumanApproval: unionStrings(base.RequireHumanApproval, overlay.RequireHumanApproval),
-		MaxNetworkRequests:   minInt32Ptr(base.MaxNetworkRequests, overlay.MaxNetworkRequests),
-		MaxToolCalls:         minInt32Ptr(base.MaxToolCalls, overlay.MaxToolCalls),
-		MaxCallsPerMinute:    minInt32Ptr(base.MaxCallsPerMinute, overlay.MaxCallsPerMinute),
-		AllowedPaths:         unionStrings(base.AllowedPaths, overlay.AllowedPaths),
-		DeniedPaths:          unionStrings(base.DeniedPaths, overlay.DeniedPaths),
-		MaxWorkspaceBytes:    minInt64Ptr(base.MaxWorkspaceBytes, overlay.MaxWorkspaceBytes),
-		ArgumentRules:        concatArgumentRules(base.ArgumentRules, overlay.ArgumentRules),
 	}
-}
-
-// concatArgumentRules appends overlay rules after base rules, dropping structurally
-// identical duplicates so the same rule referenced by multiple layers appears once.
-// Order is preserved (base first); argument rules can only tighten, so concatenation is
-// always safe.
-func concatArgumentRules(base, overlay []scrutineerv1alpha1.ToolArgumentRule) []scrutineerv1alpha1.ToolArgumentRule {
-	if len(base) == 0 && len(overlay) == 0 {
-		return nil
-	}
-	out := make([]scrutineerv1alpha1.ToolArgumentRule, 0, len(base)+len(overlay))
-	seen := make(map[string]struct{}, len(base)+len(overlay))
-	for _, rule := range append(append([]scrutineerv1alpha1.ToolArgumentRule(nil), base...), overlay...) {
-		key := argumentRuleKey(rule)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, rule)
-	}
-	return out
-}
-
-// argumentRuleKey is a stable structural key for dedupe. Order within a rule is
-// significant (constraints are evaluated in order), so it is preserved in the key.
-func argumentRuleKey(rule scrutineerv1alpha1.ToolArgumentRule) string {
-	key := "s=" + rule.Server + ";t=" + fmt.Sprintf("%q", rule.Tools)
-	for _, c := range rule.Constraints {
-		key += fmt.Sprintf(";c=%s|%s|%q|%s", c.Arg, c.Op, c.Values, c.Effect)
-	}
-	return key
 }
 
 // StrictestMode returns the most restrictive mode across inputs (enforced > dry-run > audit-only).
@@ -123,34 +79,4 @@ func unionStrings(a, b []string) []string {
 	add(a)
 	add(b)
 	return out
-}
-
-func minInt32Ptr(a, b *int32) *int32 {
-	switch {
-	case a == nil:
-		return b
-	case b == nil:
-		return a
-	default:
-		v := *a
-		if *b < v {
-			v = *b
-		}
-		return &v
-	}
-}
-
-func minInt64Ptr(a, b *int64) *int64 {
-	switch {
-	case a == nil:
-		return b
-	case b == nil:
-		return a
-	default:
-		v := *a
-		if *b < v {
-			v = *b
-		}
-		return &v
-	}
 }

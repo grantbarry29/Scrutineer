@@ -18,19 +18,19 @@ import (
 
 func TestMergeRules_unionsLists(t *testing.T) {
 	base := scrutineerv1alpha1.PolicyRules{
-		AllowedDomains: []string{"a.com"},
-		DeniedTools:    []string{"kubectl"},
+		AllowedDomains:       []string{"a.com"},
+		RequireHumanApproval: []string{"deploy"},
 	}
 	overlay := scrutineerv1alpha1.PolicyRules{
-		AllowedDomains: []string{"b.com", "a.com"},
-		DeniedTools:    []string{"deploy"},
+		AllowedDomains:       []string{"b.com", "a.com"},
+		RequireHumanApproval: []string{"wire-transfer"},
 	}
 	got := MergeRules(base, overlay)
 	if len(got.AllowedDomains) != 2 || got.AllowedDomains[0] != "a.com" || got.AllowedDomains[1] != "b.com" {
 		t.Fatalf("AllowedDomains = %v, want [a.com b.com]", got.AllowedDomains)
 	}
-	if len(got.DeniedTools) != 2 {
-		t.Fatalf("DeniedTools = %v", got.DeniedTools)
+	if len(got.RequireHumanApproval) != 2 {
+		t.Fatalf("RequireHumanApproval = %v", got.RequireHumanApproval)
 	}
 }
 
@@ -67,109 +67,6 @@ func TestUnionStrings_doesNotMutateInputs(t *testing.T) {
 	}
 }
 
-func TestMergeRules_minCaps(t *testing.T) {
-	a := int32(100)
-	b := int32(25)
-	got := MergeRules(
-		scrutineerv1alpha1.PolicyRules{MaxToolCalls: &a},
-		scrutineerv1alpha1.PolicyRules{MaxToolCalls: &b},
-	)
-	if got.MaxToolCalls == nil || *got.MaxToolCalls != 25 {
-		t.Fatalf("MaxToolCalls = %v, want 25", got.MaxToolCalls)
-	}
-}
-
-func TestMergeRules_minMaxCallsPerMinute(t *testing.T) {
-	a := int32(60)
-	b := int32(10)
-	got := MergeRules(
-		scrutineerv1alpha1.PolicyRules{MaxCallsPerMinute: &a},
-		scrutineerv1alpha1.PolicyRules{MaxCallsPerMinute: &b},
-	)
-	if got.MaxCallsPerMinute == nil || *got.MaxCallsPerMinute != 10 {
-		t.Fatalf("MaxCallsPerMinute = %v, want 10", got.MaxCallsPerMinute)
-	}
-}
-
-func TestMergeRules_unionsPaths(t *testing.T) {
-	got := MergeRules(
-		scrutineerv1alpha1.PolicyRules{AllowedPaths: []string{"/workspace/**"}},
-		scrutineerv1alpha1.PolicyRules{DeniedPaths: []string{"/etc/**"}},
-	)
-	if len(got.AllowedPaths) != 1 || got.AllowedPaths[0] != "/workspace/**" {
-		t.Fatalf("AllowedPaths = %v", got.AllowedPaths)
-	}
-	if len(got.DeniedPaths) != 1 || got.DeniedPaths[0] != "/etc/**" {
-		t.Fatalf("DeniedPaths = %v", got.DeniedPaths)
-	}
-}
-
-func TestMergeRules_minWorkspaceBytes(t *testing.T) {
-	a := int64(1_000_000_000)
-	b := int64(500_000_000)
-	got := MergeRules(
-		scrutineerv1alpha1.PolicyRules{MaxWorkspaceBytes: &a},
-		scrutineerv1alpha1.PolicyRules{MaxWorkspaceBytes: &b},
-	)
-	if got.MaxWorkspaceBytes == nil || *got.MaxWorkspaceBytes != b {
-		t.Fatalf("MaxWorkspaceBytes = %v, want 500000000", got.MaxWorkspaceBytes)
-	}
-}
-
-func TestMergeRules_concatenatesArgumentRules(t *testing.T) {
-	base := scrutineerv1alpha1.PolicyRules{
-		ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
-			Tools:       []string{"read_file"},
-			Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/workspace/"}, Effect: scrutineerv1alpha1.ConstraintEffectAllow}},
-		}},
-	}
-	overlay := scrutineerv1alpha1.PolicyRules{
-		ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{{
-			Tools:       []string{"kubectl"},
-			Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "args[0]", Op: scrutineerv1alpha1.ArgOpIn, Values: []string{"delete"}}},
-		}},
-	}
-	got := MergeRules(base, overlay)
-	if len(got.ArgumentRules) != 2 {
-		t.Fatalf("ArgumentRules = %d rules, want 2: %+v", len(got.ArgumentRules), got.ArgumentRules)
-	}
-	if got.ArgumentRules[0].Tools[0] != "read_file" || got.ArgumentRules[1].Tools[0] != "kubectl" {
-		t.Fatalf("order not preserved: %+v", got.ArgumentRules)
-	}
-}
-
-func TestMergeRules_dedupesIdenticalArgumentRules(t *testing.T) {
-	rule := scrutineerv1alpha1.ToolArgumentRule{
-		Tools:       []string{"read_file"},
-		Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpMatches, Values: []string{"\\.\\."}, Effect: scrutineerv1alpha1.ConstraintEffectDeny}},
-	}
-	got := MergeRules(
-		scrutineerv1alpha1.PolicyRules{ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{rule}},
-		scrutineerv1alpha1.PolicyRules{ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{rule}},
-	)
-	if len(got.ArgumentRules) != 1 {
-		t.Fatalf("identical rule not deduped: %+v", got.ArgumentRules)
-	}
-}
-
-func TestMergeRules_distinguishesArgumentRulesByEffect(t *testing.T) {
-	allow := scrutineerv1alpha1.ToolArgumentRule{
-		Tools:       []string{"read_file"},
-		Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/x"}, Effect: scrutineerv1alpha1.ConstraintEffectAllow}},
-	}
-	deny := scrutineerv1alpha1.ToolArgumentRule{
-		Tools:       []string{"read_file"},
-		Constraints: []scrutineerv1alpha1.ArgumentConstraint{{Arg: "path", Op: scrutineerv1alpha1.ArgOpHasPrefix, Values: []string{"/x"}, Effect: scrutineerv1alpha1.ConstraintEffectDeny}},
-	}
-	got := MergeRules(
-		scrutineerv1alpha1.PolicyRules{ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{allow}},
-		scrutineerv1alpha1.PolicyRules{ArgumentRules: []scrutineerv1alpha1.ToolArgumentRule{deny}},
-	)
-	if len(got.ArgumentRules) != 2 {
-		t.Fatalf("effect not part of identity: %+v", got.ArgumentRules)
-	}
-}
-
 func TestStrictestMode(t *testing.T) {
 	got := StrictestMode(
 		scrutineerv1alpha1.PolicyModeAuditOnly,
@@ -183,14 +80,14 @@ func TestStrictestMode(t *testing.T) {
 
 func TestResolve_inlineOverrides(t *testing.T) {
 	layers := []Layer{{
-		Rules: scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"kubectl"}},
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
 		Mode:  scrutineerv1alpha1.PolicyModeAuditOnly,
 		Match: &scrutineerv1alpha1.MatchedPolicyRef{Kind: "AgentPolicy", Name: "baseline"},
 	}}
-	inline := scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"deploy"}}
+	inline := scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"tracker.example"}}
 	resolved := Resolve(layers, inline)
-	if len(resolved.Rules.DeniedTools) != 2 {
-		t.Fatalf("DeniedTools = %v", resolved.Rules.DeniedTools)
+	if len(resolved.Rules.DeniedDomains) != 2 {
+		t.Fatalf("DeniedDomains = %v", resolved.Rules.DeniedDomains)
 	}
 	if resolved.Mode != scrutineerv1alpha1.PolicyModeAuditOnly {
 		t.Fatalf("mode = %q", resolved.Mode)

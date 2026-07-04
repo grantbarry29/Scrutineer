@@ -100,16 +100,6 @@ func validateSpec(session *scrutineerv1alpha1.AgentSession) error {
 		return fmt.Errorf("spec.runtime.timeoutSeconds must be >= 1")
 	}
 
-	if spec.Policy.MaxNetworkRequests != nil && *spec.Policy.MaxNetworkRequests < 0 {
-		return fmt.Errorf("spec.policy.maxNetworkRequests must be >= 0")
-	}
-	if spec.Policy.MaxToolCalls != nil && *spec.Policy.MaxToolCalls < 0 {
-		return fmt.Errorf("spec.policy.maxToolCalls must be >= 0")
-	}
-	if spec.Policy.MaxCallsPerMinute != nil && *spec.Policy.MaxCallsPerMinute < 0 {
-		return fmt.Errorf("spec.policy.maxCallsPerMinute must be >= 0")
-	}
-
 	return nil
 }
 

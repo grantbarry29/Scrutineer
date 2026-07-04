@@ -36,7 +36,7 @@ Always distinguish these — conflating them is the most common design error:
 
 ```mermaid
 flowchart LR
-    declared["DECLARED\nAgentPolicy / ToolPolicy / spec.policy"]
+    declared["DECLARED\nAgentPolicy / spec.policy"]
     propagated["PROPAGATED\nenv vars, Envoy config, NetworkPolicy"]
     observed["OBSERVED\nstatus.policyDecisions / violations"]
     enforced["ENFORCED\ndata-plane blocks the action"]
@@ -62,7 +62,7 @@ flowchart TB
 
     subgraph k8s["Kubernetes cluster"]
         subgraph cp["Scrutineer control plane"]
-            crds["CRDs: AgentSession, AgentPolicy,\nToolPolicy, RuntimeProfile"]
+            crds["CRDs: AgentSession, AgentPolicy,\nRuntimeProfile, ApprovalPolicy/Request"]
             ctrl["Scrutineer controller manager\n(reconcilers + reporter endpoint)"]
         end
 
@@ -123,10 +123,6 @@ classDiagram
       spec.rules_PolicyRules
       spec.mode
     }
-    class ToolPolicy {
-      spec.rules_tools_MCP_caps
-      spec.mode
-    }
     class RuntimeProfile {
       spec.container_security
       spec.pod_security_runtimeClassName
@@ -135,22 +131,17 @@ classDiagram
     class PolicyRules {
       allowedDomains_deniedDomains
       allowedCIDRs_deniedCIDRs
-      allowedTools_deniedTools_inert
-      maxCallsPerMinute
       requireHumanApproval
-      allowedPaths_deniedPaths_inert
     }
     AgentSession "1" --> "0..*" AgentPolicy : policyRefs
-    AgentSession "1" --> "0..*" ToolPolicy : policyRefs
     AgentSession "1" --> "0..1" RuntimeProfile : runtimeProfileRef
     AgentPolicy --> PolicyRules
-    ToolPolicy --> PolicyRules
     AgentSession --> PolicyRules : spec.policy inline
 ```
 
 **Reference rules (invariant):** all refs (`policyRefs`, `runtimeProfileRef`, `promptConfigMapRef`) are **same-namespace only** in the MVP. Cross-namespace references are a deliberate future feature, not an oversight.
 
-`PolicyRules` is the **shared** policy shape used by AgentPolicy, ToolPolicy, and inline `spec.policy`, so merge logic is uniform. The tool/path/argument rule fields are **inert declared data** post-pivot — merged and recorded, but with no enforcement backend until the tools/arena chokepoints land (see [`untamperable-pivot.md`](untamperable-pivot.md) §5–6).
+`PolicyRules` is the **shared** policy shape used by AgentPolicy and inline `spec.policy`, so merge logic is uniform. Post-pivot it carries only fields with an enforcement or control-plane backend: network rules (Envoy/NetworkPolicy) and `requireHumanApproval` (controller approval gate). The tool/file rule fields and caps — and the `ToolPolicy` CRD — were removed per doctrine #1 (#75, resolving the #71 deviation); they return, likely reshaped, with the tools/arena chokepoints.
 
 ---
 
@@ -229,21 +220,20 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    refs["spec.policyRefs[]\n(AgentPolicy, ToolPolicy, in order)"] --> merge
+    refs["spec.policyRefs[]\n(AgentPolicy, in order)"] --> merge
     inline["spec.policy (inline overrides)"] --> merge
     merge["LoadPolicyLayers + merge\n(union allow/deny, min caps,\nstrictest mode)"] --> eff["status.effectivePolicy\n+ status.matchedPolicies\n+ merge-time policyDecisions"]
 ```
 
 - **Merge order:** referenced policies in listed order, then inline `spec.policy` overrides.
 - **Mode:** strictest of all contributors wins (`audit-only` < `dry-run` < `enforced`).
-- **Caps** (e.g. `maxCallsPerMinute`): minimum across contributors.
-- Every merge emits structured `PolicyDecision` entries with `phase=merge`.
+- List fields are unioned; every merge emits structured `PolicyDecision` entries with `phase=merge`.
 
 ### 6.2 Propagation
 
 Effective policy reaches the runtime via:
 
-- **Env vars** on the agent container (`AGENT_POLICY_MODE`, `AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE`, etc.) — a *propagation hook*, not enforcement.
+- **Env vars** on the agent container (`AGENT_POLICY_MODE`, `AGENT_POLICY_DENIED_DOMAINS`, etc.) — a *propagation hook*, not enforcement.
 - **NetworkPolicies** — the CIDR egress baseline, plus (when the `envoy` enforcement type is enabled) the agent-pod **routing lock** and the Envoy-pod **backstop**.
 - **Explicit-proxy env** (`HTTP_PROXY`/`HTTPS_PROXY` → the session's Envoy ClusterIP) and the **rendered Envoy RBAC config** (effective FQDN policy → ConfigMap) when a RuntimeProfile enables the `envoy` type.
 
@@ -300,7 +290,7 @@ Detailed designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-ar
 
 | Path | Responsibility |
 |------|----------------|
-| `api/v1alpha1/` | CRD Go types + kubebuilder markers (`agentsession_types.go`, `agentpolicy_types.go`, `toolpolicy_types.go`, `runtimeprofile_types.go`, `policy_types.go`). Source of truth for generated CRDs. |
+| `api/v1alpha1/` | CRD Go types + kubebuilder markers (`agentsession_types.go`, `agentpolicy_types.go`, `runtimeprofile_types.go`, `policy_types.go`, approval types). Source of truth for generated CRDs. |
 | `internal/controller/agentsession/` | The reconciler and its helpers: `reconciler.go`, `status.go` (patch strategy), `runtime_backend.go` (backend interface + registry + `kubernetes-job`), `backend_pod.go` (`kubernetes-pod`), `policy.go`/`policy_decisions.go`, `violations.go`, `networkpolicy.go`, `egress_envoy.go` (per-session proxy provisioning), `lock_gate.go` (verified-or-refused), `runtimeprofile*.go`, `pod*.go`, watches. |
 | `internal/controller/job/` | Pure Job/Pod template construction: `builder.go`, `sidecars.go` (envoy proxy-env wiring), `constants.go` (labels). No cluster I/O. |
 | `internal/policy/` | Policy layer loading, merge/resolve, status application. Backend-neutral. |

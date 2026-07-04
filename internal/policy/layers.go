@@ -28,26 +28,11 @@ func LoadPolicyLayers(ctx context.Context, c client.Reader, session *scrutineerv
 		if err := validatePolicyRef(ref, i); err != nil {
 			return nil, err
 		}
-		kind := ref.Kind
-		if kind == "" {
-			kind = "AgentPolicy"
+		layer, err := loadAgentPolicy(ctx, c, session.Namespace, ref.Name)
+		if err != nil {
+			return nil, err
 		}
-		switch kind {
-		case "AgentPolicy":
-			layer, err := loadAgentPolicy(ctx, c, session.Namespace, ref.Name)
-			if err != nil {
-				return nil, err
-			}
-			layers = append(layers, layer)
-		case "ToolPolicy":
-			layer, err := loadToolPolicy(ctx, c, session.Namespace, ref.Name)
-			if err != nil {
-				return nil, err
-			}
-			layers = append(layers, layer)
-		default:
-			return nil, fmt.Errorf("spec.policyRefs[%d].kind %q is not supported (allowed: AgentPolicy, ToolPolicy)", i, kind)
-		}
+		layers = append(layers, layer)
 	}
 	return layers, nil
 }
@@ -57,10 +42,10 @@ func validatePolicyRef(ref scrutineerv1alpha1.PolicyRef, index int) error {
 		return fmt.Errorf("spec.policyRefs[%d].name is required", index)
 	}
 	switch ref.Kind {
-	case "", "AgentPolicy", "ToolPolicy":
+	case "", "AgentPolicy":
 		return nil
 	default:
-		return fmt.Errorf("spec.policyRefs[%d].kind %q is not supported (allowed: AgentPolicy, ToolPolicy)", index, ref.Kind)
+		return fmt.Errorf("spec.policyRefs[%d].kind %q is not supported (allowed: AgentPolicy)", index, ref.Kind)
 	}
 }
 
@@ -82,28 +67,6 @@ func loadAgentPolicy(ctx context.Context, c client.Reader, namespace, name strin
 			UID:        string(ap.UID),
 			Generation: ap.Generation,
 			Mode:       NormalizeMode(ap.Spec.Mode),
-		},
-	}, nil
-}
-
-func loadToolPolicy(ctx context.Context, c client.Reader, namespace, name string) (Layer, error) {
-	var tp scrutineerv1alpha1.ToolPolicy
-	key := client.ObjectKey{Namespace: namespace, Name: name}
-	if err := c.Get(ctx, key, &tp); err != nil {
-		if apierrors.IsNotFound(err) {
-			return Layer{}, fmt.Errorf("spec.policyRefs: ToolPolicy %q not found in namespace %q", name, namespace)
-		}
-		return Layer{}, fmt.Errorf("spec.policyRefs: get ToolPolicy %q: %w", name, err)
-	}
-	return Layer{
-		Rules: tp.Spec.ToolPolicyRules(),
-		Mode:  NormalizeMode(tp.Spec.Mode),
-		Match: &scrutineerv1alpha1.MatchedPolicyRef{
-			Kind:       "ToolPolicy",
-			Name:       tp.Name,
-			UID:        string(tp.UID),
-			Generation: tp.Generation,
-			Mode:       NormalizeMode(tp.Spec.Mode),
 		},
 	}, nil
 }

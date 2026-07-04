@@ -1,7 +1,6 @@
 resources:
 - bases/scrutineer.sh_agentsessions.yaml
 - bases/scrutineer.sh_agentpolicies.yaml
-- bases/scrutineer.sh_toolpolicies.yaml
 - bases/scrutineer.sh_runtimeprofiles.yaml
 - bases/scrutineer.sh_approvalpolicies.yaml
 - bases/scrutineer.sh_approvalrequests.yaml

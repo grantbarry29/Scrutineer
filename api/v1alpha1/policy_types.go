@@ -96,7 +96,7 @@ type PolicyDecision struct {
 	// +optional
 	PolicyRef *MatchedPolicyRef `json:"policyRef,omitempty"`
 
-	// Rule is the policy rule field that produced the decision (e.g. deniedTools).
+	// Rule is the policy rule field that produced the decision (e.g. deniedDomains).
 	// +optional
 	Rule string `json:"rule,omitempty"`
 
@@ -140,59 +140,17 @@ type PolicyRules struct {
 	// +optional
 	DeniedCIDRs []string `json:"deniedCIDRs,omitempty"`
 
-	// AllowedTools lists tool identifiers the agent is permitted to invoke.
-	// +optional
-	AllowedTools []string `json:"allowedTools,omitempty"`
-
-	// DeniedTools lists tool identifiers the agent must not invoke.
-	// +optional
-	DeniedTools []string `json:"deniedTools,omitempty"`
-
 	// RequireHumanApproval lists action types that require human approval before execution.
 	// +optional
 	RequireHumanApproval []string `json:"requireHumanApproval,omitempty"`
-
-	// MaxNetworkRequests caps the total number of network requests the agent may issue.
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	MaxNetworkRequests *int32 `json:"maxNetworkRequests,omitempty"`
-
-	// MaxToolCalls caps the total number of tool calls the agent may issue.
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	MaxToolCalls *int32 `json:"maxToolCalls,omitempty"`
-
-	// MaxCallsPerMinute caps tool invocations per minute (declared and propagated; enforcement is Phase 3).
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	MaxCallsPerMinute *int32 `json:"maxCallsPerMinute,omitempty"`
-
-	// ArgumentRules constrain tool calls by their arguments, applied after name-level tool
-	// allow/deny. Merged by concatenation across layers (constraints only tighten).
-	// Declared data only: no enforcement backend until the out-of-pod tools chokepoint
-	// lands. See docs/design/tools-pod-chokepoint.md.
-	// +optional
-	ArgumentRules []ToolArgumentRule `json:"argumentRules,omitempty"`
-
-	// AllowedPaths is a path/glob allowlist for file and workspace access (e.g. /workspace/**).
-	// +optional
-	AllowedPaths []string `json:"allowedPaths,omitempty"`
-
-	// DeniedPaths is a path/glob denylist for file and workspace access (e.g. /etc/**).
-	// +optional
-	DeniedPaths []string `json:"deniedPaths,omitempty"`
-
-	// MaxWorkspaceBytes caps total workspace storage when enforced by the future arena
-	// workspace (docs/design/arena-workspace.md).
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	MaxWorkspaceBytes *int64 `json:"maxWorkspaceBytes,omitempty"`
 }
 
 // PolicyRef references a reusable policy CRD in the same namespace as the AgentSession.
 type PolicyRef struct {
-	// Kind is the policy resource kind (AgentPolicy or ToolPolicy).
-	// +kubebuilder:validation:Enum=AgentPolicy;ToolPolicy
+	// Kind is the policy resource kind. AgentPolicy is the only kind today; tool/file
+	// policy kinds return with their out-of-pod chokepoints (the untamperable pivot,
+	// docs/design/untamperable-pivot.md).
+	// +kubebuilder:validation:Enum=AgentPolicy
 	// +kubebuilder:default=AgentPolicy
 	// +optional
 	Kind string `json:"kind,omitempty"`

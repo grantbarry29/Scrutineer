@@ -57,7 +57,7 @@ lives in [`docs/design/`](docs/design/) and component `README.md`s.
 
 **Control plane (the manager — [`cmd/main.go`](cmd/main.go)):**
 
-1. Defines namespaced CRDs (`scrutineer.sh/v1alpha1`): `AgentSession`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`, `ApprovalRequest`.
+1. Defines namespaced CRDs (`scrutineer.sh/v1alpha1`): `AgentSession`, `AgentPolicy`, `RuntimeProfile`, `ApprovalPolicy`, `ApprovalRequest`.
 2. Reconciles each `AgentSession` into a runtime object named `scrutineer-session-<name>`, owned by the session, behind a backend-neutral `runtimeBackend` interface: a `batch/v1` Job (`kubernetes-job`, default) or a bare `v1` Pod (`kubernetes-pod`). `status.runtimeRef` records which object was created.
 3. Merges reusable policies (`spec.policyRefs`) with inline `spec.policy` overrides → `status.effectivePolicy`, `status.policyDecisions`, and `AGENT_POLICY_*` env vars.
 4. Applies optional `RuntimeProfile` hardening and enables the data-plane egress backend via `spec.runtimeProfileRef` / `spec.enforcement[]` (the `envoy` type provisions a per-session **out-of-pod** egress proxy and locks the agent pod's egress to it).
@@ -81,9 +81,10 @@ See [AgentSession controller reference](#agentsession-controller-reference) for 
   [`docs/design/untamperable-pivot.md`](docs/design/untamperable-pivot.md)); the
   cooperative in-pod tier was removed rather than presented as governance. Today that
   means **egress is enforced and `observed`**
-  (see [Egress enforcement](#egress-enforcement-guarantees--assumptions)), while the
-  tool/path policy fields are inert declared data awaiting their out-of-pod chokepoints
-  (tools pod, arena workspace — deferred designs in [`docs/design/`](docs/design/)).
+  (see [Egress enforcement](#egress-enforcement-guarantees--assumptions)); there is
+  **no tool/file policy surface** — those fields were removed with the cooperative tier
+  and return with their out-of-pod chokepoints (tools pod, arena workspace — deferred
+  designs in [`docs/design/`](docs/design/), decision #75).
 - **Two in-cluster orchestrators.** `runtime.orchestrator` accepts `kubernetes-job`
   (default) and `kubernetes-pod`; external backends (`tekton` / `argo` / `temporal` /
   `external`) remain reserved.
@@ -186,7 +187,7 @@ a generic workflow task. The spec captures four things:
 | `model`    | Which provider/model the agent should call                            |
 | `runtime`  | Where/how it should execute (orchestrator, image, command, resources) |
 | `policy`   | Inline governance overrides (domains, tools, approvals, quotas)     |
-| `policyRefs` | Reusable `AgentPolicy` / `ToolPolicy` objects (same namespace)    |
+| `policyRefs` | Reusable `AgentPolicy` objects (same namespace)                   |
 | `workspace`| Per-session workspace volume (ephemeral for MVP)                      |
 | `outputs`  | Whether to retain logs/artifacts                                      |
 | `cancelRequested` | When `true`, stop the owned Job and reach terminal `Cancelled` |
@@ -223,7 +224,7 @@ External references resolve in the **same namespace** as the `AgentSession`:
 | Ref | Kind | Namespace behavior |
 |-----|------|-------------------|
 | `spec.task.promptConfigMapRef` | ConfigMap | Same namespace as session |
-| `spec.policyRefs[]` | AgentPolicy, ToolPolicy | Same namespace as session |
+| `spec.policyRefs[]` | AgentPolicy | Same namespace as session |
 | `spec.runtimeProfileRef` | RuntimeProfile | Same namespace as session |
 
 Cross-namespace refs are not supported in the MVP. Future CRDs may add an explicit `namespace` field on refs.
@@ -276,18 +277,16 @@ kubectl apply -f config/samples/scrutineer_v1alpha1_runtimeprofile_enforcement.y
 kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_runtimeprofile_enforcement.yaml
 ```
 
-### Reusable policy (`AgentPolicy` + `ToolPolicy`)
+### Reusable policy (`AgentPolicy`)
 
 Platform teams can publish baseline governance once; sessions reference policies and add inline overrides.
 
 **Merge order** (implemented in [`internal/policy/`](internal/policy/)):
 
-1. `spec.policyRefs` in list order (recommended: `AgentPolicy` entries, then `ToolPolicy`)
+1. `spec.policyRefs` in list order
 2. `spec.policy` inline overrides last (wins on conflict)
-3. List fields are unioned; numeric caps take the **minimum** (strictest); `argumentRules` are **concatenated** (constraints only tighten)
+3. List fields are unioned
 4. Effective **mode** = strictest across matched policies (`enforced` > `dry-run` > `audit-only`)
-
-**Tool argument rules (`ToolPolicy.spec.argumentRules`):** constrain a tool call by its **arguments**, not just its name — applied only to calls that already pass `allowedTools`/`deniedTools`. Each rule binds tools (`"*"` = any) to `constraints` (dotted arg path + operator + `Allow`/`Deny` effect); a `Deny` match blocks, `Allow` constraints act as an allowlist. **Post-pivot these are inert declared data** — merged into `status.effectivePolicy` and recorded, but with no enforcement backend until the tools-pod chokepoint lands ([`docs/design/tools-pod-chokepoint.md`](docs/design/tools-pod-chokepoint.md)). See `config/samples/scrutineer_v1alpha1_toolpolicy.yaml`.
 
 **Status written on reconcile:**
 
@@ -297,11 +296,11 @@ Platform teams can publish baseline governance once; sessions reference policies
 | `status.matchedPolicies` | Which policy CRDs contributed |
 | `status.policyDecisions` | Bounded merge-time audit log (max 64) |
 
-**Propagation today:** `AGENT_POLICY_*` and `AGENT_POLICY_MODE` env vars on the agent container (a propagation hook, not enforcement). Network FQDN rules are **enforced** at the per-session out-of-pod Envoy proxy when the `envoy` backend is enabled; `audit-only` / `dry-run` / `enforced` modes govern whether a matched rule blocks or only records. Tool and path rules are inert declared data pending their chokepoints.
+**Propagation today:** `AGENT_POLICY_*` and `AGENT_POLICY_MODE` env vars on the agent container (a propagation hook, not enforcement). Network FQDN rules are **enforced** at the per-session out-of-pod Envoy proxy when the `envoy` backend is enabled; `audit-only` / `dry-run` / `enforced` modes govern whether a matched rule blocks or only records. There is no tool/file policy surface until the tools/arena chokepoints land (#75 clean break).
 
 **Policy change behavior:**
 
-- Updating a referenced `AgentPolicy` or `ToolPolicy` re-reconciles affected sessions (controller watch).
+- Updating a referenced `AgentPolicy` re-reconciles affected sessions (controller watch).
 - `status.effectivePolicy` updates immediately.
 - If the owned Job has **not** started pods yet (`Active==0`), the controller **replaces** the Job so env vars match.
 - If the Job is **already running**, pod templates are immutable — env inside the pod may be stale; `PolicyPropagated=False` / `PolicyEnvDrift` surfaces the gap.
@@ -312,9 +311,7 @@ Platform teams can publish baseline governance once; sessions reference policies
 kubectl apply -f config/samples/scrutineer_v1alpha1_agentpolicy.yaml
 kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_policy_ref.yaml
 
-kubectl apply -f config/samples/scrutineer_v1alpha1_toolpolicy.yaml
 # prod-agents-baseline must exist for the combined sample:
-kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession_toolpolicy_ref.yaml
 ```
 
 ### Inline sample
@@ -355,11 +352,7 @@ spec:
     # (e.g. "*.github.com" covers api.github.com but not github.com itself).
     allowedDomains: ["github.com", "*.github.com"]
     deniedDomains:  ["dropbox.com", "*.gmail.com"]
-    allowedTools:   [shell, github]
-    deniedTools:    [kubectl-prod]
     requireHumanApproval: [production_deploy, external_write]
-    maxNetworkRequests: 100
-    maxToolCalls: 25
   workspace:
     ephemeral: true
     size: 5Gi
@@ -407,12 +400,7 @@ AGENT_POLICY_ALLOWED_DOMAINS         # comma-separated
 AGENT_POLICY_DENIED_DOMAINS          # comma-separated
 AGENT_POLICY_ALLOWED_CIDRS           # comma-separated
 AGENT_POLICY_DENIED_CIDRS            # comma-separated
-AGENT_POLICY_ALLOWED_TOOLS           # comma-separated
-AGENT_POLICY_DENIED_TOOLS            # comma-separated
 AGENT_POLICY_REQUIRE_HUMAN_APPROVAL  # comma-separated
-AGENT_POLICY_MAX_NETWORK_REQUESTS
-AGENT_POLICY_MAX_TOOL_CALLS
-AGENT_POLICY_MAX_TOOL_CALLS_PER_MINUTE
 AGENT_POLICY_MODE
 ```
 
@@ -434,7 +422,6 @@ The controller lives in [`internal/controller/agentsession/`](internal/controlle
 | Owned `Job` | `Owns(&batchv1.Job{})` | Job status transitions re-queue the parent session |
 | Session `Pod` | `Watches(&corev1.Pod{})` | Job-owned Pods labeled `scrutineer.sh/session=<name>` re-queue the session (faster `podName` / Running updates) |
 | `AgentPolicy` | Secondary watch | Sessions with matching `spec.policyRefs` re-reconcile |
-| `ToolPolicy` | Secondary watch | Sessions with matching `spec.policyRefs` re-reconcile |
 | `RuntimeProfile` | Secondary watch | Sessions with matching `spec.runtimeProfileRef` re-reconcile |
 | `ApprovalRequest` | Secondary watch | Approval grant/deny for a session re-reconciles it (gate resume + per-tool holds) |
 | Timer | `RequeueAfter: 15s` | Backstop poll while Job is in flight (non-terminal sessions) |
@@ -490,8 +477,7 @@ Controller-side checks (in addition to CRD OpenAPI validation):
 | `runtime.image` and `model.provider` / `model.name` non-empty | `InvalidSpec` |
 | `runtime.orchestrator` must be `kubernetes-job` or `kubernetes-pod` | `InvalidSpec` |
 | Temperature in `[0, 2]`; `maxTokens >= 1`; `timeoutSeconds >= 1` | `InvalidSpec` |
-| Policy numeric caps `>= 0` | `InvalidSpec` |
-| `policyRefs[].kind` in `AgentPolicy`, `ToolPolicy` | `InvalidSpec` |
+| `policyRefs[].kind` is `AgentPolicy` | `InvalidSpec` |
 | `runtimeProfileRef` shape | `InvalidSpec` |
 | Workspace `size` parseable as quantity | `InvalidSpec` |
 | Missing ConfigMap / key (task resolution) | `InvalidTask` |
@@ -508,12 +494,12 @@ Controller-side checks (in addition to CRD OpenAPI validation):
 
 Merge order:
 
-1. `spec.policyRefs` in list order (`AgentPolicy`, then `ToolPolicy` recommended)
+1. `spec.policyRefs` in list order
 2. `spec.policy` inline overrides last
-3. List fields union; numeric caps take the **minimum** (strictest)
+3. List fields union
 4. Effective mode = strictest (`enforced` > `dry-run` > `audit-only`)
 
-Written to status each reconcile: `effectivePolicy`, `matchedPolicies`, `policyDecisions` (merge-time + runtime, max 64). Propagated to the Job as `AGENT_POLICY_*` env vars and into the enforcement sidecars, which apply network/tool/file rules and report runtime evidence.
+Written to status each reconcile: `effectivePolicy`, `matchedPolicies`, `policyDecisions` (merge-time + runtime, max 64). Propagated to the Job as `AGENT_POLICY_*` env vars (a hook, not enforcement); FQDN rules are enforced at the session's out-of-pod Envoy proxy, whose egress-reporter reports runtime evidence.
 
 When a referenced policy changes:
 
@@ -823,7 +809,7 @@ After `make install` (or `make dev-up`), check that hand-maintained samples stil
 make verify-samples
 ```
 
-This runs `kubectl apply --dry-run=server` on each `config/samples/scrutineer_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap, AgentPolicy/ToolPolicy/RuntimeProfile refs).
+This runs `kubectl apply --dry-run=server` on each `config/samples/scrutineer_*.yaml` (success, failing, cancel-at-create, prompt ConfigMap, AgentPolicy/RuntimeProfile refs).
 
 ---
 
@@ -833,15 +819,15 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/scrutineer_*.
 |------------|----------|-------|
 | Reconcile to Kubernetes runtime | Yes | `runtime.orchestrator: kubernetes-job` (default) or `kubernetes-pod`, via the `runtimeBackend` interface; `status.runtimeRef` records the object created |
 | Task prompt / ConfigMap prompt | Yes | `spec.task` or `promptConfigMapRef` (same namespace) |
-| `AgentPolicy` / `ToolPolicy` + `spec.policyRefs` | Yes | Same-namespace merge → `status.effectivePolicy`; inline `spec.policy` overrides win |
+| `AgentPolicy` + `spec.policyRefs` | Yes | Same-namespace merge → `status.effectivePolicy`; inline `spec.policy` overrides win |
 | Policy modes (`audit-only` / `dry-run` / `enforced`) | Yes | Strictest mode in status + `AGENT_POLICY_MODE`; **enforced** at the egress chokepoint |
 | `status.policyDecisions` | Yes | Merge-time + runtime decisions (max 64) |
 | Policy / profile change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
 | Enforcement backends (`spec.enforcement`) | Yes | Out-of-pod `envoy` egress proxy with `observed` evidence (the only type; the cooperative in-pod tier was removed in the pivot, #71) |
 | **Network egress enforcement** | Yes | Out-of-pod `envoy` egress proxy + default-deny routing lock, gated verified-or-refused by the lock probe (`observed` evidence) |
-| **Tool-call governance** | Declared only | Tool/argument policy fields are inert pending the tools-pod chokepoint (deferred design) |
-| **File-access governance** | Declared only | Path policy fields are inert pending the arena workspace (deferred design) |
+| **Tool-call governance** | Not yet | No policy surface until the tools-pod chokepoint lands (deferred design; #75 clean break) |
+| **File-access governance** | Not yet | No policy surface until the arena workspace lands (deferred design; #75 clean break) |
 | **Runtime evidence loop** | Yes | [reporter](internal/reporter/) merges `policyDecisions`/`violations`/`usage`/`events` from the egress-reporter |
 | Human approval gate | Yes | `ApprovalPolicy` → `AwaitingApproval` → grant/deny; per-tool runtime holds; authenticated-approver webhook (opt-in) |
 | Observability & audit | Yes | Prometheus metrics, OTel traces, OTLP audit sink |
@@ -898,8 +884,9 @@ design docs are in [`docs/design/`](docs/design/). Highlights of what remains:
 
 ### Shipped CRDs
 
-`AgentSession`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, `ApprovalPolicy`,
-`ApprovalRequest` — all namespace-scoped. A `CredentialProfile` (credential
+`AgentSession`, `AgentPolicy`, `RuntimeProfile`, `ApprovalPolicy`,
+`ApprovalRequest` — all namespace-scoped. (`ToolPolicy` was removed with the
+cooperative tier — it returns, likely reshaped, with the tools-pod chokepoint.) A `CredentialProfile` (credential
 mediation at the tools-pod chokepoint) and `SessionTemplate` (parameterized
 blueprints) remain future work.
 

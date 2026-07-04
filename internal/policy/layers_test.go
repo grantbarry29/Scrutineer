@@ -16,7 +16,7 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
-func TestResolve_agentAndToolPolicyLayers(t *testing.T) {
+func TestResolve_layersAndInline(t *testing.T) {
 	layers := []Layer{
 		{
 			Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"evil.example"}},
@@ -25,14 +25,14 @@ func TestResolve_agentAndToolPolicyLayers(t *testing.T) {
 		},
 		{
 			Rules: scrutineerv1alpha1.PolicyRules{
-				AllowedTools: []string{"shell"},
-				DeniedTools:  []string{"kubectl"},
+				DeniedDomains:        []string{"tracker.example"},
+				RequireHumanApproval: []string{"deploy"},
 			},
 			Mode:  scrutineerv1alpha1.PolicyModeEnforced,
-			Match: &scrutineerv1alpha1.MatchedPolicyRef{Kind: "ToolPolicy", Name: "tools"},
+			Match: &scrutineerv1alpha1.MatchedPolicyRef{Kind: "AgentPolicy", Name: "strict"},
 		},
 	}
-	inline := scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"deploy"}}
+	inline := scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"exfil.example"}}
 	resolved := Resolve(layers, inline)
 
 	if resolved.Mode != scrutineerv1alpha1.PolicyModeEnforced {
@@ -41,10 +41,10 @@ func TestResolve_agentAndToolPolicyLayers(t *testing.T) {
 	if len(resolved.Matched) != 2 {
 		t.Fatalf("matched = %d", len(resolved.Matched))
 	}
-	if len(resolved.Rules.DeniedTools) != 2 {
-		t.Fatalf("denied tools = %v", resolved.Rules.DeniedTools)
-	}
-	if len(resolved.Rules.DeniedDomains) != 1 {
+	if len(resolved.Rules.DeniedDomains) != 3 {
 		t.Fatalf("denied domains = %v", resolved.Rules.DeniedDomains)
+	}
+	if len(resolved.Rules.RequireHumanApproval) != 1 {
+		t.Fatalf("requireHumanApproval = %v", resolved.Rules.RequireHumanApproval)
 	}
 }

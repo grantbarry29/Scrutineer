@@ -31,11 +31,11 @@ func TestSessionReferencesAgentPolicy(t *testing.T) {
 	if sessionReferencesAgentPolicy(session, "missing") {
 		t.Fatal("unexpected match")
 	}
-	session.Spec.PolicyRefs[0].Kind = "ToolPolicy"
+	session.Spec.PolicyRefs[0].Kind = "OtherKind"
 	if sessionReferencesAgentPolicy(session, "baseline") {
-		t.Fatal("ToolPolicy kind should not match AgentPolicy watch")
+		t.Fatal("a different kind should not match the AgentPolicy watch")
 	}
-	if !sessionReferencesPolicy(session, "ToolPolicy", "baseline") {
-		t.Fatal("expected ToolPolicy ref match")
+	if !sessionReferencesPolicy(session, "OtherKind", "baseline") {
+		t.Fatal("expected kind-scoped ref match")
 	}
 }

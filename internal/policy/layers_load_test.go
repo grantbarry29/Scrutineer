@@ -22,7 +22,7 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
-func TestLoadPolicyLayers_agentAndTool(t *testing.T) {
+func TestLoadPolicyLayers_agentPolicies(t *testing.T) {
 	s := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(s)
 	_ = scrutineerv1alpha1.AddToScheme(s)
@@ -36,21 +36,23 @@ func TestLoadPolicyLayers_agentAndTool(t *testing.T) {
 			},
 		},
 	}
-	tp := &scrutineerv1alpha1.ToolPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "tools", Namespace: "ns"},
-		Spec: scrutineerv1alpha1.ToolPolicySpec{
-			Mode:        scrutineerv1alpha1.PolicyModeEnforced,
-			DeniedTools: []string{"kubectl"},
+	strict := &scrutineerv1alpha1.AgentPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "strict", Namespace: "ns"},
+		Spec: scrutineerv1alpha1.AgentPolicySpec{
+			Mode: scrutineerv1alpha1.PolicyModeEnforced,
+			PolicyRules: scrutineerv1alpha1.PolicyRules{
+				DeniedDomains: []string{"tracker.example"},
+			},
 		},
 	}
-	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(ap, tp).Build()
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(ap, strict).Build()
 
 	session := &scrutineerv1alpha1.AgentSession{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "sess"},
 		Spec: scrutineerv1alpha1.AgentSessionSpec{
 			PolicyRefs: []scrutineerv1alpha1.PolicyRef{
 				{Kind: "AgentPolicy", Name: "net"},
-				{Kind: "ToolPolicy", Name: "tools"},
+				{Name: "strict"}, // empty kind defaults to AgentPolicy
 			},
 		},
 	}

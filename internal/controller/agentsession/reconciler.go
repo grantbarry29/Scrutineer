@@ -108,7 +108,6 @@ const requeueAfter = 15 * time.Second
 const deletionRequeueAfter = 2 * time.Second
 
 // +kubebuilder:rbac:groups=scrutineer.sh,resources=agentpolicies,verbs=get;list;watch
-// +kubebuilder:rbac:groups=scrutineer.sh,resources=toolpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=scrutineer.sh,resources=runtimeprofiles,verbs=get;list;watch
 // +kubebuilder:rbac:groups=scrutineer.sh,resources=approvalpolicies,verbs=get;list;watch
 // ApprovalRequests are created+mutated by the controller (owner-ref GC handles deletion, so no delete verb).
@@ -641,10 +640,6 @@ func (r *AgentSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&scrutineerv1alpha1.AgentPolicy{},
 			handler.EnqueueRequestsFromMapFunc(r.mapAgentPolicyToSessions),
-		).
-		Watches(
-			&scrutineerv1alpha1.ToolPolicy{},
-			handler.EnqueueRequestsFromMapFunc(r.mapToolPolicyToSessions),
 		).
 		Watches(
 			&scrutineerv1alpha1.RuntimeProfile{},

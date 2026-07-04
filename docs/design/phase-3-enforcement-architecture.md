@@ -143,8 +143,7 @@ DNS/egress proxy prototype, and a file/workspace policy design. All of it was
 cooperative — it shared the agent's pod and trust domain — and was **removed** in the
 untamperable pivot ([`untamperable-pivot.md`](untamperable-pivot.md) §5). The original
 slice write-ups and their design docs live in git history (deleted in #74). Surviving
-descendants: the mode semantics and evidence contract (unchanged), the tool/argument and
-path policy schema (inert in `api/v1alpha1/policy_types.go`), and the successor designs
+descendants: the mode semantics and evidence contract (unchanged) and the successor designs
 ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)).
 
 ## Phase 3b — Runtime evidence loop (critical path)

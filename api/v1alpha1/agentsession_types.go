@@ -204,7 +204,7 @@ type AgentSessionSpec struct {
 
 	// PolicyRefs lists reusable policies to merge before spec.policy overrides.
 	// Refs are resolved in order within the same namespace as the AgentSession.
-	// Recommended order: AgentPolicy entries, then ToolPolicy, then spec.policy inline overrides.
+	// Referenced policies merge in list order; spec.policy inline overrides apply last.
 	// +optional
 	PolicyRefs []PolicyRef `json:"policyRefs,omitempty"`
 

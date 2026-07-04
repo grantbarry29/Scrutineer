@@ -316,9 +316,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				Spec: scrutineerv1alpha1.AgentPolicySpec{
 					Mode: scrutineerv1alpha1.PolicyModeDryRun,
 					PolicyRules: scrutineerv1alpha1.PolicyRules{
-						DeniedDomains: []string{"dropbox.com"},
-						DeniedTools:   []string{"kubectl-prod"},
-						AllowedTools:  []string{"shell"},
+						DeniedDomains: []string{"dropbox.com", "tracker.example"},
 					},
 				},
 			}
@@ -332,7 +330,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			session.Spec.Policy = scrutineerv1alpha1.InlinePolicySpec{
 				PolicyRules: scrutineerv1alpha1.PolicyRules{
 					AllowedDomains: []string{"github.com"},
-					DeniedTools:    []string{"deploy"},
+					DeniedDomains:  []string{"exfil.example"},
 				},
 			}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
@@ -345,29 +343,28 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(got.Status.EffectivePolicy).NotTo(BeNil())
 			Expect(got.Status.EffectivePolicy.Mode).To(Equal(scrutineerv1alpha1.PolicyModeDryRun))
 			Expect(got.Status.EffectivePolicy.AllowedDomains).To(ContainElements("github.com"))
-			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElements("dropbox.com"))
-			Expect(got.Status.EffectivePolicy.DeniedTools).To(ContainElements("kubectl-prod", "deploy"))
+			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElements("dropbox.com", "exfil.example"))
 			Expect(got.Status.MatchedPolicies).To(HaveLen(1))
 			Expect(got.Status.MatchedPolicies[0].Name).To(Equal("baseline"))
 
 			Expect(got.Status.PolicyDecisions).NotTo(BeEmpty())
-			var matchedDecision, deniedTool *scrutineerv1alpha1.PolicyDecision
+			var matchedDecision, deniedDomain *scrutineerv1alpha1.PolicyDecision
 			for i := range got.Status.PolicyDecisions {
 				d := &got.Status.PolicyDecisions[i]
 				if d.Reason == "PolicyMatched" {
 					matchedDecision = d
 				}
-				if d.Target == "kubectl-prod" {
-					deniedTool = d
+				if d.Target == "tracker.example" {
+					deniedDomain = d
 				}
 			}
 			Expect(matchedDecision).NotTo(BeNil())
 			Expect(matchedDecision.Phase).To(Equal(scrutineerv1alpha1.PolicyDecisionPhaseMerge))
 			Expect(matchedDecision.PolicyRef).NotTo(BeNil())
 			Expect(matchedDecision.PolicyRef.Name).To(Equal("baseline"))
-			Expect(deniedTool).NotTo(BeNil())
-			Expect(deniedTool.Action).To(Equal(scrutineerv1alpha1.PolicyDecisionDryRun))
-			Expect(deniedTool.Rule).To(Equal("deniedTools"))
+			Expect(deniedDomain).NotTo(BeNil())
+			Expect(deniedDomain.Action).To(Equal(scrutineerv1alpha1.PolicyDecisionDryRun))
+			Expect(deniedDomain.Rule).To(Equal("deniedDomains"))
 
 			policyResolved := getCondition(&got, ConditionPolicyResolved)
 			Expect(policyResolved).NotTo(BeNil())
@@ -377,10 +374,9 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
 			Expect(env[scrutineerjob.EnvPolicyMode]).To(Equal("dry-run"))
-			Expect(env[scrutineerjob.EnvPolicyDeniedDomains]).To(Equal("dropbox.com"))
+			Expect(env[scrutineerjob.EnvPolicyDeniedDomains]).To(ContainSubstring("dropbox.com"))
+			Expect(env[scrutineerjob.EnvPolicyDeniedDomains]).To(ContainSubstring("exfil.example"))
 			Expect(env[scrutineerjob.EnvPolicyAllowedDomains]).To(Equal("github.com"))
-			Expect(env[scrutineerjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl-prod"))
-			Expect(env[scrutineerjob.EnvPolicyDeniedTools]).To(ContainSubstring("deploy"))
 		})
 
 		It("creates a NetworkPolicy when enforced CIDR policy is present", func() {
@@ -556,7 +552,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 		})
 
-		It("merges ToolPolicy refs with AgentPolicy and inline overrides", func() {
+		It("merges multiple AgentPolicy refs with inline overrides", func() {
 			ns := newTestNamespace()
 			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.AgentPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "net-base", Namespace: ns},
@@ -564,26 +560,21 @@ var _ = Describe("AgentSession reconciler", func() {
 					PolicyRules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"dropbox.com"}},
 				},
 			})).To(Succeed())
-			maxTools := int32(20)
-			maxPerMin := int32(10)
-			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.ToolPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "tool-base", Namespace: ns},
-				Spec: scrutineerv1alpha1.ToolPolicySpec{
-					AllowedTools:      []string{"shell"},
-					DeniedTools:       []string{"kubectl"},
-					MaxToolCalls:      &maxTools,
-					MaxCallsPerMinute: &maxPerMin,
+			Expect(k8sClient.Create(testCtx, &scrutineerv1alpha1.AgentPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "approval-base", Namespace: ns},
+				Spec: scrutineerv1alpha1.AgentPolicySpec{
+					PolicyRules: scrutineerv1alpha1.PolicyRules{RequireHumanApproval: []string{"deploy"}},
 				},
 			})).To(Succeed())
 
-			session := minimalAgentSession(ns, "toolpolicy-merge")
+			session := minimalAgentSession(ns, "multipolicy-merge")
 			session.Spec.Runtime.Command = []string{"sleep", "300"}
 			session.Spec.PolicyRefs = []scrutineerv1alpha1.PolicyRef{
 				{Kind: "AgentPolicy", Name: "net-base"},
-				{Kind: "ToolPolicy", Name: "tool-base"},
+				{Kind: "AgentPolicy", Name: "approval-base"},
 			}
 			session.Spec.Policy = scrutineerv1alpha1.InlinePolicySpec{
-				PolicyRules: scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"deploy"}},
+				PolicyRules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"exfil.example"}},
 			}
 			Expect(k8sClient.Create(testCtx, session)).To(Succeed())
 			key := client.ObjectKeyFromObject(session)
@@ -591,20 +582,15 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			var got scrutineerv1alpha1.AgentSession
 			Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
-			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElement("dropbox.com"))
-			Expect(got.Status.EffectivePolicy.DeniedTools).To(ContainElements("kubectl", "deploy"))
-			Expect(got.Status.EffectivePolicy.MaxToolCalls).NotTo(BeNil())
-			Expect(*got.Status.EffectivePolicy.MaxToolCalls).To(Equal(int32(20)))
-			Expect(got.Status.EffectivePolicy.MaxCallsPerMinute).NotTo(BeNil())
-			Expect(*got.Status.EffectivePolicy.MaxCallsPerMinute).To(Equal(int32(10)))
+			Expect(got.Status.EffectivePolicy.DeniedDomains).To(ContainElements("dropbox.com", "exfil.example"))
+			Expect(got.Status.EffectivePolicy.RequireHumanApproval).To(ContainElement("deploy"))
 			Expect(got.Status.MatchedPolicies).To(HaveLen(2))
 
 			var job batchv1.Job
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 			env := envMap(job.Spec.Template.Spec.Containers[0].Env)
-			Expect(env[scrutineerjob.EnvPolicyDeniedTools]).To(ContainSubstring("kubectl"))
-			Expect(env[scrutineerjob.EnvPolicyMaxToolCalls]).To(Equal("20"))
-			Expect(env[scrutineerjob.EnvPolicyMaxToolCallsPerMinute]).To(Equal("10"))
+			Expect(env[scrutineerjob.EnvPolicyDeniedDomains]).To(ContainSubstring("dropbox.com"))
+			Expect(env[scrutineerjob.EnvPolicyRequireApproval]).To(Equal("deploy"))
 		})
 
 		It("replaces a pending Job when policy env changes", func() {
@@ -632,7 +618,7 @@ var _ = Describe("AgentSession reconciler", func() {
 
 			Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(ap), ap)).To(Succeed())
 			ap.Spec.Mode = scrutineerv1alpha1.PolicyModeEnforced
-			ap.Spec.DeniedTools = []string{"blocked-tool"}
+			ap.Spec.DeniedDomains = []string{"blocked.example"}
 			Expect(k8sClient.Update(testCtx, ap)).To(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -640,7 +626,7 @@ var _ = Describe("AgentSession reconciler", func() {
 				g.Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 				env := envMap(job.Spec.Template.Spec.Containers[0].Env)
 				g.Expect(env[scrutineerjob.EnvPolicyMode]).To(Equal("enforced"))
-				g.Expect(env[scrutineerjob.EnvPolicyDeniedTools]).To(Equal("blocked-tool"))
+				g.Expect(env[scrutineerjob.EnvPolicyDeniedDomains]).To(Equal("blocked.example"))
 			}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 
 			var got scrutineerv1alpha1.AgentSession

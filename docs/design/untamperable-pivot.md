@@ -68,7 +68,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 - `cmd/tool-gateway` + `internal/enforcement/toolgateway` — the *policy logic* (allow/deny, argument rules, approval holds) is inherited by the tools-pod design; the in-pod placement dies.
 - `cmd/fs-gateway` + `internal/enforcement/workspace` enforcement path — inherited by the arena design.
 
-**API surgery (as shipped in #71 — a recorded deviation from the original clean-break plan):** `RuntimeProfile.spec.enforcement[]` keeps its generic shape with `envoy` as the only valid type; CRDs and samples regenerated. The tool/file *policy* fields (`ToolPolicy`, `PolicyRules` tool/path/argument rules) were **retained as inert declared data** — nothing enforces them, nothing claims to — pending the tools/arena chokepoint designs, which inherit their schema. This is in tension with doctrine #1 ("no CRD fields without an enforcement backend") and is tracked as an explicit open decision: remove the inert fields, or keep them as schema continuity for the successors (see §6).
+**API surgery (completed across #71 + #75):** `RuntimeProfile.spec.enforcement[]` keeps its generic shape with `envoy` as the only valid type. #71 initially retained the tool/file policy fields as inert declared data (a recorded deviation); #75 resolved that deviation with the full clean break — the `ToolPolicy` CRD and every unenforced `PolicyRules` field (tool/path rules and all caps, including `maxNetworkRequests`) are **removed**. `PolicyRules` now carries only backed fields: network rules (Envoy/NetworkPolicy) and `requireHumanApproval` (controller approval gate). Doctrine #1 holds without exception; the removed schema lives in git history and returns, likely reshaped, with the tools/arena designs.
 
 **Kept:**
 
@@ -84,7 +84,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 
 | Gap | Posture until closed | Closed by |
 |---|---|---|
-| Tool-level governance (incl. approval holds) has no enforcement backend | Tool/file policy fields exist as **inert declared data** (kept in #71 for schema continuity; open decision: remove vs. keep) | [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) |
+| Tool-level governance (incl. approval holds) has no enforcement backend | No tool policy surface exists (removed, not unenforced-but-declared — #75) | [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) |
 | File/workspace governance | Same — workspace is an ungoverned volume | [`arena-workspace.md`](arena-workspace.md) |
 | Bypass *attempts* leave no evidence (CNI drops direct connects silently; Envoy only sees traffic that arrived) | Documented; deny evidence exists only at the chokepoint | #64 node interceptor (unforgeable node-observed attempts); nearer-term design note welcome |
 | TLS egress is CONNECT-opaque (authority-only filtering) | Documented; L7 body visibility only for plain HTTP / in-cluster hops | tools-pod hop is plain HTTP via proxy; external TLS stays authority-filtered |
@@ -96,10 +96,10 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 |---|---|---|
 | 0 | This doc + vision rewrite + deferred-design drafts + board re-triage | shipped (`dfeab37`) |
 | 1 | Lock-verification gate (§4) | shipped (#70, `cfdd9c0`) — verified on kindnet + Calico |
-| 2 | Removal (§5) | shipped (#71, `b9ceaa8`; residue purge #74) |
+| 2 | Removal (§5) | shipped (#71, `b9ceaa8`; residue purge #74; API clean-break completion #75) |
 | 3 | Hardening backlog: #66, bypass-attempt evidence note (#72), #55 reshaped to egress metrics, TLS posture doc | issues |
 | deferred | Tools pod, arena pod, credential mediation (#25), sandboxes (#29), transparent interception (#64) | design docs / epics |
 
 ## 8. Superseded documents
 
-The five cooperative-tier design docs (`phase-3-dns-proxy-prototype`, `phase-3-tool-gateway-contract`, `phase-3-tool-argument-constraints`, `phase-3-file-workspace-policy`, `phase-5-runtime-tool-approval`) were **deleted** in the post-pivot cleanup (#74); git history (pre-#74 `docs/design/`) is the record of what was built and why. Their surviving surfaces live in code and successor designs: the argument-constraint schema is the live (inert) `PolicyRules.argumentRules` API in `api/v1alpha1/policy_types.go`, the approval-hold protocol is the dormant `ApprovalRequest` runtime variant + reporter approval channel, and both are inherited by [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md).
+The five cooperative-tier design docs (`phase-3-dns-proxy-prototype`, `phase-3-tool-gateway-contract`, `phase-3-tool-argument-constraints`, `phase-3-file-workspace-policy`, `phase-5-runtime-tool-approval`) were **deleted** in the post-pivot cleanup (#74); git history (pre-#74 `docs/design/`) is the record of what was built and why. Their surviving surfaces live in code and successor designs: the argument-constraint/tool/path schema lives in git history (removed with `ToolPolicy` in the #75 clean break), the approval-hold protocol is the dormant `ApprovalRequest` runtime variant + reporter approval channel, and both are inherited by [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md).

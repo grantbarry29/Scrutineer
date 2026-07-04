@@ -15,8 +15,8 @@ through the `runtimeBackend` interface (two backends today: `kubernetes-job` and
 
 ## Responsibilities / Non-responsibilities
 
-- **Does:** validate the spec; resolve task, policy (inline + referenced `AgentPolicy`/
-  `ToolPolicy`), and `RuntimeProfile`; run the pre-runtime **human-approval gate**;
+- **Does:** validate the spec; resolve task, policy (inline + referenced
+  `AgentPolicy`), and `RuntimeProfile`; run the pre-runtime **human-approval gate**;
   reconcile mid-execution per-tool `ApprovalRequest`s; create/observe the runtime via the
   selected backend; map a backend-neutral `observation` onto status/conditions/events/
   result; manage the finalizer, cancellation, and idempotent requeue; emit Kubernetes
@@ -31,7 +31,7 @@ through the `runtimeBackend` interface (two backends today: `kubernetes-job` and
 - `SetupWithManager` registers the controller; `Reconcile` is the single idempotent loop.
 - Triggers: `AgentSession` plus owned `NetworkPolicy`, the per-session egress-proxy
   objects (`Service`/`ServiceAccount`/`ConfigMap`), and each backend's owned runtime
-  object, and watches on `Pod`, `AgentPolicy`, `ToolPolicy`, `RuntimeProfile`, and
+  object, and watches on `Pod`, `AgentPolicy`, `RuntimeProfile`, and
   `ApprovalRequest` (mapped back to affected sessions).
 
 ## Control / data flow
@@ -120,7 +120,7 @@ against an unchanged cluster makes no API mutations.
   |---|---|---|
   | `agentsessions` | get,list,watch,update,patch | Primary resource: reconcile + finalizer; **never** created/deleted by the controller |
   | `agentsessions/status`, `agentsessions/finalizers` | get,update,patch / update | Status subresource + finalizer |
-  | `agentpolicies`, `toolpolicies`, `runtimeprofiles`, `approvalpolicies` | get,list,watch | Read-only policy/profile refs + watches |
+  | `agentpolicies`, `runtimeprofiles`, `approvalpolicies` | get,list,watch | Read-only policy/profile refs + watches |
   | `approvalrequests` (+`/status`) | get,list,watch,create,update,patch | Created with an owner ref (GC deletes them → no `delete`) |
   | `jobs` (batch) | get,list,watch,create,update,patch,delete | `kubernetes-job` runtime object (create + drift-replace + cancel) |
   | `pods` | get,list,watch,create,update,patch,delete | `kubernetes-pod` runtime object (create/owner-patch/stop); `get,list,watch` also serve the Job-owned-pod watch + `status.podName` |

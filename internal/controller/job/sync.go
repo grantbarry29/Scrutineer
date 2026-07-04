@@ -27,15 +27,7 @@ var managedEnvKeys = []string{
 	EnvPolicyDeniedDomains,
 	EnvPolicyAllowedCIDRs,
 	EnvPolicyDeniedCIDRs,
-	EnvPolicyAllowedTools,
-	EnvPolicyDeniedTools,
 	EnvPolicyRequireApproval,
-	EnvPolicyMaxNetReqs,
-	EnvPolicyMaxToolCalls,
-	EnvPolicyMaxToolCallsPerMinute,
-	EnvPolicyAllowedPaths,
-	EnvPolicyDeniedPaths,
-	EnvPolicyMaxWorkspaceBytes,
 	EnvPolicyMode,
 }
 

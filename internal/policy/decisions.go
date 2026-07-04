@@ -12,7 +12,6 @@ package policy
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,33 +62,7 @@ func BuildMergeDecisions(resolved Resolved, now time.Time) []scrutineerv1alpha1.
 	out = append(out, ruleListDecisions(ts, mode, "network", "deniedDomains", resolved.Rules.DeniedDomains, actionForMode(mode), "DeniedDomains")...)
 	out = append(out, ruleListDecisions(ts, mode, "network", "allowedCIDRs", resolved.Rules.AllowedCIDRs, scrutineerv1alpha1.PolicyDecisionAllow, "AllowedCIDRs")...)
 	out = append(out, ruleListDecisions(ts, mode, "network", "deniedCIDRs", resolved.Rules.DeniedCIDRs, actionForMode(mode), "DeniedCIDRs")...)
-	out = append(out, ruleListDecisions(ts, mode, "tool", "allowedTools", resolved.Rules.AllowedTools, scrutineerv1alpha1.PolicyDecisionAllow, "AllowedTools")...)
-	out = append(out, ruleListDecisions(ts, mode, "tool", "deniedTools", resolved.Rules.DeniedTools, actionForMode(mode), "DeniedTools")...)
 	out = append(out, ruleListDecisions(ts, mode, "approval", "requireHumanApproval", resolved.Rules.RequireHumanApproval, scrutineerv1alpha1.PolicyDecisionAudit, "RequireHumanApproval")...)
-
-	if resolved.Rules.MaxNetworkRequests != nil {
-		out = append(out, capDecision(ts, mode, "maxNetworkRequests", *resolved.Rules.MaxNetworkRequests))
-	}
-	if resolved.Rules.MaxToolCalls != nil {
-		out = append(out, capDecision(ts, mode, "maxToolCalls", *resolved.Rules.MaxToolCalls))
-	}
-	if resolved.Rules.MaxCallsPerMinute != nil {
-		out = append(out, capDecision(ts, mode, "maxCallsPerMinute", *resolved.Rules.MaxCallsPerMinute))
-	}
-	if n := len(resolved.Rules.ArgumentRules); n > 0 {
-		out = append(out, scrutineerv1alpha1.PolicyDecision{
-			Time:    ts,
-			Phase:   scrutineerv1alpha1.PolicyDecisionPhaseMerge,
-			Type:    "tool",
-			Action:  scrutineerv1alpha1.PolicyDecisionAudit,
-			Actor:   mergeDecisionActor,
-			Target:  strconv.Itoa(n),
-			Reason:  "ArgumentRulesDeclared",
-			Message: fmt.Sprintf("Effective policy declares %d tool argument rule(s); declared only — no enforcement backend until the tools-pod chokepoint", n),
-			Mode:    mode,
-			Rule:    "argumentRules",
-		})
-	}
 
 	if len(out) > MaxMergePolicyDecisions {
 		omitted := len(out) - (MaxMergePolicyDecisions - 1)
@@ -133,21 +106,6 @@ func ruleListDecisions(ts metav1.Time, mode scrutineerv1alpha1.PolicyMode, typ, 
 		})
 	}
 	return out
-}
-
-func capDecision(ts metav1.Time, mode scrutineerv1alpha1.PolicyMode, rule string, value int32) scrutineerv1alpha1.PolicyDecision {
-	return scrutineerv1alpha1.PolicyDecision{
-		Time:    ts,
-		Phase:   scrutineerv1alpha1.PolicyDecisionPhaseMerge,
-		Type:    "cap",
-		Action:  scrutineerv1alpha1.PolicyDecisionAllow,
-		Actor:   mergeDecisionActor,
-		Target:  strconv.FormatInt(int64(value), 10),
-		Reason:  "CapDeclared",
-		Message: fmt.Sprintf("Effective policy declares %s=%d", rule, value),
-		Mode:    mode,
-		Rule:    rule,
-	}
 }
 
 func actionForMode(mode scrutineerv1alpha1.PolicyMode) scrutineerv1alpha1.PolicyDecisionAction {

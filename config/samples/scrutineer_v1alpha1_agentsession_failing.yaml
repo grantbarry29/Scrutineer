@@ -31,8 +31,6 @@ spec:
   policy:
     allowedDomains: []
     deniedDomains: []
-    allowedTools: []
-    deniedTools: []
   workspace:
     ephemeral: true
     mountPath: /workspace

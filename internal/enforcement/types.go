@@ -28,8 +28,6 @@ const (
 type Capabilities struct {
 	NetworkCIDR bool
 	NetworkFQDN bool
-	Tools       bool
-	FileAccess  bool
 }
 
 // SessionContext is normalized control-plane input passed to enforcement backends.

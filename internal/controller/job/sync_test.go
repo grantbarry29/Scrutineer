@@ -39,7 +39,7 @@ func TestPolicyEnvDrift(t *testing.T) {
 
 	pol2 := &policy.Resolved{
 		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
-		Rules: scrutineerv1alpha1.PolicyRules{DeniedTools: []string{"x"}},
+		Rules: scrutineerv1alpha1.PolicyRules{DeniedDomains: []string{"x.example"}},
 	}
 	c := Build(session, task, pol2, nil)
 	if !PolicyEnvDrift(a, c) {

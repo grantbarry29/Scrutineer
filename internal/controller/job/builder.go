@@ -11,7 +11,6 @@ You may obtain a copy of the License at
 package job
 
 import (
-	"strconv"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -178,15 +177,7 @@ func buildEnv(session *scrutineerv1alpha1.AgentSession, task *Task, resolved *po
 		{Name: EnvPolicyDeniedDomains, Value: csv(rules.DeniedDomains)},
 		{Name: EnvPolicyAllowedCIDRs, Value: csv(rules.AllowedCIDRs)},
 		{Name: EnvPolicyDeniedCIDRs, Value: csv(rules.DeniedCIDRs)},
-		{Name: EnvPolicyAllowedTools, Value: csv(rules.AllowedTools)},
-		{Name: EnvPolicyDeniedTools, Value: csv(rules.DeniedTools)},
 		{Name: EnvPolicyRequireApproval, Value: csv(rules.RequireHumanApproval)},
-		{Name: EnvPolicyMaxNetReqs, Value: int32PtrToStr(rules.MaxNetworkRequests)},
-		{Name: EnvPolicyMaxToolCalls, Value: int32PtrToStr(rules.MaxToolCalls)},
-		{Name: EnvPolicyMaxToolCallsPerMinute, Value: int32PtrToStr(rules.MaxCallsPerMinute)},
-		{Name: EnvPolicyAllowedPaths, Value: csv(rules.AllowedPaths)},
-		{Name: EnvPolicyDeniedPaths, Value: csv(rules.DeniedPaths)},
-		{Name: EnvPolicyMaxWorkspaceBytes, Value: int64PtrToStr(rules.MaxWorkspaceBytes)},
 		{Name: EnvPolicyMode, Value: string(mode)},
 	}
 
@@ -196,18 +187,4 @@ func buildEnv(session *scrutineerv1alpha1.AgentSession, task *Task, resolved *po
 
 func csv(in []string) string {
 	return strings.Join(in, ",")
-}
-
-func int32PtrToStr(p *int32) string {
-	if p == nil {
-		return ""
-	}
-	return strconv.FormatInt(int64(*p), 10)
-}
-
-func int64PtrToStr(p *int64) string {
-	if p == nil {
-		return ""
-	}
-	return strconv.FormatInt(*p, 10)
 }

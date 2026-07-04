@@ -145,98 +145,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  allowedPaths:
-                    description: AllowedPaths is a path/glob allowlist for file and
-                      workspace access (e.g. /workspace/**).
-                    items:
-                      type: string
-                    type: array
-                  allowedTools:
-                    description: AllowedTools lists tool identifiers the agent is
-                      permitted to invoke.
-                    items:
-                      type: string
-                    type: array
-                  argumentRules:
-                    description: |-
-                      ArgumentRules constrain tool calls by their arguments, applied after name-level tool
-                      allow/deny. Merged by concatenation across layers (constraints only tighten).
-                      Declared data only: no enforcement backend until the out-of-pod tools chokepoint
-                      lands. See docs/design/tools-pod-chokepoint.md.
-                    items:
-                      description: |-
-                        ToolArgumentRule constrains the arguments of matching tool calls. It applies only to
-                        calls that already passed name-level allow/deny. This models declared policy; the
-                        future out-of-pod tools chokepoint enforces it.
-                      properties:
-                        constraints:
-                          description: |-
-                            Constraints are ANDed: every constraint must pass for the call to be allowed by
-                            this rule.
-                          items:
-                            description: |-
-                              ArgumentConstraint matches one tool-argument value and declares whether a match allows
-                              or denies the call. v1 uses structured matchers (not an expression language). See
-                              docs/design/phase-3-tool-argument-constraints.md.
-                            properties:
-                              arg:
-                                description: |-
-                                  Arg is a dotted path into the tool's argument object (e.g. "path", "args[0]",
-                                  "options.recursive").
-                                minLength: 1
-                                type: string
-                              effect:
-                                default: Deny
-                                description: |-
-                                  Effect declares what a match means. Deny (default) blocks the call; Allow makes the
-                                  constraint an allowlist gate (call permitted only if it matches).
-                                enum:
-                                - Allow
-                                - Deny
-                                type: string
-                              op:
-                                description: Op is the comparison operator.
-                                enum:
-                                - Equals
-                                - NotEquals
-                                - In
-                                - NotIn
-                                - Matches
-                                - NotMatches
-                                - HasPrefix
-                                - NotHasPrefix
-                                - Exists
-                                - NotExists
-                                type: string
-                              values:
-                                description: |-
-                                  Values holds the operands: regular expressions for Matches/NotMatches, literals
-                                  otherwise. Ignored for Exists/NotExists.
-                                items:
-                                  type: string
-                                type: array
-                            required:
-                            - arg
-                            - op
-                            type: object
-                          minItems: 1
-                          type: array
-                        server:
-                          description: Server optionally scopes the rule to a single
-                            MCP server / provider id.
-                          type: string
-                        tools:
-                          description: Tools lists tool identifiers this rule applies
-                            to. "*" matches any tool.
-                          items:
-                            type: string
-                          minItems: 1
-                          type: array
-                      required:
-                      - constraints
-                      - tools
-                      type: object
-                    type: array
                   deniedCIDRs:
                     description: DeniedCIDRs is an IP/CIDR denylist for outbound network
                       access.
@@ -249,43 +157,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  deniedPaths:
-                    description: DeniedPaths is a path/glob denylist for file and
-                      workspace access (e.g. /etc/**).
-                    items:
-                      type: string
-                    type: array
-                  deniedTools:
-                    description: DeniedTools lists tool identifiers the agent must
-                      not invoke.
-                    items:
-                      type: string
-                    type: array
-                  maxCallsPerMinute:
-                    description: MaxCallsPerMinute caps tool invocations per minute
-                      (declared and propagated; enforcement is Phase 3).
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  maxNetworkRequests:
-                    description: MaxNetworkRequests caps the total number of network
-                      requests the agent may issue.
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  maxToolCalls:
-                    description: MaxToolCalls caps the total number of tool calls
-                      the agent may issue.
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  maxWorkspaceBytes:
-                    description: |-
-                      MaxWorkspaceBytes caps total workspace storage when enforced by the future arena
-                      workspace (docs/design/arena-workspace.md).
-                    format: int64
-                    minimum: 0
-                    type: integer
                   requireHumanApproval:
                     description: RequireHumanApproval lists action types that require
                       human approval before execution.
@@ -297,18 +168,19 @@ spec:
                 description: |-
                   PolicyRefs lists reusable policies to merge before spec.policy overrides.
                   Refs are resolved in order within the same namespace as the AgentSession.
-                  Recommended order: AgentPolicy entries, then ToolPolicy, then spec.policy inline overrides.
+                  Referenced policies merge in list order; spec.policy inline overrides apply last.
                 items:
                   description: PolicyRef references a reusable policy CRD in the same
                     namespace as the AgentSession.
                   properties:
                     kind:
                       default: AgentPolicy
-                      description: Kind is the policy resource kind (AgentPolicy or
-                        ToolPolicy).
+                      description: |-
+                        Kind is the policy resource kind. AgentPolicy is the only kind today; tool/file
+                        policy kinds return with their out-of-pod chokepoints (the untamperable pivot,
+                        docs/design/untamperable-pivot.md).
                       enum:
                       - AgentPolicy
-                      - ToolPolicy
                       type: string
                     name:
                       description: Name is the policy resource name in the AgentSession
@@ -776,98 +648,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  allowedPaths:
-                    description: AllowedPaths is a path/glob allowlist for file and
-                      workspace access (e.g. /workspace/**).
-                    items:
-                      type: string
-                    type: array
-                  allowedTools:
-                    description: AllowedTools lists tool identifiers the agent is
-                      permitted to invoke.
-                    items:
-                      type: string
-                    type: array
-                  argumentRules:
-                    description: |-
-                      ArgumentRules constrain tool calls by their arguments, applied after name-level tool
-                      allow/deny. Merged by concatenation across layers (constraints only tighten).
-                      Declared data only: no enforcement backend until the out-of-pod tools chokepoint
-                      lands. See docs/design/tools-pod-chokepoint.md.
-                    items:
-                      description: |-
-                        ToolArgumentRule constrains the arguments of matching tool calls. It applies only to
-                        calls that already passed name-level allow/deny. This models declared policy; the
-                        future out-of-pod tools chokepoint enforces it.
-                      properties:
-                        constraints:
-                          description: |-
-                            Constraints are ANDed: every constraint must pass for the call to be allowed by
-                            this rule.
-                          items:
-                            description: |-
-                              ArgumentConstraint matches one tool-argument value and declares whether a match allows
-                              or denies the call. v1 uses structured matchers (not an expression language). See
-                              docs/design/phase-3-tool-argument-constraints.md.
-                            properties:
-                              arg:
-                                description: |-
-                                  Arg is a dotted path into the tool's argument object (e.g. "path", "args[0]",
-                                  "options.recursive").
-                                minLength: 1
-                                type: string
-                              effect:
-                                default: Deny
-                                description: |-
-                                  Effect declares what a match means. Deny (default) blocks the call; Allow makes the
-                                  constraint an allowlist gate (call permitted only if it matches).
-                                enum:
-                                - Allow
-                                - Deny
-                                type: string
-                              op:
-                                description: Op is the comparison operator.
-                                enum:
-                                - Equals
-                                - NotEquals
-                                - In
-                                - NotIn
-                                - Matches
-                                - NotMatches
-                                - HasPrefix
-                                - NotHasPrefix
-                                - Exists
-                                - NotExists
-                                type: string
-                              values:
-                                description: |-
-                                  Values holds the operands: regular expressions for Matches/NotMatches, literals
-                                  otherwise. Ignored for Exists/NotExists.
-                                items:
-                                  type: string
-                                type: array
-                            required:
-                            - arg
-                            - op
-                            type: object
-                          minItems: 1
-                          type: array
-                        server:
-                          description: Server optionally scopes the rule to a single
-                            MCP server / provider id.
-                          type: string
-                        tools:
-                          description: Tools lists tool identifiers this rule applies
-                            to. "*" matches any tool.
-                          items:
-                            type: string
-                          minItems: 1
-                          type: array
-                      required:
-                      - constraints
-                      - tools
-                      type: object
-                    type: array
                   deniedCIDRs:
                     description: DeniedCIDRs is an IP/CIDR denylist for outbound network
                       access.
@@ -880,43 +660,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  deniedPaths:
-                    description: DeniedPaths is a path/glob denylist for file and
-                      workspace access (e.g. /etc/**).
-                    items:
-                      type: string
-                    type: array
-                  deniedTools:
-                    description: DeniedTools lists tool identifiers the agent must
-                      not invoke.
-                    items:
-                      type: string
-                    type: array
-                  maxCallsPerMinute:
-                    description: MaxCallsPerMinute caps tool invocations per minute
-                      (declared and propagated; enforcement is Phase 3).
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  maxNetworkRequests:
-                    description: MaxNetworkRequests caps the total number of network
-                      requests the agent may issue.
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  maxToolCalls:
-                    description: MaxToolCalls caps the total number of tool calls
-                      the agent may issue.
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  maxWorkspaceBytes:
-                    description: |-
-                      MaxWorkspaceBytes caps total workspace storage when enforced by the future arena
-                      workspace (docs/design/arena-workspace.md).
-                    format: int64
-                    minimum: 0
-                    type: integer
                   mode:
                     description: Mode is the strictest mode across matched policies
                       (enforced > dry-run > audit-only).
@@ -1234,7 +977,7 @@ spec:
                       type: string
                     rule:
                       description: Rule is the policy rule field that produced the
-                        decision (e.g. deniedTools).
+                        decision (e.g. deniedDomains).
                       type: string
                     target:
                       description: Target is the entity evaluated (domain, tool, approval

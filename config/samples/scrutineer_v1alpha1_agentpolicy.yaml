@@ -8,6 +8,5 @@ spec:
   deniedDomains:
   - dropbox.com
   - gmail.com
-  deniedTools:
-  - kubectl-prod
-  maxToolCalls: 50
+  requireHumanApproval:
+  - production_deploy

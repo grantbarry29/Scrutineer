@@ -210,26 +210,19 @@ func TestPolicyEnvDrift_modelBaseURL(t *testing.T) {
 	}
 }
 
-func TestBuild_policyCapEnv(t *testing.T) {
-	maxNet := int32(50)
-	maxTool := int32(10)
-	maxPerMin := int32(5)
-	maxBytes := int64(1_000_000)
+func TestBuild_policyApprovalEnv(t *testing.T) {
 	pol := &policy.Resolved{
 		Mode: scrutineerv1alpha1.PolicyModeEnforced,
 		Rules: scrutineerv1alpha1.PolicyRules{
-			MaxNetworkRequests: &maxNet,
-			MaxToolCalls:       &maxTool,
-			MaxCallsPerMinute:  &maxPerMin,
-			MaxWorkspaceBytes:  &maxBytes,
+			RequireHumanApproval: []string{"deploy", "wire-transfer"},
 		},
 	}
 	job := Build(minimalSession(), &Task{}, pol, nil)
 	env := envVarsToMap(job.Spec.Template.Spec.Containers[0].Env)
-	if env[EnvPolicyMaxNetReqs] != "50" || env[EnvPolicyMaxToolCalls] != "10" {
-		t.Fatalf("cap env = %+v", env)
+	if env[EnvPolicyRequireApproval] != "deploy,wire-transfer" {
+		t.Fatalf("approval env = %+v", env)
 	}
-	if env[EnvPolicyMaxToolCallsPerMinute] != "5" || env[EnvPolicyMaxWorkspaceBytes] != "1000000" {
-		t.Fatalf("cap env = %+v", env)
+	if env[EnvPolicyMode] != "enforced" {
+		t.Fatalf("mode env = %+v", env)
 	}
 }

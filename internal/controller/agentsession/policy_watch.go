@@ -28,14 +28,6 @@ func (r *AgentSessionReconciler) mapAgentPolicyToSessions(ctx context.Context, o
 	return r.sessionsReferencingPolicy(ctx, ap.Namespace, "AgentPolicy", ap.Name)
 }
 
-func (r *AgentSessionReconciler) mapToolPolicyToSessions(ctx context.Context, obj client.Object) []reconcile.Request {
-	tp, ok := obj.(*scrutineerv1alpha1.ToolPolicy)
-	if !ok {
-		return nil
-	}
-	return r.sessionsReferencingPolicy(ctx, tp.Namespace, "ToolPolicy", tp.Name)
-}
-
 func (r *AgentSessionReconciler) sessionsReferencingPolicy(ctx context.Context, namespace, kind, name string) []reconcile.Request {
 	var sessions scrutineerv1alpha1.AgentSessionList
 	if err := r.List(ctx, &sessions, client.InNamespace(namespace)); err != nil {
@@ -72,7 +64,7 @@ func sessionReferencesPolicy(session *scrutineerv1alpha1.AgentSession, kind, pol
 	return false
 }
 
-// sessionReferencesAgentPolicy supports tests that predate ToolPolicy.
+// sessionReferencesAgentPolicy supports tests that predate the kind parameter.
 func sessionReferencesAgentPolicy(session *scrutineerv1alpha1.AgentSession, policyName string) bool {
 	return sessionReferencesPolicy(session, "AgentPolicy", policyName)
 }
