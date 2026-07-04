@@ -42,15 +42,16 @@ enforces NetworkPolicy before it will run enforced sessions (*verified-or-refuse
 comes back `Refused` on your kind version, retry with
 `make quickstart-down && make quickstart QUICKSTART_CNI=calico`.
 
-Then try a session and watch the controller govern it:
+Then run the guided demo of the untamperable egress path — a denied request rejected
+live at the per-session chokepoint, a bypass attempt killed by the routing lock, and
+`observed` evidence the agent could not have forged, contrasted against `audit-only`
+mode ([walkthrough](docs/demo.md)):
 
 ```sh
-kubectl apply -f config/samples/scrutineer_v1alpha1_agentsession.yaml
-kubectl get agentsessions -w
+make demo
 ```
 
-Tear down with `make quickstart-down`. A guided demo of the untamperable egress path is
-tracked in [#78](https://github.com/grantbarry29/Scrutineer/issues/78).
+Tear down with `make demo-down` / `make quickstart-down`.
 
 ## Long-term product vision
 

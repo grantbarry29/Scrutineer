@@ -1,0 +1,28 @@
+# The two demo policies differ only in mode. Same allowlist: example.com is the one
+# domain the agent may reach; everything else is implicitly denied at the chokepoint.
+#
+#   enforced   — denials are real: Envoy RBAC rejects the request (agent sees an error).
+#   audit-only — nothing is blocked at L7, but every request is still observed and
+#                recorded as `dry-run` evidence (what WOULD have been denied).
+#
+# The routing lock (default-deny NetworkPolicy) applies in both modes — observation
+# is only trustworthy if the chokepoint is the agent's only path.
+apiVersion: scrutineer.sh/v1alpha1
+kind: AgentPolicy
+metadata:
+  name: demo-policy-enforced
+  namespace: default
+spec:
+  mode: enforced
+  allowedDomains:
+  - example.com
+---
+apiVersion: scrutineer.sh/v1alpha1
+kind: AgentPolicy
+metadata:
+  name: demo-policy-audit
+  namespace: default
+spec:
+  mode: audit-only
+  allowedDomains:
+  - example.com

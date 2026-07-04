@@ -1,0 +1,41 @@
+# Demo session under ENFORCED policy. The "agent" is plain busybox — Scrutineer is
+# bring-your-own-agent and governs the workload from outside; nothing here cooperates
+# with enforcement. Expected probe results (see docs/demo.md):
+#   DEMO_ALLOWED  example.com  -> SUCCEEDED  (allowlisted, proxied via the session Envoy)
+#   DEMO_DENIED   example.net -> BLOCKED    (not allowlisted; Envoy RBAC rejects it)
+#   DEMO_BYPASS   direct DNS   -> BLOCKED    (routing lock: no egress except the proxy)
+apiVersion: scrutineer.sh/v1alpha1
+kind: AgentSession
+metadata:
+  name: demo-enforced
+  namespace: default
+spec:
+  task:
+    description: Egress-governance demo (enforced mode)
+    prompt: noop
+  model:
+    provider: openai
+    name: gpt-4.1
+  policyRefs:
+  - name: demo-policy-enforced
+  runtimeProfileRef:
+    name: demo-egress-proxy
+  runtime:
+    orchestrator: kubernetes-job
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - |
+      sleep 12
+      echo "demo agent (enforced): probing through my governed egress path..."
+      ok=""
+      for i in 1 2 3 4 5 6 7 8; do
+        if wget -q -O /dev/null "http://example.com/" 2>/dev/null; then ok=yes; break; fi
+        sleep 3
+      done
+      if [ "$ok" = yes ]; then echo "DEMO_ALLOWED example.com -> SUCCEEDED"; else echo "DEMO_ALLOWED example.com -> FAILED (no internet from the cluster?)"; fi
+      if wget -q -O /dev/null "http://example.net/" 2>/dev/null; then echo "DEMO_DENIED example.net -> SUCCEEDED"; else echo "DEMO_DENIED example.net -> BLOCKED"; fi
+      if timeout 5 nslookup example.com >/dev/null 2>&1; then echo "DEMO_BYPASS direct DNS -> RESOLVED"; else echo "DEMO_BYPASS direct DNS -> BLOCKED"; fi
+      echo "demo agent done; letting the evidence pipeline flush"
+      sleep 15

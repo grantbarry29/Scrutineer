@@ -1,0 +1,28 @@
+# Demo RuntimeProfile: hardened container defaults + the envoy enforcement backend.
+# Enabling `envoy` provisions a per-session out-of-pod Envoy egress proxy (own pod,
+# own ServiceAccount, own network namespace) and locks the agent pod's egress to it
+# with a default-deny NetworkPolicy — in every policy mode, so egress stays observable
+# even when nothing is being blocked. See docs/demo.md.
+apiVersion: scrutineer.sh/v1alpha1
+kind: RuntimeProfile
+metadata:
+  name: demo-egress-proxy
+  namespace: default
+spec:
+  container:
+    # runAsNonRoot is omitted: the demo agent is stock busybox, which runs as root by
+    # default, and RuntimeProfile has no runAsUser override to remap it (#82) — with
+    # runAsNonRoot the kubelet rejects the container (CreateContainerConfigError).
+    # The demo's subject is network enforcement; use a non-root agent image in real use.
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+  pod:
+    seccompProfile:
+      type: RuntimeDefault
+  enforcement:
+  - name: envoy
+    type: envoy
+    enabled: true
