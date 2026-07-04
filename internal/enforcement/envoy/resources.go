@@ -177,11 +177,20 @@ func Pod(sessionName, namespace string, cfg PodConfig) *corev1.Pod {
 		Image:           cfg.Image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Args:            []string{"-c", configMountPath + "/" + configFileName},
-		Ports: []corev1.ContainerPort{{
-			Name:          "proxy",
-			ContainerPort: ProxyPort,
-			Protocol:      corev1.ProtocolTCP,
-		}},
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "proxy",
+				ContainerPort: ProxyPort,
+				Protocol:      corev1.ProtocolTCP,
+			},
+			{
+				// The stats-only listener (/stats/prometheus, #55); the admin API
+				// itself stays loopback-bound inside the container.
+				Name:          "envoy-stats",
+				ContainerPort: StatsPort,
+				Protocol:      corev1.ProtocolTCP,
+			},
+		},
 		SecurityContext: hardenedSecurityContext(),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: configVolume, MountPath: configMountPath, ReadOnly: true},
@@ -264,6 +273,11 @@ func egressReporterContainer(sessionName, namespace string, cfg PodConfig) corev
 		Name:            reporterContainerName,
 		Image:           cfg.ReporterImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
+		Ports: []corev1.ContainerPort{{
+			Name:          "metrics",
+			ContainerPort: ReporterMetricsPort,
+			Protocol:      corev1.ProtocolTCP,
+		}},
 		Env: append([]corev1.EnvVar{
 			{Name: sidecarenv.EnvSessionName, Value: sessionName},
 			{Name: sidecarenv.EnvSessionNamespace, Value: namespace},

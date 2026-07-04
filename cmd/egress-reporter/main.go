@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -26,14 +27,21 @@ import (
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/egressmetrics"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/reporterclient"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
 )
 
-// EnvAccessLogPath optionally overrides the access-log file location (defaults to
-// envoy.AccessLogPath, where the bootstrap writes it).
-const EnvAccessLogPath = "SCRUTINEER_ACCESS_LOG_PATH"
+const (
+	// EnvAccessLogPath optionally overrides the access-log file location (defaults to
+	// envoy.AccessLogPath, where the bootstrap writes it).
+	EnvAccessLogPath = "SCRUTINEER_ACCESS_LOG_PATH"
+
+	// EnvMetricsAddr overrides the Prometheus /metrics bind (#55). Defaults to
+	// ":<envoy.ReporterMetricsPort>"; the value "disabled" turns the endpoint off.
+	EnvMetricsAddr = "SCRUTINEER_METRICS_ADDR"
+)
 
 func main() {
 	base, err := sidecarenv.LoadBase("")
@@ -57,8 +65,27 @@ func main() {
 		},
 	}
 
+	metrics := egressmetrics.New(func() float64 { return float64(tailer.Dropped()) })
+	tailer.OnDecision = metrics.ObserveDecision
+	tailer.OnMalformed = metrics.Malformed.Inc
+	tailer.Submit = metrics.WrapSubmit(tailer.Submit)
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	metricsAddr := strings.TrimSpace(os.Getenv(EnvMetricsAddr))
+	if metricsAddr == "" {
+		metricsAddr = fmt.Sprintf(":%d", envoy.ReporterMetricsPort)
+	}
+	if metricsAddr != "disabled" {
+		// Metrics are auxiliary: a bind failure is logged, never fatal — the evidence
+		// pipeline must keep running without telemetry.
+		go func() {
+			if err := metrics.Serve(ctx, metricsAddr); err != nil {
+				log.Printf("egress-reporter: metrics endpoint unavailable (%s): %v", metricsAddr, err)
+			}
+		}()
+	}
 
 	log.Printf("scrutineer egress-reporter tailing %s (session %s/%s)", path, base.SessionNamespace, base.SessionName)
 	tailer.Run(ctx)

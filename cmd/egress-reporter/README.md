@@ -41,14 +41,29 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
 | `SCRUTINEER_REPORTER_URL` | Reporter base URL |
 | `SCRUTINEER_REPORTER_TOKEN_PATH` | Projected SA token file |
 | `SCRUTINEER_ACCESS_LOG_PATH` | Optional; defaults to `/var/log/envoy/access.json` |
+| `SCRUTINEER_METRICS_ADDR` | Optional Prometheus `/metrics` bind; defaults to `:9903` (`envoy.ReporterMetricsPort`); `disabled` turns it off |
 | `AGENT_POLICY_MODE` | `enforced` ⇒ denials classified `deny`; otherwise `dry-run` |
 | `AGENT_POLICY_ALLOWED_DOMAINS` / `AGENT_POLICY_DENIED_DOMAINS` | CSV FQDN policy (exact or `*.` wildcard) classified per observed authority |
+
+## Operability
+
+Serves Prometheus metrics on `:9903` `/metrics` (container port `metrics`, #55):
+decisions by action, malformed access-log lines, submissions by outcome + latency, and
+dropped decisions (pending-queue overflow = evidence lost). Dedicated registry in
+[`internal/enforcement/egressmetrics`](../../internal/enforcement/egressmetrics/); a
+metrics bind failure is logged and never stops the evidence pipeline. The Envoy container
+beside it exposes `envoy_*` stats on `:9902` `/stats/prometheus` (stats-only listener;
+the admin API stays loopback). Catalog:
+[`docs/design/phase-4-observability-export.md`](../../docs/design/phase-4-observability-export.md).
 
 ## Files that change together
 
 `cmd/egress-reporter/main.go` → core logic in `internal/enforcement/envoy`
 (`accesslog.go` parser + `tailer.go`; the bootstrap's `json_format` keys must stay in
-sync with `AccessLogEntry`) → pod wiring in `internal/enforcement/envoy/resources.go` +
+sync with `AccessLogEntry`) → metrics in `internal/enforcement/egressmetrics` (wired via
+the Tailer's `OnDecision`/`OnMalformed` hooks + wrapped `Submit`; port consts in
+`envoy.go` ↔ container ports in `resources.go` ↔ the observability-export catalog) →
+pod wiring in `internal/enforcement/envoy/resources.go` +
 `internal/controller/agentsession/egress_envoy.go` → `Dockerfile.egress-reporter` →
 `docker-build-egress-reporter` / `kind-load-egress-reporter` Makefile targets (and
 `test-e2e-images`).

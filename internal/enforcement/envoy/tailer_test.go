@@ -161,6 +161,29 @@ func TestTailer_skipsMalformedLines(t *testing.T) {
 	}
 }
 
+// OnDecision fires once per queued decision and OnMalformed once per skipped line — the
+// egress-reporter's instrumentation points (#55). Plain callbacks keep the Prometheus
+// dependency out of this shared package (the manager imports it too).
+func TestTailer_hooksObserveDecisionsAndMalformed(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	var actions []string
+	malformed := 0
+	tailer.OnDecision = func(d scrutineerv1alpha1.PolicyDecision) { actions = append(actions, string(d.Action)) }
+	tailer.OnMalformed = func() { malformed++ }
+
+	appendFile(t, path, logLine("a.example")+"not-json\n"+logLine("b.example"))
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) != 2 {
+		t.Fatalf("OnDecision calls = %d, want 2 (%v)", len(actions), actions)
+	}
+	if malformed != 1 {
+		t.Fatalf("OnMalformed calls = %d, want 1", malformed)
+	}
+}
+
 func TestTailer_truncationResets(t *testing.T) {
 	sink := &capturingSubmit{}
 	tailer, path := newTestTailer(t, sink)

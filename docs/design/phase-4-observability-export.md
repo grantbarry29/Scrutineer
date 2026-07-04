@@ -34,6 +34,21 @@ Exposed on the controller-runtime metrics endpoint (`--metrics-bind-address`, de
 
 **Collection model:** the three gauges are computed on scrape by `AgentSessionCollector` — it lists `AgentSession`s (phase/violation gauges) and `ApprovalRequest`s (`approval_queue_depth`); the counters/histogram are updated inline (`ObserveNovelViolations`, `ObserveRuntimeReport`). Label cardinality is bounded by namespaces, the fixed phase enum, and violation `type` (`network`/`tool`/`file`/…); `result` is a small fixed set. Avoid adding unbounded labels (session name, target, domain).
 
+### Egress-proxy pod (data plane, #55)
+
+Each per-session egress-proxy pod exposes two scrape endpoints (container ports are named for scrape configs; no PodMonitor/annotations shipped — discovery is the operator's infrastructure):
+
+- **Envoy stats** — `:9902` (`envoy.StatsPort`, port name `envoy-stats`), path `/stats/prometheus`. A stats-only listener routes exactly that path to the loopback admin cluster; the admin API itself stays bound to `127.0.0.1:9901`. Full upstream/RBAC/CONNECT stats under the standard `envoy_*` names. The agent cannot reach it (the routing lock allows agent→Envoy on the proxy port only).
+- **egress-reporter** — `:9903` (`envoy.ReporterMetricsPort`, port name `metrics`), path `/metrics`, bind overridable via `SCRUTINEER_METRICS_ADDR` (`disabled` turns it off). Dedicated registry (`internal/enforcement/egressmetrics`); a metrics failure never stops the evidence pipeline.
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `scrutineer_egress_reporter_decisions_total` | Counter | `action` | Access-log entries parsed into egress evidence, by decision action. |
+| `scrutineer_egress_reporter_malformed_lines_total` | Counter | — | Unparseable Envoy access-log lines skipped. |
+| `scrutineer_egress_reporter_submissions_total` | Counter | `outcome` | Evidence batch submissions to the controller reporter (`ok`/`error`). |
+| `scrutineer_egress_reporter_submission_duration_seconds` | Histogram | — | Submission latency (default buckets). |
+| `scrutineer_egress_reporter_dropped_decisions_total` | Counter | — | Decisions discarded to pending-queue overflow — evidence lost to a prolonged reporter outage. |
+
 ## OpenTelemetry traces
 
 Opt-in OTLP/HTTP export. Disabled (noop tracer) when the endpoint is empty, **but the W3C propagator is always installed** so inbound `traceparent` headers are honored even without export. Instrumentation scope root: `github.com/grantbarry29/scrutineer` (`/agentsession`, `/reporter`). See `internal/tracing/`.

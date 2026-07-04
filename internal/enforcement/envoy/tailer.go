@@ -54,6 +54,11 @@ type Tailer struct {
 	// Policy is the effective FQDN policy each observed authority is classified against
 	// (#32). Zero value classifies everything as allow.
 	Policy EgressPolicy
+	// OnDecision, if set, observes each decision as it is queued (metrics hook, #55).
+	// Plain callbacks keep the Prometheus dependency out of this shared package.
+	OnDecision func(scrutineerv1alpha1.PolicyDecision)
+	// OnMalformed, if set, observes each skipped malformed access-log line (#55).
+	OnMalformed func()
 
 	offset  int64
 	partial []byte
@@ -150,9 +155,16 @@ func (t *Tailer) readNew() error {
 		entry, err := ParseAccessLogLine(line)
 		if err != nil {
 			log.Printf("egress-reporter: skipping malformed access-log line: %v", err)
+			if t.OnMalformed != nil {
+				t.OnMalformed()
+			}
 			continue
 		}
-		t.queue(entry.Decision(t.Policy))
+		d := entry.Decision(t.Policy)
+		if t.OnDecision != nil {
+			t.OnDecision(d)
+		}
+		t.queue(d)
 	}
 	t.partial = data
 	return nil

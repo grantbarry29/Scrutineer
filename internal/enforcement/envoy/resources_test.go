@@ -116,6 +116,31 @@ func TestPodIsSeparateAndUnprivileged(t *testing.T) {
 	}
 }
 
+// Both containers declare their metrics ports (#55): Envoy's stats listener and the
+// egress-reporter's /metrics endpoint, named so scrape configs can target them.
+func TestPodExposesMetricsPorts(t *testing.T) {
+	pod := Pod("sess-a", "ns1", testPodConfig())
+	byName := map[string]corev1.Container{}
+	for _, c := range pod.Spec.Containers {
+		byName[c.Name] = c
+	}
+
+	hasPort := func(c corev1.Container, name string, port int32) bool {
+		for _, p := range c.Ports {
+			if p.Name == name && p.ContainerPort == port {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasPort(byName[containerName], "envoy-stats", StatsPort) {
+		t.Fatalf("envoy container must declare the stats port: %+v", byName[containerName].Ports)
+	}
+	if !hasPort(byName[reporterContainerName], "metrics", ReporterMetricsPort) {
+		t.Fatalf("egress-reporter container must declare its metrics port: %+v", byName[reporterContainerName].Ports)
+	}
+}
+
 // TestPodWiresEgressReporter locks in the Slice C evidence plumbing: Envoy writes the
 // JSON access log into a shared volume; the egress-reporter container tails it and
 // authenticates to the reporter with the pod's projected per-session SA token.

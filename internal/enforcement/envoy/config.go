@@ -38,6 +38,10 @@ import "fmt"
 // IPv4-only — the backstop NetworkPolicy denies all IPv6 from this pod by construction,
 // so resolving AAAA records would only produce upstreams Envoy cannot reach. Changing
 // this requires the coupled posture change in internal/enforcement/networkpolicy.
+//
+// A second "stats" listener on StatsPort exposes ONLY /stats/prometheus (exact-path
+// route to the loopback admin cluster, #55) so the pod is scrapeable; the admin API
+// itself (config dump, quitquitquit, …) stays bound to 127.0.0.1 and is never routed.
 func BootstrapYAML(cfg BootstrapConfig) string {
 	return fmt.Sprintf(`admin:
   address:
@@ -110,6 +114,32 @@ static_resources:
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  - name: stats
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: %[4]d
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: egress_stats
+          route_config:
+            name: stats_route
+            virtual_hosts:
+            - name: stats
+              domains:
+              - "*"
+              routes:
+              - match:
+                  path: "/stats/prometheus"
+                route:
+                  cluster: envoy_admin
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
   clusters:
   - name: dynamic_forward_proxy_cluster
     lb_policy: CLUSTER_PROVIDED
@@ -120,5 +150,16 @@ static_resources:
         dns_cache_config:
           name: dynamic_forward_proxy_cache_config
           dns_lookup_family: V4_ONLY
-`, cfg.Port, AccessLogPath, rbacHTTPFilters(cfg))
+  - name: envoy_admin
+    type: STATIC
+    load_assignment:
+      cluster_name: envoy_admin
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 9901
+`, cfg.Port, AccessLogPath, rbacHTTPFilters(cfg), StatsPort)
 }

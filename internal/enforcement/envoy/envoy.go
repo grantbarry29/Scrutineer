@@ -37,6 +37,15 @@ const (
 	// HTTPS via CONNECT). Agents reach it via the explicit-proxy env vars below.
 	ProxyPort = 15001
 
+	// StatsPort is the pod-IP-bound listener exposing ONLY /stats/prometheus (routed to
+	// the loopback admin cluster, #55). The admin API itself stays on 127.0.0.1:9901.
+	// The agent cannot reach it: the routing lock allows agent→Envoy on ProxyPort only.
+	StatsPort = 9902
+
+	// ReporterMetricsPort is the egress-reporter container's /metrics bind (#55),
+	// overridable via SCRUTINEER_METRICS_ADDR in cmd/egress-reporter.
+	ReporterMetricsPort = 9903
+
 	// serviceSuffix is appended to the AgentSession name to form the Envoy Service name.
 	serviceSuffix = "-egress"
 

@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package envoy
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -59,6 +60,32 @@ func TestBootstrapYAML(t *testing.T) {
 	// and the egress-reporter records evidence (dry-run classification happens there).
 	if strings.Contains(cfg, "filters.http.rbac.v3.RBAC") {
 		t.Fatalf("BootstrapYAML must not emit RBAC without an enforced policy")
+	}
+}
+
+// The stats listener (#55) exposes ONLY /stats/prometheus by routing that single path to
+// the loopback admin cluster — the admin API itself (config dump, quitquitquit, …) must
+// never be reachable from off-pod.
+func TestBootstrapYAML_statsListener(t *testing.T) {
+	cfg := BootstrapYAML(BootstrapConfig{Port: ProxyPort})
+
+	must := []string{
+		fmt.Sprintf("port_value: %d", StatsPort), // scrape endpoint bound on the pod IP
+		`path: "/stats/prometheus"`,              // exact-path route, nothing else
+		"cluster: envoy_admin",                   // routed to the loopback admin
+	}
+	for _, s := range must {
+		if !strings.Contains(cfg, s) {
+			t.Fatalf("BootstrapYAML missing %q", s)
+		}
+	}
+	// Admin stays loopback-bound; the stats listener must not widen it.
+	if !strings.Contains(cfg, "address: 127.0.0.1") {
+		t.Fatal("admin must remain bound to loopback")
+	}
+	// No prefix route to the admin cluster — only the exact /stats/prometheus path.
+	if strings.Contains(cfg, `prefix: "/stats`) {
+		t.Fatal("stats route must be exact-path, not prefix (admin surface leak)")
 	}
 }
 
