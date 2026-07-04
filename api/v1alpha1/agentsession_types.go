@@ -103,7 +103,10 @@ type ModelSpec struct {
 	BaseURL string `json:"baseURL,omitempty"`
 }
 
-// RuntimeSpec describes how the agent should be executed.
+// RuntimeSpec describes the workload Scrutineer schedules and governs — NOT an agent
+// framework. Scrutineer runs no reasoning loop, builds no prompts, and makes no model
+// calls; that logic lives in the user-supplied Image. spec.task and spec.model are
+// advisory inputs propagated to the container as env; the Image decides how to use them.
 type RuntimeSpec struct {
 	// Orchestrator selects which runtime backend should execute the session.
 	// Supported: "kubernetes-job" (default) and "kubernetes-pod".
@@ -113,7 +116,8 @@ type RuntimeSpec struct {
 	// +optional
 	Orchestrator string `json:"orchestrator,omitempty"`
 
-	// Image is the container image to run the agent.
+	// Image is the user-supplied container image that *is* the agent: it holds the
+	// reasoning loop, model calls, and tool use that Scrutineer governs (bring-your-own-agent).
 	Image string `json:"image"`
 
 	// Command overrides the container ENTRYPOINT.
@@ -199,7 +203,8 @@ type AgentSessionSpec struct {
 	// Model describes which LLM provider/model the agent should use.
 	Model ModelSpec `json:"model"`
 
-	// Runtime describes how the agent should be executed.
+	// Runtime describes the workload to run — the bring-your-own-agent Image plus how it
+	// executes (orchestrator, command, resources). Not an agent framework; see RuntimeSpec.
 	Runtime RuntimeSpec `json:"runtime"`
 
 	// PolicyRefs lists reusable policies to merge before spec.policy overrides.

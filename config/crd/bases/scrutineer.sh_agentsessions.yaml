@@ -192,7 +192,9 @@ spec:
                   type: object
                 type: array
               runtime:
-                description: Runtime describes how the agent should be executed.
+                description: |-
+                  Runtime describes the workload to run — the bring-your-own-agent Image plus how it
+                  executes (orchestrator, command, resources). Not an agent framework; see RuntimeSpec.
                 properties:
                   args:
                     description: Args overrides the container CMD.
@@ -327,7 +329,9 @@ spec:
                       type: object
                     type: array
                   image:
-                    description: Image is the container image to run the agent.
+                    description: |-
+                      Image is the user-supplied container image that *is* the agent: it holds the
+                      reasoning loop, model calls, and tool use that Scrutineer governs (bring-your-own-agent).
                     type: string
                   imagePullPolicy:
                     description: ImagePullPolicy is the container image pull policy.
