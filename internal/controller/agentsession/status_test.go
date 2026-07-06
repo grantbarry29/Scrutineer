@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -109,7 +110,7 @@ var _ = Describe("status patch strategy", func() {
 			var live scrutineerv1alpha1.AgentSession
 			g.Expect(k8sClient.Get(testCtx, key, &live)).To(Succeed())
 			live.Status.Phase = scrutineerv1alpha1.PhaseRunning
-			AppendRuntimeViolations(&live, []scrutineerv1alpha1.PolicyViolation{{
+			AppendRuntimeViolations(context.Background(), &live, []scrutineerv1alpha1.PolicyViolation{{
 				Time:    violationTS,
 				Type:    "network",
 				Message: "egress blocked",

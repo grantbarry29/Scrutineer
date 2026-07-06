@@ -21,7 +21,9 @@ import (
 
 // AppendRuntimeViolations appends policy violations onto session status without
 // exceeding the shared cap. Duplicate violations (same violationKey) are skipped.
-func AppendRuntimeViolations(session *scrutineerv1alpha1.AgentSession, incoming []scrutineerv1alpha1.PolicyViolation) {
+// ctx is the reconcile/request context; audit emission inherits its cancellation,
+// logger, and trace span (#59).
+func AppendRuntimeViolations(ctx context.Context, session *scrutineerv1alpha1.AgentSession, incoming []scrutineerv1alpha1.PolicyViolation) {
 	if session == nil || len(incoming) == 0 {
 		return
 	}
@@ -52,7 +54,7 @@ func AppendRuntimeViolations(session *scrutineerv1alpha1.AgentSession, incoming 
 			// Empty is treated as self-reported (see PolicyViolation.AssuranceLevel).
 			assurance = scrutineerv1alpha1.EvidenceSelfReported
 		}
-		audit.Emit(context.Background(), audit.PolicyViolation(
+		audit.Emit(ctx, audit.PolicyViolation(
 			session.Namespace,
 			session.Name,
 			v.Type,

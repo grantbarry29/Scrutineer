@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -42,7 +43,7 @@ func TestAppendSessionEvents_idempotentByEventID(t *testing.T) {
 func TestApplyRuntimePolicyReport_appendsEvents(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(2, 0))
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Events: []scrutineerv1alpha1.SessionEvent{{
 			Time:    ts,
 			Type:    scrutineerv1alpha1.SessionEventTypeNetwork,

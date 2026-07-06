@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -33,12 +34,12 @@ func TestApplyRuntimePolicyReport_incrementsNetworkUsageFromNovelDecision(t *tes
 		}},
 	}
 
-	ApplyRuntimePolicyReport(session, report)
+	ApplyRuntimePolicyReport(context.Background(), session, report)
 	if session.Status.Usage == nil || session.Status.Usage.NetworkRequests != 1 {
 		t.Fatalf("network requests = %+v", session.Status.Usage)
 	}
 
-	ApplyRuntimePolicyReport(session, report)
+	ApplyRuntimePolicyReport(context.Background(), session, report)
 	if session.Status.Usage.NetworkRequests != 1 {
 		t.Fatalf("network requests after re-delivery = %d", session.Status.Usage.NetworkRequests)
 	}
@@ -47,7 +48,7 @@ func TestApplyRuntimePolicyReport_incrementsNetworkUsageFromNovelDecision(t *tes
 func TestApplyRuntimePolicyReport_incrementsToolUsageFromNovelDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(1_700_000_001, 0))
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
 			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
@@ -63,7 +64,7 @@ func TestApplyRuntimePolicyReport_incrementsToolUsageFromNovelDecision(t *testin
 
 func TestApplyRuntimePolicyReport_appliesExplicitTokenUsageDelta(t *testing.T) {
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Usage: &scrutineerv1alpha1.SessionUsage{
 			InputTokens:  100,
 			OutputTokens: 40,
@@ -90,12 +91,12 @@ func TestApplyRuntimePolicyReport_skipsUsageDeltaWhenDecisionsAreDuplicates(t *t
 		}},
 		Usage: &scrutineerv1alpha1.SessionUsage{InputTokens: 50},
 	}
-	ApplyRuntimePolicyReport(session, report)
+	ApplyRuntimePolicyReport(context.Background(), session, report)
 	if session.Status.Usage.InputTokens != 50 {
 		t.Fatalf("first input tokens = %d", session.Status.Usage.InputTokens)
 	}
 
-	ApplyRuntimePolicyReport(session, report)
+	ApplyRuntimePolicyReport(context.Background(), session, report)
 	if session.Status.Usage.InputTokens != 50 {
 		t.Fatalf("input tokens after re-delivery = %d, want 50", session.Status.Usage.InputTokens)
 	}
@@ -107,7 +108,7 @@ func TestApplyRuntimePolicyReport_skipsUsageDeltaWhenDecisionsAreDuplicates(t *t
 func TestApplyRuntimePolicyReport_incrementsFileUsageFromNovelDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(1_700_000_003, 0))
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
 			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
@@ -120,7 +121,7 @@ func TestApplyRuntimePolicyReport_incrementsFileUsageFromNovelDecision(t *testin
 		t.Fatalf("file operations = %+v", session.Status.Usage)
 	}
 
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
 			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,

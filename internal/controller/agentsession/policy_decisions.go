@@ -11,6 +11,8 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
+	"context"
+
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
 	"github.com/grantbarry29/scrutineer/internal/policy"
@@ -70,7 +72,8 @@ func novelRuntimePolicyDecisions(session *scrutineerv1alpha1.AgentSession, incom
 }
 
 // ApplyRuntimePolicyReport merges runtime evidence from a data-plane backend into status.
-func ApplyRuntimePolicyReport(session *scrutineerv1alpha1.AgentSession, report enforcement.RuntimeReport) {
+// ctx is the reconcile/request context, threaded down to audit emission (#59).
+func ApplyRuntimePolicyReport(ctx context.Context, session *scrutineerv1alpha1.AgentSession, report enforcement.RuntimeReport) {
 	novelDecisions := AppendRuntimePolicyDecisions(session, report.Decisions)
 
 	violations := append([]scrutineerv1alpha1.PolicyViolation(nil), report.Violations...)
@@ -86,7 +89,7 @@ func ApplyRuntimePolicyReport(session *scrutineerv1alpha1.AgentSession, report e
 			}
 		}
 	}
-	AppendRuntimeViolations(session, violations)
+	AppendRuntimeViolations(ctx, session, violations)
 	AppendSessionEvents(session, report.Events)
 	ApplyUsageFromReport(session, usageFromRuntimeReport(report), novelDecisions, len(report.Decisions))
 }

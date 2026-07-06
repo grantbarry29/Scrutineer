@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package agentsession
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 func TestApplyRuntimePolicyReport_enforcedViolationFromDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:    ts,
 			Phase:   scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
@@ -49,7 +50,7 @@ func TestApplyRuntimePolicyReport_enforcedViolationFromDecision(t *testing.T) {
 func TestApplyRuntimePolicyReport_dryRunViolation(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
 			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
@@ -66,7 +67,7 @@ func TestApplyRuntimePolicyReport_dryRunViolation(t *testing.T) {
 func TestApplyRuntimePolicyReport_auditNoViolation(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(0, 0))
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time:   ts,
 			Type:   "network",
@@ -85,7 +86,7 @@ func TestApplyRuntimePolicyReport_explicitViolationsDeduped(t *testing.T) {
 		Time: ts, Type: "network", Target: "10.0.0.1", Message: "blocked",
 	}
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, enforcement.RuntimeReport{
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
 		Decisions: []scrutineerv1alpha1.PolicyDecision{{
 			Time: ts, Type: "network", Action: scrutineerv1alpha1.PolicyDecisionDeny,
 			Target: "10.0.0.1", Message: "blocked",
@@ -114,7 +115,7 @@ func TestApplyRuntimePolicyReport_toolDecision(t *testing.T) {
 	}
 
 	session := &scrutineerv1alpha1.AgentSession{}
-	ApplyRuntimePolicyReport(session, report)
+	ApplyRuntimePolicyReport(context.Background(), session, report)
 
 	if len(session.Status.PolicyDecisions) != 1 || len(session.Status.Violations) != 1 {
 		t.Fatalf("decisions=%d violations=%d", len(session.Status.PolicyDecisions), len(session.Status.Violations))

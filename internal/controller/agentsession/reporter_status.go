@@ -101,7 +101,7 @@ func patchRuntimePolicyReportOnce(
 
 	original := live.DeepCopy()
 	updated := live.DeepCopy()
-	ApplyRuntimePolicyReport(updated, report)
+	ApplyRuntimePolicyReport(ctx, updated, report)
 
 	// ApplyRuntimePolicyReport already unions the report onto the live status, so
 	// merging back the (snapshotted) original status is the belt-and-suspenders union
