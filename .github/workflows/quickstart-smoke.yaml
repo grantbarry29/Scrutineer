@@ -1,0 +1,46 @@
+# Front-door smoke (#78): prove the fresh-clone experience stays green.
+# Runs the real thing — `make quickstart` (dedicated kind cluster, images pull-or-build,
+# controller deployed, lock-gate verdict must come back VERIFIED) followed by `make demo`
+# (both demo sessions must reach Succeeded and print the expected evidence). Both targets
+# exit non-zero on any deviation, so no extra assertions are needed here.
+# While the ghcr packages are private the image pulls fail and the job exercises the
+# local-build fallback — the same path a contributor without registry access hits.
+name: Quickstart Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quickstart-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.23"
+          cache-dependency-path: go.sum
+
+      - name: Install kind
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: v0.31.0
+          install_only: true
+
+      - name: Quickstart (cluster + controller + lock-gate verdict)
+        run: make quickstart
+
+      - name: Demo (enforced vs audit-only egress governance)
+        run: make demo
+
+      - name: Tear down
+        if: always()
+        run: |
+          make demo-down || true
+          make quickstart-down || true
