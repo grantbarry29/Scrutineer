@@ -35,3 +35,40 @@ jobs:
 
       - name: Run e2e tests
         run: make test-e2e
+
+  # Networking enforcement suite (#91): routing lock, Envoy RBAC, observed evidence,
+  # lock-gate differential — the product's core guarantee, per-push on the kindnet
+  # flavor (runner-hosted kindnetd enforces egress NetworkPolicy; proven by the
+  # quickstart smoke's VERIFIED gate verdict). Decision on record: Calico and
+  # dual-stack cross-checks stay local-only (make test-e2e-net-all) until the
+  # nightly correctness-pipeline split (#93).
+  e2e-networking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.23"
+          cache-dependency-path: go.sum
+
+      - name: Install kind
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: v0.31.0
+          install_only: true
+
+      - name: Create kind cluster
+        run: |
+          kind create cluster --name scrutineer-dev --config .devcontainer/kind-config.yaml --wait 90s
+          kubectl config use-context kind-scrutineer-dev
+
+      - name: Install CRDs
+        run: make install
+
+      - name: Load data-plane images (controller + Envoy + egress-reporter)
+        run: make test-e2e-images
+
+      - name: Run networking e2e suite
+        run: make test-e2e-net
