@@ -88,6 +88,16 @@ func TestRuntimeProfileDrift_runtimeClassAndSecurity(t *testing.T) {
 	if !RuntimeProfileDrift(base, withSec) {
 		t.Fatal("expected drift for container security context")
 	}
+
+	runAsUser := int64(65532)
+	withUser := Build(minimalSession(), &Task{}, nil, &scrutineerv1alpha1.RuntimeProfile{
+		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
+			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{RunAsUser: &runAsUser},
+		},
+	})
+	if !RuntimeProfileDrift(base, withUser) {
+		t.Fatal("expected drift for runAsUser change")
+	}
 }
 
 // Flipping the SA-token automount opt-in (Slice D, #63) must count as profile drift so a

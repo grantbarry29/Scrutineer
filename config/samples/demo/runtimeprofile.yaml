@@ -10,10 +10,11 @@ metadata:
   namespace: default
 spec:
   container:
-    # runAsNonRoot is omitted: the demo agent is stock busybox, which runs as root by
-    # default, and RuntimeProfile has no runAsUser override to remap it (#82) — with
-    # runAsNonRoot the kubelet rejects the container (CreateContainerConfigError).
-    # The demo's subject is network enforcement; use a non-root agent image in real use.
+    # busybox defaults to root, so runAsNonRoot needs runAsUser to remap the UID (#82) —
+    # without it the kubelet rejects the container (CreateContainerConfigError).
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
     readOnlyRootFilesystem: true
     allowPrivilegeEscalation: false
     capabilities:

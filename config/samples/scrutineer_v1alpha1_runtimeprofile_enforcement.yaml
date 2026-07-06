@@ -11,6 +11,10 @@ metadata:
 spec:
   container:
     runAsNonRoot: true
+    # The sample session runs busybox (root by default): runAsUser remaps the UID so
+    # runAsNonRoot is satisfiable (#82 — without it: CreateContainerConfigError).
+    runAsUser: 65532
+    runAsGroup: 65532
     readOnlyRootFilesystem: true
     allowPrivilegeEscalation: false
     capabilities:

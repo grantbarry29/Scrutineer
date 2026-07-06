@@ -83,10 +83,24 @@ spec:
                     description: ReadOnlyRootFilesystem mounts the container root
                       filesystem read-only.
                     type: boolean
+                  runAsGroup:
+                    description: RunAsGroup sets the container's primary GID. Nil
+                      inherits the image default.
+                    format: int64
+                    minimum: 0
+                    type: integer
                   runAsNonRoot:
-                    description: RunAsNonRoot requires the container to run as a non-root
-                      UID.
+                    description: |-
+                      RunAsNonRoot requires the container to run as a non-root UID. If the image
+                      defaults to root (e.g. busybox), pair this with RunAsUser — otherwise the
+                      kubelet rejects the container (CreateContainerConfigError).
                     type: boolean
+                  runAsUser:
+                    description: RunAsUser sets the container's UID. Nil inherits
+                      the image's user.
+                    format: int64
+                    minimum: 0
+                    type: integer
                 type: object
               enforcement:
                 description: |-

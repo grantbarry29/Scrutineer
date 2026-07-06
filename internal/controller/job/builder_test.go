@@ -73,10 +73,14 @@ func TestBuildPodTemplateSpec(t *testing.T) {
 func TestMergeContainerSecurityContext(t *testing.T) {
 	base := defaultContainerSecurityContext()
 	runAsNonRoot := true
+	runAsUser := int64(65532)
+	runAsGroup := int64(65532)
 	profile := &scrutineerv1alpha1.RuntimeProfile{
 		Spec: scrutineerv1alpha1.RuntimeProfileSpec{
 			Container: &scrutineerv1alpha1.RuntimeProfileContainerSpec{
 				RunAsNonRoot: &runAsNonRoot,
+				RunAsUser:    &runAsUser,
+				RunAsGroup:   &runAsGroup,
 			},
 		},
 	}
@@ -85,11 +89,17 @@ func TestMergeContainerSecurityContext(t *testing.T) {
 	if merged.RunAsNonRoot == nil || !*merged.RunAsNonRoot {
 		t.Fatalf("expected runAsNonRoot true from profile")
 	}
+	if merged.RunAsUser == nil || *merged.RunAsUser != 65532 {
+		t.Fatalf("expected runAsUser 65532 from profile, got %v", merged.RunAsUser)
+	}
+	if merged.RunAsGroup == nil || *merged.RunAsGroup != 65532 {
+		t.Fatalf("expected runAsGroup 65532 from profile, got %v", merged.RunAsGroup)
+	}
 	if merged.Capabilities == nil || len(merged.Capabilities.Drop) == 0 {
 		t.Fatalf("expected baseline capability drops to remain")
 	}
 
-	if got := mergeContainerSecurityContext(base, nil); got == nil || got.RunAsNonRoot != nil {
+	if got := mergeContainerSecurityContext(base, nil); got == nil || got.RunAsNonRoot != nil || got.RunAsUser != nil {
 		t.Fatalf("expected nil profile to return baseline without profile overrides")
 	}
 }

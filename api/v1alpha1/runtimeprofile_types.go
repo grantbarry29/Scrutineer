@@ -49,9 +49,21 @@ type RuntimeProfileSpec struct {
 
 // RuntimeProfileContainerSpec mirrors a subset of corev1.SecurityContext for agent containers.
 type RuntimeProfileContainerSpec struct {
-	// RunAsNonRoot requires the container to run as a non-root UID.
+	// RunAsNonRoot requires the container to run as a non-root UID. If the image
+	// defaults to root (e.g. busybox), pair this with RunAsUser — otherwise the
+	// kubelet rejects the container (CreateContainerConfigError).
 	// +optional
 	RunAsNonRoot *bool `json:"runAsNonRoot,omitempty"`
+
+	// RunAsUser sets the container's UID. Nil inherits the image's user.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	RunAsUser *int64 `json:"runAsUser,omitempty"`
+
+	// RunAsGroup sets the container's primary GID. Nil inherits the image default.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	RunAsGroup *int64 `json:"runAsGroup,omitempty"`
 
 	// ReadOnlyRootFilesystem mounts the container root filesystem read-only.
 	// +optional

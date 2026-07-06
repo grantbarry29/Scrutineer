@@ -91,6 +91,12 @@ func mergeContainerSecurityContext(base *corev1.SecurityContext, profile *scruti
 	if c.RunAsNonRoot != nil {
 		out.RunAsNonRoot = c.RunAsNonRoot
 	}
+	if c.RunAsUser != nil {
+		out.RunAsUser = c.RunAsUser
+	}
+	if c.RunAsGroup != nil {
+		out.RunAsGroup = c.RunAsGroup
+	}
 	if c.ReadOnlyRootFilesystem != nil {
 		out.ReadOnlyRootFilesystem = c.ReadOnlyRootFilesystem
 	}

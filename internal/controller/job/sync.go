@@ -169,10 +169,23 @@ func securityContextsEqual(a, b *corev1.SecurityContext) bool {
 		!boolPtrEqual(a.AllowPrivilegeEscalation, b.AllowPrivilegeEscalation) {
 		return false
 	}
+	if !int64PtrEqual(a.RunAsUser, b.RunAsUser) || !int64PtrEqual(a.RunAsGroup, b.RunAsGroup) {
+		return false
+	}
 	return capabilitiesEqual(a.Capabilities, b.Capabilities)
 }
 
 func boolPtrEqual(a, b *bool) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+func int64PtrEqual(a, b *int64) bool {
 	if a == nil && b == nil {
 		return true
 	}

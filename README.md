@@ -278,7 +278,7 @@ Platform teams can publish opt-in runtime hardening once; sessions reference a p
 | Source | Fields merged into Job |
 |--------|------------------------|
 | Scrutineer baseline | Capability drops (`ALL`), `allowPrivilegeEscalation: false` (busybox-friendly; no forced `runAsNonRoot`) |
-| `RuntimeProfile.spec.container` | `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities` (profile wins when set) |
+| `RuntimeProfile.spec.container` | `runAsNonRoot`, `runAsUser`, `runAsGroup`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities` (profile wins when set; pair `runAsNonRoot` with `runAsUser` for root-default images like busybox) |
 | `RuntimeProfile.spec.pod` | `runtimeClassName`, `seccompProfile`, `automountServiceAccountToken` |
 
 By default the agent pod's ServiceAccount token is **not** mounted, so a compromised agent gets no apiserver credential. Set `spec.pod.automountServiceAccountToken: true` **only** for agents that legitimately call the Kubernetes API, and pair it with a dedicated, minimally-scoped ServiceAccount via `spec.runtime.serviceAccountName` — the token grants whatever that SA's RBAC allows. Under the egress lock the agent's apiserver traffic still transits the session's Envoy proxy (and is recorded as `observed` evidence).
