@@ -452,7 +452,7 @@ Plus any `spec.runtime.env` entries the user adds.
 
 ## AgentSession controller reference
 
-The controller lives in [`internal/controller/agentsession/`](internal/controller/agentsession/) (reconcile loop, policy/runtime watches, validation) and delegates pod/Job construction to [`internal/controller/job/`](internal/controller/job/) (build, explicit-proxy env injection, drift detection, status helpers). Orchestrator-specific work goes through a backend-neutral `runtimeBackend` interface with two backends today — `kubernetes-job` and `kubernetes-pod`, both built from the shared `job.BuildPodTemplateSpec`; the reconciler maps each backend's normalized observation onto status, so governance semantics stay backend-independent. See the [package README](internal/controller/agentsession/README.md).
+The controller lives in [`internal/controller/agentsession/`](internal/controller/agentsession/) (reconcile loop, policy/runtime watches, validation) and delegates pod/Job construction to [`internal/controller/job/`](internal/controller/job/) (build, explicit-proxy env injection, drift detection, status helpers — see its [package README](internal/controller/job/README.md)). Orchestrator-specific work goes through a backend-neutral `runtimeBackend` interface with two backends today — `kubernetes-job` and `kubernetes-pod`, both built from the shared `job.BuildPodTemplateSpec`; the reconciler maps each backend's normalized observation onto status, so governance semantics stay backend-independent. See the [package README](internal/controller/agentsession/README.md).
 
 ### Reconcile triggers
 
