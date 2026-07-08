@@ -645,6 +645,16 @@ kubectl get pods -l scrutineer.sh/session=<name>
 
 ---
 
+## CI tiers
+
+Per push/PR: **Lint** and **Test** (unit + envtest) always run; the cluster-heavy
+workflows — **E2E** (standard + kindnet networking enforcement suite) and
+**Quickstart Smoke** (`make quickstart && make demo` end-to-end) — skip docs-only
+changes (#86). Nightly (+ manual dispatch): **Nightly Networking** cross-checks the
+enforcement suite on Calico and a dual-stack cluster (#93). All cluster jobs build
+images cold while the ghcr packages are private; they switch to registry pulls
+automatically once the packages are public.
+
 ## Developing with the dev container (recommended for contributors)
 
 The repo ships with a `.devcontainer/` that gives you a fully wired Scrutineer dev
