@@ -46,8 +46,8 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
+test: manifests generate fmt vet envtest ## Run tests (race detector on — #108; local and CI run this same line).
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -race ./... -coverprofile cover.out
 
 .PHONY: verify-samples
 verify-samples: manifests install ## Server-side dry-run of config/samples manifests (requires kubectl + CRDs).
