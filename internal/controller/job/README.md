@@ -12,7 +12,7 @@ wraps it in a `batch/v1` Job. Naming is deterministic (`scrutineer-session-<sess
   task/model (`AGENT_TASK_*`, `AGENT_MODEL_*`), and effective policy (`AGENT_POLICY_*`)
   are injected for the agent image to consume; nothing in the pod cooperates with
   enforcement. Enforcement lives out-of-pod (per-session Envoy + routing lock — see
-  [`docs/design/untamperable-pivot.md`](../../../docs/design/untamperable-pivot.md)).
+  [`docs/design/untamperable-enforcement.md`](../../../docs/design/untamperable-enforcement.md)).
 - When the profile enables the `envoy` backend, `applyAgentSidecarEnv` points the agent
   at its per-session proxy via standard `HTTP(S)_PROXY` env — a routing convenience;
   the NetworkPolicy lock is what makes the proxy mandatory.

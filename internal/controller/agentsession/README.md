@@ -73,7 +73,7 @@ against an unchanged cluster makes no API mutations.
   EXCEPT `EgressBackstopCIDRs`, so even a compromised Envoy can't reach cloud metadata).
   Both are torn down on terminal.
 - `lock_gate.go` — the **verified-or-refused gate** (#70,
-  [`docs/design/untamperable-pivot.md`](../../../docs/design/untamperable-pivot.md) §4):
+  [`docs/design/untamperable-enforcement.md`](../../../docs/design/untamperable-enforcement.md) §4):
   before runtime creation, enforced-mode sessions whose enforcement substrate is a
   NetworkPolicy consult `LockVerifier`
   ([`internal/enforcement/lockverify`](../../enforcement/lockverify) — differential

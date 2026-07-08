@@ -13,9 +13,9 @@ Each of these is a separately built/deployed component and keeps a README at its
 | manager (controller + webhook + reporter + lock-probe) | `cmd/main.go` | `Dockerfile` | `ghcr.io/grantbarry29/scrutineer` | `make docker-build` / `kind-load` | `internal/controller/...`, `internal/webhook/...`, `internal/reporter`, `internal/enforcement/lockverify` |
 | egress-reporter (runs beside Envoy in the per-session egress-proxy pod, out-of-agent-pod) | `cmd/egress-reporter` | `Dockerfile.egress-reporter` | `ghcr.io/grantbarry29/scrutineer-egress-reporter` | `make docker-build-egress-reporter` / `kind-load-egress-reporter` | `internal/enforcement/envoy` |
 
-> The cooperative in-pod sidecar tier was removed in the untamperable pivot (#71);
+> The cooperative in-pod sidecar tier was removed (#71);
 > enforcement is out-of-pod only. See
-> [`docs/design/untamperable-pivot.md`](../docs/design/untamperable-pivot.md).
+> [`docs/design/untamperable-enforcement.md`](../docs/design/untamperable-enforcement.md).
 
 ## Conventions a binary README must capture
 

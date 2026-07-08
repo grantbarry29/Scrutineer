@@ -118,7 +118,7 @@ func TestRuntimeProfileDrift_automountOptIn(t *testing.T) {
 	}
 }
 
-// Post-pivot the FQDN policy lives in the Envoy ConfigMap (a separate object), not the
+// The FQDN policy lives in the Envoy ConfigMap (a separate object), not the
 // agent pod template, so changing denied domains no longer drifts the Job template. The
 // agent-facing drift that remains — enabling the Envoy proxy env — is covered by
 // TestRuntimeProfileDrift_envoyProxyEnv in sidecars_test.go.

@@ -1,8 +1,8 @@
 # Phase 3b Slice 1 — Runtime Reporter Contract (Design)
 
-> **Status:** Implemented (`internal/reporter/`, `agentsession.PatchRuntimePolicyReport`, `--reporter-bind-address`). Post-pivot (#71) the live caller is the **egress-reporter** in the per-session out-of-pod egress-proxy pod; historical sections written for the removed cooperative sidecars still describe the wire contract accurately.
+> **Status:** Implemented (`internal/reporter/`, `agentsession.PatchRuntimePolicyReport`, `--reporter-bind-address`). Since #71 the live caller is the **egress-reporter** in the per-session out-of-pod egress-proxy pod; historical sections written for the removed cooperative sidecars still describe the wire contract accurately.
 > **Audience:** the engineer/agent implementing a data-plane reporter component.
-> **Read first:** [`architecture.md`](architecture.md) · [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) · [`untamperable-pivot.md`](untamperable-pivot.md)
+> **Read first:** [`architecture.md`](architecture.md) · [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) · [`untamperable-enforcement.md`](untamperable-enforcement.md)
 
 This document specifies **how a running data-plane component reports runtime evidence back to the Scrutineer controller**, so that `AgentSession.status.policyDecisions` and `AgentSession.status.violations` reflect what actually happened at runtime. It is the missing edge that turns *propagated* governance into *observed* governance.
 

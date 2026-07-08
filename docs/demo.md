@@ -14,7 +14,7 @@ make quickstart     # kind cluster + Scrutineer deployed; ends with the lock-gat
 
 Quickstart refuses to declare success unless the **verified-or-refused** gate proves the
 cluster's CNI actually enforces NetworkPolicy (differential canary probe — see
-[`docs/design/untamperable-pivot.md`](design/untamperable-pivot.md) §4). That is itself
+[`docs/design/untamperable-enforcement.md`](design/untamperable-enforcement.md) §4). That is itself
 the first demo: Scrutineer never *assumes* its lock works. Internet egress from the
 cluster is required (the demo fetches `example.com`).
 
@@ -91,7 +91,7 @@ The proxy pod also exposes Prometheus metrics (`:9902` Envoy stats, `:9903`
   chokepoint hops.
 - Tool and file governance have **no enforcement backend yet** — Scrutineer removed the
   cooperative in-pod tier rather than ship advisory controls dressed as governance
-  (the untamperable pivot). They return out-of-pod: tools-pod epic #76, LLM-gateway
+  (untamperable or absent). They return out-of-pod: tools-pod epic #76, LLM-gateway
   epic #77.
 - The guarantee assumes an enforcing CNI (which the gate *proved*, not assumed) and an
   uncompromised node — spelled out in

@@ -177,8 +177,8 @@ spec:
                       default: AgentPolicy
                       description: |-
                         Kind is the policy resource kind. AgentPolicy is the only kind today; tool/file
-                        policy kinds return with their out-of-pod chokepoints (the untamperable pivot,
-                        docs/design/untamperable-pivot.md).
+                        policy kinds return with their out-of-pod chokepoints (untamperable or absent;
+                        docs/design/untamperable-enforcement.md).
                       enum:
                       - AgentPolicy
                       type: string

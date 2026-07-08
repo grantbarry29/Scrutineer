@@ -109,7 +109,7 @@ var _ = Describe("standalone reporter overlay", func() {
 	// Service is retargeted at the shipped pods exactly as the overlay's Service patch
 	// does, so the per-session Envoy's egress-reporter POST /v1/report lands on the
 	// shipped reporter, which must merge the observed runtime decision into the session
-	// status. Post-pivot the evidence source is the out-of-pod Envoy egress path (#71).
+	// status. The evidence source is the out-of-pod Envoy egress path (#71).
 	It("merges observed runtime evidence posted through the shipped reporter into session status", func(ctx SpecContext) {
 		requireEgressEnforcingCNI(ctx)
 		requireLiveEgressEvidenceImages(ctx)

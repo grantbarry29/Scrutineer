@@ -148,8 +148,8 @@ type PolicyRules struct {
 // PolicyRef references a reusable policy CRD in the same namespace as the AgentSession.
 type PolicyRef struct {
 	// Kind is the policy resource kind. AgentPolicy is the only kind today; tool/file
-	// policy kinds return with their out-of-pod chokepoints (the untamperable pivot,
-	// docs/design/untamperable-pivot.md).
+	// policy kinds return with their out-of-pod chokepoints (untamperable or absent;
+	// docs/design/untamperable-enforcement.md).
 	// +kubebuilder:validation:Enum=AgentPolicy
 	// +kubebuilder:default=AgentPolicy
 	// +optional

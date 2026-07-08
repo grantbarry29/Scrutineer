@@ -51,7 +51,7 @@ func scrutineerE2EImage() string {
 }
 
 // requireLiveEgressEvidenceImages skips the spec unless the Envoy egress-proxy images
-// (Envoy + egress-reporter) are present in kind — the observed-evidence path post-pivot.
+// (Envoy + egress-reporter) are present in kind — the sole observed-evidence path (#71).
 func requireLiveEgressEvidenceImages(ctx SpecContext) {
 	GinkgoHelper()
 	requireScrutineerE2EImage(ctx)

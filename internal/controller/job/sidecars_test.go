@@ -33,7 +33,7 @@ func envoyProfile() *scrutineerv1alpha1.RuntimeProfile {
 }
 
 // The Envoy egress proxy is out-of-pod: enabling it adds no in-agent-pod container and no
-// reporter-token volume (post-pivot the agent pod carries no enforcement sidecars).
+// reporter-token volume (the agent pod carries no enforcement sidecars since #71).
 func TestBuildPodTemplate_envoyIsOutOfPod(t *testing.T) {
 	job := Build(minimalSession(), &Task{}, nil, envoyProfile())
 	containers := job.Spec.Template.Spec.Containers

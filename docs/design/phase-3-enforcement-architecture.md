@@ -1,6 +1,6 @@
 # Phase 3 Enforcement Architecture
 
-> **Post-pivot note:** the cooperative in-pod enforcement slices this phase shipped (5–8 below) were **removed** in the untamperable pivot ([`untamperable-pivot.md`](untamperable-pivot.md), #71); their sections are kept as condensed historical stubs. What survives of Phase 3 is the enforcement contract (`internal/enforcement`), the NetworkPolicy baseline, the runtime-evidence loop, and the out-of-pod Envoy egress path.
+> **Note:** the cooperative in-pod enforcement slices this phase shipped (5–8 below) were **removed** ([`untamperable-enforcement.md`](untamperable-enforcement.md), #71); their sections are kept as condensed historical stubs. What survives of Phase 3 is the enforcement contract (`internal/enforcement`), the NetworkPolicy baseline, the runtime-evidence loop, and the out-of-pod Envoy egress path.
 
 Scrutineer Phase 3 moves from policy declaration and propagation to data-plane enforcement. The goal is not to turn Scrutineer into an orchestrator or agent framework. The controller should keep declaring desired governance state; enforcement backends should observe, enforce, and report evidence.
 
@@ -41,7 +41,7 @@ Use a narrow contract between the reconciler and data-plane components:
 3. Data-plane components enforce at runtime.
 4. Data-plane components report decisions and violations through a bounded status update path.
 
-Backends should be replaceable (post-pivot: every backend is out-of-pod):
+Backends should be replaceable (every backend is out-of-pod):
 
 - NetworkPolicy baseline for coarse CIDR/namespace egress + the routing lock.
 - Per-session out-of-pod Envoy egress proxy for FQDN/L7 allow/deny (shipped).
@@ -136,12 +136,12 @@ Acceptance:
 - Status list is bounded.
 - README documents what is and is not populated.
 
-### Slices 5–8: the cooperative in-pod tier — shipped, then removed (pivot #71)
+### Slices 5–8: the cooperative in-pod tier — shipped, then removed (#71)
 
 Slices 5–8 delivered in-pod sidecar injection, a tool-call evaluation contract, a
 DNS/egress proxy prototype, and a file/workspace policy design. All of it was
 cooperative — it shared the agent's pod and trust domain — and was **removed** in the
-untamperable pivot ([`untamperable-pivot.md`](untamperable-pivot.md) §5). The original
+scope narrowing ([`untamperable-enforcement.md`](untamperable-enforcement.md) §5). The original
 slice write-ups and their design docs live in git history (deleted in #74). Surviving
 descendants: the mode semantics and evidence contract (unchanged) and the successor designs
 ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)).
@@ -155,9 +155,9 @@ Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/scrut
 1. **Runtime reporter mechanism design** — `docs/design/phase-3-runtime-reporter-contract.md`.
 2. **Runtime reporter loop (impl)** — controller-owned PATCH callback populates status.
 3. **Structured session events API** — durable, ordered `status.events[]` (the reporter's sink).
-4. **First real producers** — shipped pre-pivot as cooperative in-pod images (removed in #71); the surviving producer is the **egress-reporter** in the out-of-pod egress-proxy pod.
+4. **First real producers** — shipped as cooperative in-pod images (removed in #71); the surviving producer is the **egress-reporter** in the out-of-pod egress-proxy pod.
 5. **Live network violation population** — enforced NetworkPolicy blocks → violations.
-6. **File/workspace policy implementation** — deferred to the arena design post-pivot.
+6. **File/workspace policy implementation** — deferred to the arena design.
 
 ## Open Questions
 

@@ -20,7 +20,7 @@ the agent's trust domain** — a per-session, out-of-pod Envoy chokepoint plus a
 default-deny routing lock the agent cannot alter. Runtime evidence is recorded back
 into status stamped `observed`, observability and audit signals are exported, and
 sensitive actions gate behind human approval. Enforcement ships **untamperable or
-not at all** ([the pivot](docs/design/untamperable-pivot.md)): where a guarantee
+not at all** ([decision record](docs/design/untamperable-enforcement.md)): where a guarantee
 depends on cluster behavior, Scrutineer proves it empirically and refuses rather
 than degrading silently.
 
@@ -42,7 +42,7 @@ This creates a dedicated `scrutineer-quickstart` cluster, loads the controller a
 egress-proxy images into it, installs the CRDs, deploys the controller, and prints the
 **routing-lock verification verdict** — Scrutineer empirically proves the cluster's CNI
 enforces NetworkPolicy before it will run enforced sessions (*verified-or-refused*; see
-[`docs/design/untamperable-pivot.md`](docs/design/untamperable-pivot.md)). If the verdict
+[`docs/design/untamperable-enforcement.md`](docs/design/untamperable-enforcement.md)). If the verdict
 comes back `Refused` on your kind version, retry with
 `make quickstart-down && make quickstart QUICKSTART_CNI=calico`.
 
@@ -80,7 +80,7 @@ agents inside enterprise environments.
 
 - Tool governance via an out-of-pod **tools-pod chokepoint** (#76) and model-call
   governance via an **LLM gateway** (#77) — the tool/file policy surface was removed
-  with the cooperative in-pod tier ([the pivot](docs/design/untamperable-pivot.md))
+  with the cooperative in-pod tier ([decision record](docs/design/untamperable-enforcement.md))
   and returns only with real enforcement backends
 - Node-level transparent interception, no CNI dependency (#64)
 - Identity and credential isolation / mediation (#25), sandboxes (gVisor / Kata) (#29)
@@ -117,8 +117,8 @@ See [AgentSession controller reference](#agentsession-controller-reference) for 
 ### Current limitations
 
 - **Tool and file governance is not enforced yet.** Scrutineer ships only enforcement
-  the agent cannot tamper with (the untamperable pivot,
-  [`docs/design/untamperable-pivot.md`](docs/design/untamperable-pivot.md)); the
+  the agent cannot tamper with (untamperable or absent;
+  [`docs/design/untamperable-enforcement.md`](docs/design/untamperable-enforcement.md)); the
   cooperative in-pod tier was removed rather than presented as governance. Today that
   means **egress is enforced and `observed`**
   (see [Egress enforcement](#egress-enforcement-guarantees--assumptions)); there is
@@ -290,7 +290,7 @@ By default the agent pod's ServiceAccount token is **not** mounted, so a comprom
 | `status.matchedRuntimeProfile` | Which `RuntimeProfile` was applied (name, UID, resourceVersion) |
 | `RuntimeProfileResolved` condition | `ProfileApplied` when a ref resolves; `NoProfileRef` when unset |
 
-**Enforcement backends (`spec.enforcement[]`):** the only type today is **envoy** — a per-session out-of-pod egress proxy (upstream `envoyproxy/envoy` + the first-party `scrutineer-egress-reporter` for `observed` evidence) plus the default-deny routing lock on the agent pod — see `docs/design/evidence-integrity.md` and `docs/design/untamperable-pivot.md`. Future out-of-pod chokepoints (tools pod, arena workspace) will add new types. Per-binary READMEs live under [`cmd/`](cmd/).
+**Enforcement backends (`spec.enforcement[]`):** the only type today is **envoy** — a per-session out-of-pod egress proxy (upstream `envoyproxy/envoy` + the first-party `scrutineer-egress-reporter` for `observed` evidence) plus the default-deny routing lock on the agent pod — see `docs/design/evidence-integrity.md` and `docs/design/untamperable-enforcement.md`. Future out-of-pod chokepoints (tools pod, arena workspace) will add new types. Per-binary READMEs live under [`cmd/`](cmd/).
 
 **Runtime reporter wiring:** the egress-proxy pod (not the agent pod) carries:
 
@@ -864,7 +864,7 @@ This runs `kubectl apply --dry-run=server` on each `config/samples/scrutineer_*.
 | `status.policyDecisions` | Yes | Merge-time + runtime decisions (max 64) |
 | Policy / profile change → Job env sync | Partial | Replaces **pending** Jobs; `PolicyEnvDrift` if Job already active |
 | `RuntimeProfile` + `runtimeProfileRef` | Yes | Same-namespace; merges into Job pod template; watch + pending Job replace |
-| Enforcement backends (`spec.enforcement`) | Yes | Out-of-pod `envoy` egress proxy with `observed` evidence (the only type; the cooperative in-pod tier was removed in the pivot, #71) |
+| Enforcement backends (`spec.enforcement`) | Yes | Out-of-pod `envoy` egress proxy with `observed` evidence (the only type; the cooperative in-pod tier was removed, #71) |
 | **Network egress enforcement** | Yes | Out-of-pod `envoy` egress proxy + default-deny routing lock, gated verified-or-refused by the lock probe (`observed` evidence) |
 | **Tool-call governance** | Not yet | No policy surface until the tools-pod chokepoint lands (deferred design; #75 clean break) |
 | **File-access governance** | Not yet | No policy surface until the arena workspace lands (deferred design; #75 clean break) |
@@ -915,7 +915,7 @@ After running the controller and applying the success sample:
 
 Phases 0–5 have shipped (control-plane reconciliation, reusable policy + runtime
 profiles, the runtime-evidence loop, observability/audit export, and human approval
-workflows), followed by the **untamperable pivot** (#69–#71): enforcement is now
+workflows), followed by the narrowing to **adversarial-grade-only enforcement** (#69–#71): enforcement is
 adversarial-grade only — the out-of-pod Envoy egress path with the verified-or-refused
 lock gate — and the cooperative in-pod tier was removed. Phase 6 is in progress.
 Live task state and the **roadmap** are in

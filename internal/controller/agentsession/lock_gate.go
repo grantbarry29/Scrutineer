@@ -33,7 +33,7 @@ import (
 const lockVerifyRecheckInterval = 30 * time.Second
 
 // LockVerdictSource provides the cached routing-lock verdict (verified-or-refused
-// gate, docs/design/untamperable-pivot.md §4). *lockverify.Verifier implements it.
+// gate, docs/design/untamperable-enforcement.md §4). *lockverify.Verifier implements it.
 type LockVerdictSource interface {
 	Current() lockverify.State
 }
@@ -78,7 +78,7 @@ func (r *AgentSessionReconciler) egressLockGate(session *scrutineerv1alpha1.Agen
 // transition (not on every recheck pass).
 func (r *AgentSessionReconciler) setLockUnverified(session *scrutineerv1alpha1.AgentSession, reason, msg string, enforced bool) {
 	if enforced {
-		msg += "; enforced session held (verified-or-refused, docs/design/untamperable-pivot.md)"
+		msg += "; enforced session held (verified-or-refused, docs/design/untamperable-enforcement.md)"
 	}
 	prev := meta.FindStatusCondition(session.Status.Conditions, ConditionEgressLockVerified)
 	changed := prev == nil || prev.Status != metav1.ConditionFalse || prev.Reason != reason

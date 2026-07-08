@@ -66,7 +66,7 @@ import (
 // envLockVerify enables the verified-or-refused lock gate (#70) in the in-process
 // manager. Set by make test-e2e-net: the gate's behavior is CNI-dependent, so it is
 // exercised by the networking suite on both clusters. The standard suite keeps it off
-// until pivot Phase 2 retires the cooperative-era specs that predate the gate.
+// so its specs stay CNI-independent.
 const envLockVerify = "SCRUTINEER_E2E_LOCK_VERIFY"
 
 func lockVerifyEnabled() bool { return os.Getenv(envLockVerify) == "1" }

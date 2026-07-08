@@ -288,7 +288,7 @@ quickstart-images: ## Ensure controller + egress-reporter + Envoy images exist l
 
 .PHONY: quickstart-verdict
 quickstart-verdict: ## Wait for and print the routing-lock verification verdict (verified-or-refused gate).
-	@echo ">> waiting for the lock-verification probe (differential canary; see docs/design/untamperable-pivot.md §4)..."
+	@echo ">> waiting for the lock-verification probe (differential canary; see docs/design/untamperable-enforcement.md §4)..."
 	@# The || true keeps the empty-grep iterations alive under this Makefile's
 	@# bash -e -o pipefail shell (no verdict line yet is the expected first state).
 	@verdict=""; \

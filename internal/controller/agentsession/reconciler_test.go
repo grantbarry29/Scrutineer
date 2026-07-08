@@ -234,7 +234,7 @@ var _ = Describe("AgentSession reconciler", func() {
 			Expect(k8sClient.Get(testCtx, types.NamespacedName{Namespace: ns, Name: jobNameFor(session)}, &job)).To(Succeed())
 
 			// The Envoy egress proxy is out-of-pod: the agent pod holds only the agent
-			// container (no cooperative in-pod sidecars post-pivot, #71).
+			// container (the cooperative in-pod sidecars were removed, #71).
 			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 			byName := map[string]corev1.Container{}
 			for _, c := range job.Spec.Template.Spec.Containers {

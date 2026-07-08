@@ -15,7 +15,7 @@ Scrutineer keeps canonical architecture/design docs in [`docs/design/`](../docs/
 | Task area | Read |
 |-----------|------|
 | Anything non-trivial / orientation | [`docs/design/architecture.md`](../docs/design/architecture.md) (start here) |
-| **The enforcement pivot** (adversarial-grade-only, lock gate, removal) | [`docs/design/untamperable-pivot.md`](../docs/design/untamperable-pivot.md) |
+| **The enforcement doctrine** (adversarial-grade-only, lock gate, tier removal) | [`docs/design/untamperable-enforcement.md`](../docs/design/untamperable-enforcement.md) |
 | Data-plane enforcement, `internal/enforcement` contract | [`docs/design/phase-3-enforcement-architecture.md`](../docs/design/phase-3-enforcement-architecture.md) |
 | Runtime reporter / writing runtime evidence into `status` | [`docs/design/phase-3-runtime-reporter-contract.md`](../docs/design/phase-3-runtime-reporter-contract.md) |
 | Out-of-pod egress chokepoint / observed-evidence trust boundary | [`docs/design/evidence-integrity.md`](../docs/design/evidence-integrity.md) |

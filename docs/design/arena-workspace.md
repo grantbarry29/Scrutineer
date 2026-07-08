@@ -1,9 +1,9 @@
 # Arena Workspace — Untamperable File Governance via a Network-POSIX Workspace
 
-**Status:** draft / deferred (design TODO from the pivot; not scheduled)
-**Scope:** the out-of-pod successor to the cooperative in-pod file tier removed in the pivot (#71): the agent's governed workspace ("arena" — repos, files, artifacts) lives in a separate per-session pod and is served over a per-operation network protocol, so every file operation crosses a boundary the agent cannot alter — mediated, policy-checked, and `observed`.
+**Status:** draft / deferred (design TODO from the scope narrowing; not scheduled)
+**Scope:** the out-of-pod successor to the cooperative in-pod file tier removed in #71: the agent's governed workspace ("arena" — repos, files, artifacts) lives in a separate per-session pod and is served over a per-operation network protocol, so every file operation crosses a boundary the agent cannot alter — mediated, policy-checked, and `observed`.
 **Non-goals:** governing the agent container's own rootfs or scratch space (ungoverned by design — a local tmpfs keeps hot paths fast); syscall-level interception (#29 sandboxes).
-**Tracking:** to be filed when scheduled; absorbs #33 (transparent/FUSE file interception). The pre-pivot path-rule schema (`allowedPaths`/`deniedPaths`) was removed in the #75 clean break; it and the cooperative-tier design it came from live in git history (pre-#75 `api/v1alpha1/`, pre-#74 `docs/design/`).
+**Tracking:** to be filed when scheduled; absorbs #33 (transparent/FUSE file interception). The earlier path-rule schema (`allowedPaths`/`deniedPaths`) was removed in the #75 clean break; it and the cooperative-tier design it came from live in git history (pre-#75 `api/v1alpha1/`, pre-#74 `docs/design/`).
 
 ---
 
@@ -28,5 +28,5 @@ Key facts driving the recommendation: kubelet-performed mounts originate in the 
 
 1. FUSE client delivery: init-container installing the client + mount, or a purpose-built agent-pod base layer?
 2. Cache coherence needs for multi-writer arenas (agent + tools pod both writing)?
-3. Path-rule policy shape: reintroduce the pre-pivot `allowedPaths`/`deniedPaths` rules (git history, pre-#75) or reshape around mount-time grants + per-op checks?
+3. Path-rule policy shape: reintroduce the pre-#75 `allowedPaths`/`deniedPaths` rules (git history, pre-#75) or reshape around mount-time grants + per-op checks?
 4. Snapshot/audit story: arena pod is perfectly placed for copy-on-write session diffs ("what changed") — in scope for v1 of this design?

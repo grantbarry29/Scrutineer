@@ -3,7 +3,7 @@
 > **Canonical architecture reference for Scrutineer.** Read this before implementing anything non-trivial.
 > **Companion docs:** product vision (`.cursor/rules/scrutineer-product-vision.mdc`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)), workflow rules (`.cursor/scrutineer-cursor-workflow.md`), and the phase-specific design docs in this folder.
 >
-> **Enforcement doctrine (the pivot, #69–#71):** enforcement is **adversarial-grade only**. The cooperative in-pod sidecar tier was removed; the sole enforcement plane is the per-session out-of-pod Envoy egress proxy + default-deny routing lock, empirically verified by the lock gate (#70) before enforced sessions run. Doctrine and rationale: [`untamperable-pivot.md`](untamperable-pivot.md).
+> **Enforcement doctrine (#69–#71):** enforcement is **adversarial-grade only**. The cooperative in-pod sidecar tier was removed; the sole enforcement plane is the per-session out-of-pod Envoy egress proxy + default-deny routing lock, empirically verified by the lock gate (#70) before enforced sessions run. Doctrine and rationale: [`untamperable-enforcement.md`](untamperable-enforcement.md).
 
 This document describes **what Scrutineer is, how it is structured, and the invariants every change must preserve.** It is written to be precise enough that an implementer (human or model) can make a correct change without re-deriving the architecture.
 
@@ -141,7 +141,7 @@ classDiagram
 
 **Reference rules (invariant):** all refs (`policyRefs`, `runtimeProfileRef`, `promptConfigMapRef`) are **same-namespace only** in the MVP. Cross-namespace references are a deliberate future feature, not an oversight.
 
-`PolicyRules` is the **shared** policy shape used by AgentPolicy and inline `spec.policy`, so merge logic is uniform. Post-pivot it carries only fields with an enforcement or control-plane backend: network rules (Envoy/NetworkPolicy) and `requireHumanApproval` (controller approval gate). The tool/file rule fields and caps — and the `ToolPolicy` CRD — were removed per doctrine #1 (#75, resolving the #71 deviation); they return, likely reshaped, with the tools/arena chokepoints.
+`PolicyRules` is the **shared** policy shape used by AgentPolicy and inline `spec.policy`, so merge logic is uniform. It now carries only fields with an enforcement or control-plane backend: network rules (Envoy/NetworkPolicy) and `requireHumanApproval` (controller approval gate). The tool/file rule fields and caps — and the `ToolPolicy` CRD — were removed per doctrine #1 (#75, resolving the #71 deviation); they return, likely reshaped, with the tools/arena chokepoints.
 
 ---
 
@@ -278,11 +278,11 @@ flowchart TB
     backends -- "RuntimeReport" --> rep --> apply
 ```
 
-- **Today (post-pivot, #71):** the sole enforcement plane is the per-session **out-of-pod Envoy egress proxy** + the default-deny **routing lock**, whose enforcement is empirically verified before enforced sessions run (the lock gate, #70). Agent egress is forced through Envoy via `HTTP_PROXY`/`HTTPS_PROXY`; Envoy's access log is tailed by a co-located **egress-reporter** that submits **`observed`** evidence to the **reporter** (`cmd/main.go` → `mgr.Add(reporter.NewRunnable(...))`), which merges it into `status.policyDecisions`(runtime), `status.violations`, `status.usage`, and `status.events`. The cooperative in-pod sidecar tier was **removed** — a control the agent could bypass or starve is advisory, not enforcement.
+- **Today (#71):** the sole enforcement plane is the per-session **out-of-pod Envoy egress proxy** + the default-deny **routing lock**, whose enforcement is empirically verified before enforced sessions run (the lock gate, #70). Agent egress is forced through Envoy via `HTTP_PROXY`/`HTTPS_PROXY`; Envoy's access log is tailed by a co-located **egress-reporter** that submits **`observed`** evidence to the **reporter** (`cmd/main.go` → `mgr.Add(reporter.NewRunnable(...))`), which merges it into `status.policyDecisions`(runtime), `status.violations`, `status.usage`, and `status.events`. The cooperative in-pod sidecar tier was **removed** — a control the agent could bypass or starve is advisory, not enforcement.
 - **Trust model:** enforcement lives in a trust domain the agent cannot alter (separate pod/identity/netns) and is made mandatory by the CNI-enforced NetworkPolicy lock, so evidence is `observed`. Tool- and file-domain governance await their own out-of-pod chokepoints ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)); until then those domains have no policy surface (no unenforced fields).
 - **The direction:** isolate the data plane from the agent so integrity no longer depends on its cooperation — per-session identity / scoped ServiceAccount, out-of-pod or kernel/eBPF observation the agent cannot bypass, FQDN egress (Cilium/Envoy), and sandboxed runtimes (gVisor/Kata). See [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) for the evidence loop, and the *Runtime evidence integrity* track for the adversarial roadmap.
 
-Detailed designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) (contract + history), [`evidence-integrity.md`](evidence-integrity.md) (egress chokepoint + trust boundary), [`untamperable-pivot.md`](untamperable-pivot.md) (doctrine + lock gate), [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md) (deferred successors).
+Detailed designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) (contract + history), [`evidence-integrity.md`](evidence-integrity.md) (egress chokepoint + trust boundary), [`untamperable-enforcement.md`](untamperable-enforcement.md) (doctrine + lock gate), [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md) (deferred successors).
 
 ---
 
@@ -325,9 +325,9 @@ Detailed designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-ar
 Phases (tracked as GitHub Issues / epics — see <https://github.com/grantbarry29/scrutineer/issues>):
 
 - **0–2 (done):** MVP foundation, MVP hardening, reusable policy model + RuntimeProfile.
-- **3 (done, reshaped by the pivot):** enforcement contracts + NetworkPolicy baseline survive; the cooperative in-pod slices were removed (#71).
+- **3 (done, reshaped by the scope narrowing):** enforcement contracts + NetworkPolicy baseline survive; the cooperative in-pod slices were removed (#71).
 - **3b (done):** runtime evidence loop — reporter endpoint, `status.events[]`, and the egress-reporter as the live `observed` producer.
-- **The pivot (#69, Phases 0–2 done):** adversarial-grade-only doctrine, verified-or-refused lock gate (#70), cooperative-tier removal (#71); Phase 3 hardening + deferred tools/arena chokepoints remain.
+- **Adversarial-grade-only enforcement (#69, Phases 0–2 done):** adversarial-grade-only doctrine, verified-or-refused lock gate (#70), cooperative-tier removal (#71); Phase 3 hardening + deferred tools/arena chokepoints remain.
 - **4:** observability & audit (usage metrics, timeline model, Prometheus, OTel, audit sink, log/artifact collection) — consumes the evidence loop.
 - **5:** scoped human approval workflows.
 - **6 (in progress):** orchestrator-agnostic runtime backends. `runtimeBackend` interface + `status.runtimeRef` shipped; two in-tree backends (`kubernetes-job`, `kubernetes-pod`) done. Next: external adapter design (Tekton/Argo/Temporal) + SessionTemplate.

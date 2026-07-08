@@ -22,9 +22,9 @@ import (
 // EnforcementTypeEnvoy is the only RuntimeProfile spec.enforcement type: the per-session
 // Envoy egress proxy, provisioned by the controller as a separate out-of-pod pod (own
 // identity/netns) so a compromised agent cannot tamper with the enforcement point it
-// would otherwise share a pod with (evidence-integrity design, #8/#60; the untamperable
-// pivot, docs/design/untamperable-pivot.md). The cooperative in-pod sidecar tier was
-// removed in the pivot (#71): a control the agent could bypass or starve is advisory,
+// would otherwise share a pod with (evidence-integrity design, #8/#60; doctrine:
+// docs/design/untamperable-enforcement.md). The cooperative in-pod sidecar tier was
+// removed (#71): a control the agent could bypass or starve is advisory,
 // not enforcement. Enabling this type provisions the proxy
 // and points the agent at it via explicit-proxy env; see
 // internal/controller/agentsession/egress_envoy.go.
@@ -77,7 +77,7 @@ func hasEnabledEnforcement(profile *scrutineerv1alpha1.RuntimeProfile, enforceme
 }
 
 // sidecarContainers returns the pod's non-agent containers (sorted by name) for Job drift
-// detection. Post-pivot the agent pod carries no enforcement sidecars, but the helper
+// detection. The agent pod carries no enforcement sidecars (#71), but the helper
 // stays general so drift comparison keeps working for any future in-pod additions.
 func sidecarContainers(spec *corev1.PodSpec) []corev1.Container {
 	if spec == nil {

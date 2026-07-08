@@ -108,7 +108,7 @@ func BackstopNameFor(sessionNamespace, sessionName string) string {
 // BuildEgressProxyBackstop renders the egress policy for a session's Envoy proxy pod: it may
 // resolve DNS and reach the internet, but the backstopCIDRs (cloud metadata by default, plus
 // any operator-added cluster/service/API ranges) are denied — even a compromised Envoy can't
-// reach the metadata endpoint or pivot into those ranges. Returns nil when there is nothing
+// reach the metadata endpoint or move laterally into those ranges. Returns nil when there is nothing
 // to deny (no backstops), leaving the proxy pod's egress unrestricted.
 //
 // Dual-stack posture (#66): the egress path is IPv4-only. This policy deliberately contains

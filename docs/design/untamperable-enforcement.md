@@ -1,9 +1,9 @@
-# The Untamperable Pivot — Enforcement Only From Sources the Agent Cannot Alter
+# Untamperable Enforcement — Only From Sources the Agent Cannot Alter
 
 **Status:** landed — Phases 0–2 shipped (#70 lock gate `cfdd9c0`, #71 removal `b9ceaa8`); Phase 3 hardening tracked under epic #69
-**Scope:** the product pivot to **adversarial-grade-only enforcement**: retire the cooperative in-pod enforcement tier entirely, make the untamperable L4/L7 egress path (per-session out-of-pod Envoy + default-deny routing lock) the sole enforcement plane, add the **verified-or-refused** lock gate, and defer tool/file governance to out-of-pod chokepoint designs ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)).
+**Scope:** the decision (a deliberate scope narrowing, 2026-06) to ship **adversarial-grade-only enforcement**: retire the cooperative in-pod enforcement tier entirely, make the untamperable L4/L7 egress path (per-session out-of-pod Envoy + default-deny routing lock) the sole enforcement plane, add the **verified-or-refused** lock gate, and defer tool/file governance to out-of-pod chokepoint designs ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)).
 **Non-goals:** implementing the tools pod or arena pod now (design-doc TODOs); node-level transparent interception (#64, unchanged); syscall/eBPF observation; node-compromise defense (same assumption as [`evidence-integrity.md`](evidence-integrity.md)); multi-arch UI/story changes.
-**Tracking:** pivot epic #69 (children: #70 gate, #71 removal, #74 residue purge); builds on #8 (shipped) and #32 (shipped); absorbs #25/#33 as deferred designs; reshapes #55; #64/#66 unchanged.
+**Tracking:** epic #69 (children: #70 gate, #71 removal, #74 residue purge); builds on #8 (shipped) and #32 (shipped); absorbs #25/#33 as deferred designs; reshapes #55; #64/#66 unchanged.
 
 ---
 
@@ -14,7 +14,7 @@ Scrutineer ships **only** enforcement that a non-cooperating agent cannot bypass
 1. **Out of the agent's control** — separate pod, own ServiceAccount/identity, own network namespace.
 2. **Mandatory** — the agent's *only* working path for the governed action, enforced by a layer the agent cannot modify (today: the default-deny NetworkPolicy routing lock).
 
-The cooperative in-pod tier (dns-proxy, tool-gateway, fs-gateway sidecars) is **removed, not deprecated**. A control the agent must opt into is advisory; advisory controls presented as governance are the exact failure mode this product exists to eliminate. The pitch after this pivot is one sentence with no asterisks: *if Scrutineer says it happened, it happened; if Scrutineer says it was blocked, it was blocked.*
+The cooperative in-pod tier (dns-proxy, tool-gateway, fs-gateway sidecars) is **removed, not deprecated**. A control the agent must opt into is advisory; advisory controls presented as governance are the exact failure mode this product exists to eliminate. The pitch after this decision is one sentence with no asterisks: *if Scrutineer says it happened, it happened; if Scrutineer says it was blocked, it was blocked.*
 
 ### Why now
 
@@ -22,11 +22,11 @@ The cooperative in-pod tier (dns-proxy, tool-gateway, fs-gateway sidecars) is **
 - The maintenance cost of two tiers is real: five first-party images, three injection paths, doubled e2e and docs — and effort spent on the cooperative tier hardens a boundary a malicious agent simply walks around.
 - Pre-1.0, no install base, established clean-break precedent (#65). The cost of removal is entirely internal, and it shrinks over time while the cost of keeping two tiers grows.
 
-## 2. Doctrine (the invariants this pivot adds)
+## 2. Doctrine (the invariants this decision adds)
 
 1. **Untamperable or absent — never advisory.** No enforcement component ships that shares the agent's trust domain. If a governance domain (tools, files) has no out-of-pod chokepoint yet, Scrutineer declares nothing for it rather than enforcing weakly: no CRD fields without an enforcement backend.
 2. **Verified or refused.** Where a guarantee depends on cluster behavior, Scrutineer proves it empirically before claiming it. Concretely: the routing lock is only real on a CNI that enforces NetworkPolicy; the controller must verify this (§4) and **refuse to run enforced sessions** — with a loud condition — when it cannot. Silent degradation to unenforced is prohibited.
-3. **Assurance labels stay.** Everything Scrutineer records post-pivot is `observed`, but the `EvidenceAssurance` vocabulary is retained: it is how the API stays honest if a weaker signal is ever reintroduced, and how audit consumers distinguish sources. (The intent-vs-observed diff also returns with the tools pod, where the tool-call payload is intent — observed at the chokepoint this time.)
+3. **Assurance labels stay.** Everything Scrutineer records since the removal is `observed`, but the `EvidenceAssurance` vocabulary is retained: it is how the API stays honest if a weaker signal is ever reintroduced, and how audit consumers distinguish sources. (The intent-vs-observed diff also returns with the tools pod, where the tool-call payload is intent — observed at the chokepoint this time.)
 
 ## 3. Target architecture
 
@@ -48,7 +48,7 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 
 ## 4. The lock-verification gate (first code slice)
 
-**Problem:** on a CNI that does not enforce NetworkPolicy (default kind/kindnet, various managed defaults), the routing lock silently no-ops and "untamperable" becomes false without any signal. Post-pivot the lock *is* the product; its absence must be loud and blocking.
+**Problem:** on a CNI that does not enforce NetworkPolicy (default kind/kindnet, various managed defaults), the routing lock silently no-ops and "untamperable" becomes false without any signal. Now the lock *is* the product; its absence must be loud and blocking.
 
 **Design: probe-only — verified or refused. No attestation override.**
 
@@ -102,4 +102,4 @@ The Envoy pod pattern (controller-created per-session pod + Service + ConfigMap 
 
 ## 8. Superseded documents
 
-The five cooperative-tier design docs (`phase-3-dns-proxy-prototype`, `phase-3-tool-gateway-contract`, `phase-3-tool-argument-constraints`, `phase-3-file-workspace-policy`, `phase-5-runtime-tool-approval`) were **deleted** in the post-pivot cleanup (#74); git history (pre-#74 `docs/design/`) is the record of what was built and why. Their surviving surfaces live in code and successor designs: the argument-constraint/tool/path schema lives in git history (removed with `ToolPolicy` in the #75 clean break), the approval-hold protocol is the dormant `ApprovalRequest` runtime variant + reporter approval channel, and both are inherited by [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md).
+The five cooperative-tier design docs (`phase-3-dns-proxy-prototype`, `phase-3-tool-gateway-contract`, `phase-3-tool-argument-constraints`, `phase-3-file-workspace-policy`, `phase-5-runtime-tool-approval`) were **deleted** in the follow-up cleanup (#74); git history (pre-#74 `docs/design/`) is the record of what was built and why. Their surviving surfaces live in code and successor designs: the argument-constraint/tool/path schema lives in git history (removed with `ToolPolicy` in the #75 clean break), the approval-hold protocol is the dormant `ApprovalRequest` runtime variant + reporter approval channel, and both are inherited by [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md).

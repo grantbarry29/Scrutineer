@@ -9,7 +9,7 @@ You may obtain a copy of the License at
 */
 
 // Package lockverify implements the verified-or-refused gate for the NetworkPolicy
-// routing lock (docs/design/untamperable-pivot.md §4, issue #70).
+// routing lock (docs/design/untamperable-enforcement.md §4, issue #70).
 //
 // A NetworkPolicy is only a declaration: the API server accepts it on every cluster,
 // but packets are only blocked if the CNI enforces it — and no API reports whether it

@@ -11,7 +11,7 @@ You may obtain a copy of the License at
 // Package enforcement defines the control-plane contract between Scrutineer and
 // replaceable data-plane enforcement backends (NetworkPolicy, out-of-pod egress proxy).
 // See docs/design/phase-3-enforcement-architecture.md and
-// docs/design/untamperable-pivot.md.
+// docs/design/untamperable-enforcement.md.
 package enforcement
 
 import scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"

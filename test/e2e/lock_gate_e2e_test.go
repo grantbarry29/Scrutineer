@@ -26,7 +26,7 @@ import (
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
-// Verified-or-refused gate (#70, docs/design/untamperable-pivot.md §4). This spec runs
+// Verified-or-refused gate (#70, docs/design/untamperable-enforcement.md §4). This spec runs
 // on BOTH networking clusters with opposite expectations: a CNI that enforces
 // NetworkPolicy must verify and run the enforced session; a CNI that does not must
 // refuse it — loudly, via the EgressLockVerified condition — and never create its Job.

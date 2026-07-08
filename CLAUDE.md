@@ -9,7 +9,7 @@ below). Edit rules in `dev-agent-rules/`, never in the pointers.
 **Scrutineer** is a Kubernetes-native governance and runtime control plane for autonomous
 AI agents — not an orchestrator, workflow engine, or agent framework. A Kubebuilder
 operator around the `AgentSession` CRD; controllers declare/propagate governance,
-cooperative in-pod sidecars enforce it. Orientation:
+out-of-pod per-session chokepoints (Envoy egress proxy + default-deny routing lock) enforce it. Orientation:
 [`docs/design/architecture.md`](docs/design/architecture.md).
 
 ## Always read at the start of any task
