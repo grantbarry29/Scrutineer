@@ -1,9 +1,25 @@
 name: E2E
 
+# Path scoping (#86): both jobs here are cluster-heavy — skip pushes that cannot
+# change runtime behavior (docs, rules). Lint/Test (separate workflows) stay
+# unconditional so every push keeps a green check. Caveat for a future PR flow:
+# a path-skipped required check reports as skipped, not passed.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "dev-agent-rules/**"
+      - "**.md"
+      - "LICENSE"
+      - ".cursor/**"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "dev-agent-rules/**"
+      - "**.md"
+      - "LICENSE"
+      - ".cursor/**"
 
 permissions:
   contents: read

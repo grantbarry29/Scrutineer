@@ -7,10 +7,27 @@
 # local-build fallback — the same path a contributor without registry access hits.
 name: Quickstart Smoke
 
+# Path scoping (#86): cluster-heavy job — skip pushes that cannot change runtime
+# behavior (docs, rules, memory). Everything the quickstart/demo path actually
+# depends on (Makefile, config/, api/, internal/, cmd/, Dockerfiles, go.mod,
+# workflows) still triggers. Caveat for a future PR flow: a path-skipped required
+# check reports as skipped, not passed — revisit when branch protection arrives.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "dev-agent-rules/**"
+      - "**.md"
+      - "LICENSE"
+      - ".cursor/**"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "dev-agent-rules/**"
+      - "**.md"
+      - "LICENSE"
+      - ".cursor/**"
 
 permissions:
   contents: read
