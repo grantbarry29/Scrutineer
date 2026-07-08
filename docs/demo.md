@@ -24,6 +24,14 @@ cluster is required (the demo fetches `example.com`).
 make demo
 ```
 
+The demo targets the quickstart cluster's kube-context (`kind-scrutineer-quickstart`)
+and refuses to run against anything else, so a stale context can never point it at a
+real cluster — running it elsewhere is a deliberate act:
+`DEMO_KUBE_CONTEXT=<ctx> make demo` (same for `demo-down`). If the lock gate is not
+`Verified` it cleans up and refuses (running `demo-audit` without an effective routing
+lock would contradict the table below), and a session that cannot succeed fails fast
+with its diagnosis instead of sitting out the full wait.
+
 This applies [`config/samples/demo/`](../config/samples/demo/): one hardened
 `RuntimeProfile` enabling the `envoy` backend, two `AgentPolicy` objects that differ only
 in `mode`, and two `AgentSession`s running the **same plain-busybox agent**

@@ -314,38 +314,111 @@ quickstart-verdict: ## Wait for and print the routing-lock verification verdict 
 quickstart-down: ## Delete the quickstart kind cluster.
 	@kind delete cluster --name $(KIND_CLUSTER_NAME_QUICKSTART)
 
+# The demo targets belong to the quickstart cluster; running them against any other
+# kube-context must be a deliberate act (#89): the guard refuses on a mismatched
+# current-context, and every kubectl below pins --context so the guard and the
+# actions cannot target different clusters.
+DEMO_KUBE_CONTEXT ?= kind-$(KIND_CLUSTER_NAME_QUICKSTART)
+DEMO_KUBECTL = kubectl --context $(DEMO_KUBE_CONTEXT)
+
+.PHONY: demo-context-guard
+demo-context-guard:
+	@if [ "$(DEMO_KUBE_CONTEXT)" = "kind-$(KIND_CLUSTER_NAME_QUICKSTART)" ]; then \
+	  ctx=$$(kubectl config current-context 2>/dev/null || echo '<none>'); \
+	  if [ "$$ctx" != "$(DEMO_KUBE_CONTEXT)" ]; then \
+	    echo ">> refusing: current kube-context is '$$ctx' but the demo targets '$(DEMO_KUBE_CONTEXT)'."; \
+	    echo ">> Run 'make quickstart' first, or target another cluster deliberately:"; \
+	    echo ">>   DEMO_KUBE_CONTEXT=$$ctx make demo"; \
+	    exit 1; \
+	  fi; \
+	fi
+
 .PHONY: demo
-demo: ## Guided egress-governance demo against the current cluster (run 'make quickstart' first; see docs/demo.md).
-	kubectl apply -f config/samples/demo/
+demo: demo-context-guard ## Guided egress-governance demo against the quickstart cluster (run 'make quickstart' first; see docs/demo.md).
+	$(DEMO_KUBECTL) apply -f config/samples/demo/
 	@echo ""
 	@echo ">> two sessions are starting: demo-enforced and demo-audit — same busybox agent,"
 	@echo ">> same allowlist (example.com), different policy mode. Waiting for both (~2 min)..."
-	kubectl wait agentsession/demo-enforced agentsession/demo-audit --for=jsonpath='{.status.phase}'=Succeeded --timeout=6m
+	@# Fail fast instead of a blind 6-minute wait (#88). The loop watches, in order:
+	@# the lock-gate condition (not Verified => demo-enforced is held by design and
+	@# demo-audit would run WITHOUT an effective routing lock, so running the demo
+	@# would demonstrate a falsehood — clean up and refuse); terminal phases
+	@# (Denied/Failed => print the diagnosis); pods stuck in a waiting state the Job
+	@# never fails on (the #82 CreateContainerConfigError class — session phase stays
+	@# Running forever); then the 6m overall backstop.
+	@deadline=$$(( $$(date +%s) + 360 )); stuck=0; \
+	while :; do \
+	  pe=$$($(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{.status.phase}' 2>/dev/null || true); \
+	  pa=$$($(DEMO_KUBECTL) get agentsession demo-audit -o jsonpath='{.status.phase}' 2>/dev/null || true); \
+	  if [ "$$pe" = "Succeeded" ] && [ "$$pa" = "Succeeded" ]; then break; fi; \
+	  gate=$$($(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{.status.conditions[?(@.type=="EgressLockVerified")].status}' 2>/dev/null || true); \
+	  if [ "$$gate" = "False" ]; then \
+	    echo ""; \
+	    echo ">> the routing-lock gate is not Verified on this cluster:"; \
+	    $(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{.status.conditions[?(@.type=="EgressLockVerified")].reason}{": "}{.status.conditions[?(@.type=="EgressLockVerified")].message}{"\n"}' 2>/dev/null || true; \
+	    echo ">> demo-enforced is held (verified-or-refused) and demo-audit would run without an"; \
+	    echo ">> effective routing lock — its bypass row would contradict docs/demo.md."; \
+	    echo ">> Cleaning up. Retry on Calico: make quickstart-down && make quickstart QUICKSTART_CNI=calico && make demo"; \
+	    $(DEMO_KUBECTL) delete -f config/samples/demo/ --ignore-not-found >/dev/null 2>&1 || true; \
+	    exit 1; \
+	  fi; \
+	  for s in demo-enforced demo-audit; do \
+	    p=$$($(DEMO_KUBECTL) get agentsession $$s -o jsonpath='{.status.phase}' 2>/dev/null || true); \
+	    if [ "$$p" = "Failed" ] || [ "$$p" = "Denied" ]; then \
+	      echo ""; \
+	      echo ">> $$s reached phase $$p:"; \
+	      $(DEMO_KUBECTL) get agentsession $$s -o jsonpath='{range .status.conditions[*]}{.type}={.status} ({.reason}) {.message}{"\n"}{end}' 2>/dev/null || true; \
+	      echo ">> recent events:"; \
+	      $(DEMO_KUBECTL) get events --field-selector involvedObject.name=$$s --sort-by=.lastTimestamp 2>/dev/null | tail -5 || true; \
+	      echo ">> agent log tail:"; \
+	      $(DEMO_KUBECTL) logs job/scrutineer-session-$$s --tail=10 2>/dev/null || true; \
+	      exit 1; \
+	    fi; \
+	  done; \
+	  wr=$$($(DEMO_KUBECTL) get pods -l 'scrutineer.sh/session in (demo-enforced,demo-audit)' \
+	    -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.status.containerStatuses[*].state.waiting.reason}{"\n"}{end}' 2>/dev/null \
+	    | grep -E 'CreateContainerConfigError|ImagePullBackOff|CrashLoopBackOff|InvalidImageName' || true); \
+	  if [ -n "$$wr" ]; then stuck=$$((stuck+1)); else stuck=0; fi; \
+	  if [ "$$stuck" -ge 3 ]; then \
+	    echo ""; \
+	    echo ">> demo pods are stuck (the Job will never fail on this; phase stays Running):"; \
+	    echo "$$wr"; \
+	    echo ">> details: kubectl --context $(DEMO_KUBE_CONTEXT) get events --sort-by=.lastTimestamp | tail"; \
+	    exit 1; \
+	  fi; \
+	  if [ $$(date +%s) -ge $$deadline ]; then \
+	    echo ">> timed out after 6m; phases: demo-enforced=$$pe demo-audit=$$pa. Pod states:"; \
+	    $(DEMO_KUBECTL) get pods 2>/dev/null | grep -E 'demo|NAME' || true; \
+	    exit 1; \
+	  fi; \
+	  sleep 5; \
+	done; \
+	echo ">> both sessions Succeeded."
 	@echo ""
 	@echo "===== the agent's own view (enforced): allowed proxied, denial rejected, bypass dead ====="
-	@kubectl logs job/scrutineer-session-demo-enforced --tail=-1 2>/dev/null | grep 'DEMO_' || true
+	@$(DEMO_KUBECTL) logs job/scrutineer-session-demo-enforced --tail=-1 2>/dev/null | grep 'DEMO_' || true
 	@echo ""
 	@echo "===== the agent's own view (audit-only): nothing blocked at L7, bypass still dead ====="
-	@kubectl logs job/scrutineer-session-demo-audit --tail=-1 2>/dev/null | grep 'DEMO_' || true
+	@$(DEMO_KUBECTL) logs job/scrutineer-session-demo-audit --tail=-1 2>/dev/null | grep 'DEMO_' || true
 	@echo ""
 	@echo "===== Scrutineer's view: observed runtime evidence in status.policyDecisions ====="
 	@# Evidence lands via the out-of-pod egress-reporter; give a lagging batch a moment.
 	@for i in $$(seq 1 15); do \
-	  n=$$(kubectl get agentsession demo-enforced -o jsonpath='{range .status.policyDecisions[?(@.phase=="runtime")]}{.action}{"\n"}{end}' 2>/dev/null | grep -c . || true); \
+	  n=$$($(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{range .status.policyDecisions[?(@.phase=="runtime")]}{.action}{"\n"}{end}' 2>/dev/null | grep -c . || true); \
 	  if [ "$${n:-0}" -gt 0 ]; then break; fi; sleep 2; \
 	done
 	@echo "--- demo-enforced (ACTION  TARGET  REASON  ASSURANCE) ---"
-	@kubectl get agentsession demo-enforced -o jsonpath='{range .status.policyDecisions[?(@.phase=="runtime")]}{.action}{"\t"}{.target}{"\t"}{.reason}{"\t"}{.assuranceLevel}{"\n"}{end}' | sort | uniq -c || true
+	@$(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{range .status.policyDecisions[?(@.phase=="runtime")]}{.action}{"\t"}{.target}{"\t"}{.reason}{"\t"}{.assuranceLevel}{"\n"}{end}' | sort | uniq -c || true
 	@echo "--- demo-audit (ACTION  TARGET  REASON  ASSURANCE) ---"
-	@kubectl get agentsession demo-audit -o jsonpath='{range .status.policyDecisions[?(@.phase=="runtime")]}{.action}{"\t"}{.target}{"\t"}{.reason}{"\t"}{.assuranceLevel}{"\n"}{end}' | sort | uniq -c || true
+	@$(DEMO_KUBECTL) get agentsession demo-audit -o jsonpath='{range .status.policyDecisions[?(@.phase=="runtime")]}{.action}{"\t"}{.target}{"\t"}{.reason}{"\t"}{.assuranceLevel}{"\n"}{end}' | sort | uniq -c || true
 	@echo ""
 	@echo "Every runtime decision above is stamped 'observed' from the egress-proxy pod's own"
 	@echo "identity — the agent never reported anything and could not have forged this."
 	@echo "Full walkthrough + what to look at next: docs/demo.md. Clean up: make demo-down"
 
 .PHONY: demo-down
-demo-down: ## Delete the demo sessions, policies, and profile.
-	kubectl delete -f config/samples/demo/ --ignore-not-found
+demo-down: demo-context-guard ## Delete the demo sessions, policies, and profile (quickstart cluster only; see demo-context-guard).
+	$(DEMO_KUBECTL) delete -f config/samples/demo/ --ignore-not-found
 
 ##@ Dependencies
 
