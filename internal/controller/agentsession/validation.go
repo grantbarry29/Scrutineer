@@ -25,6 +25,9 @@ import (
 // CRD-level validation (enum, min/max, required fields) is also expressed via Kubebuilder
 // markers on the API types; this function exists so the controller can reject malformed
 // objects cleanly even when the CRD schema is lax (e.g. older clusters, hot-loaded CRDs).
+// This is reconcile-time validation: an invalid spec surfaces as phase=Denied, not an
+// apply-time rejection. An admission (validating) webhook that rejects at apply-time is
+// tracked in #4.
 func validateSpec(session *scrutineerv1alpha1.AgentSession) error {
 	spec := session.Spec
 
