@@ -13,6 +13,7 @@ For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://git
 | [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) | Draft/deferred (epic #76): out-of-pod successor to the removed cooperative tool tier — tools pod, credential mediation, ext_authz, approval holds at the chokepoint. |
 | [`arena-workspace.md`](arena-workspace.md) | Draft/deferred: out-of-pod successor to file governance — network-POSIX arena pod (FUSE/9p analysis). |
 | [`llm-gateway-chokepoint.md`](llm-gateway-chokepoint.md) | Draft/deferred (epic #77): out-of-pod, credential-locked gateway for the agent's model calls — turns advisory `spec.model` into enforced, `observed` governance (provider/model allowlist, token/cost caps, prompt evidence). |
+| [`long-running-agents.md`](long-running-agents.md) | Open investigation (not designed/scheduled): whether Scrutineer should govern long-running, app-driven agents vs. the current one-shot Job/Pod model — questions and options only, likely a docs/pattern answer. |
 | [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) | Working on data-plane enforcement, the `internal/enforcement` contract, or any Phase 3/3b slice. |
 | [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) | Implementing the runtime reporter (data-plane → controller evidence loop) or anything that writes runtime evidence into status. |
 | [`phase-4-session-events.md`](phase-4-session-events.md) | Working on `status.events[]`, timeline ingestion, or reporter event payloads. |
