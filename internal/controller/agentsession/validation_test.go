@@ -119,6 +119,32 @@ var _ = Describe("validateSpec", func() {
 		Expect(validateSpec(session)).To(MatchError(ContainSubstring("baseURL")))
 	})
 
+	// ToolPolicy was removed in the #75 clean break; a validator that still names it
+	// as allowed quietly re-implies a tool-policy surface exists (#95).
+	It("rejects the removed ToolPolicy policyRefs kind", func() {
+		session := &scrutineerv1alpha1.AgentSession{
+			Spec: scrutineerv1alpha1.AgentSessionSpec{
+				Task:       scrutineerv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:      scrutineerv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime:    scrutineerv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				PolicyRefs: []scrutineerv1alpha1.PolicyRef{{Kind: "ToolPolicy", Name: "x"}},
+			},
+		}
+		Expect(validateSpec(session)).To(MatchError(ContainSubstring(`policyRefs[0].kind "ToolPolicy" is not supported (allowed: AgentPolicy)`)))
+	})
+
+	It("accepts AgentPolicy and empty policyRefs kinds", func() {
+		session := &scrutineerv1alpha1.AgentSession{
+			Spec: scrutineerv1alpha1.AgentSessionSpec{
+				Task:       scrutineerv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:      scrutineerv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime:    scrutineerv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				PolicyRefs: []scrutineerv1alpha1.PolicyRef{{Kind: "AgentPolicy", Name: "a"}, {Name: "b"}},
+			},
+		}
+		Expect(validateSpec(session)).To(Succeed())
+	})
+
 	It("rejects unsupported runtimeProfileRef kind", func() {
 		session := &scrutineerv1alpha1.AgentSession{
 			Spec: scrutineerv1alpha1.AgentSessionSpec{

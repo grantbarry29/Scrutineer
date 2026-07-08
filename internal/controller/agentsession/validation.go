@@ -43,10 +43,12 @@ func validateSpec(session *scrutineerv1alpha1.AgentSession) error {
 		if strings.TrimSpace(ref.Name) == "" {
 			return fmt.Errorf("spec.policyRefs[%d].name is required", i)
 		}
+		// Keep this allowed set in sync with policy.validatePolicyRef (internal/policy/
+		// layers.go) and the PolicyRef.Kind CRD enum. ToolPolicy was removed in #75.
 		switch ref.Kind {
-		case "", "AgentPolicy", "ToolPolicy":
+		case "", "AgentPolicy":
 		default:
-			return fmt.Errorf("spec.policyRefs[%d].kind %q is not supported (allowed: AgentPolicy, ToolPolicy)", i, ref.Kind)
+			return fmt.Errorf("spec.policyRefs[%d].kind %q is not supported (allowed: AgentPolicy)", i, ref.Kind)
 		}
 	}
 	if err := validateRuntimeProfileRef(spec.RuntimeProfileRef); err != nil {
