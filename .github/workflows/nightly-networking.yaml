@@ -1,0 +1,87 @@
+# Nightly correctness tier (#93): the multi-CNI cross-checks of the networking
+# enforcement suite. Per-push CI covers the kindnet flavor (e2e.yaml); this runs the
+# expensive environments — Calico (production-representative CNI, egress-semantics
+# cross-check) and dual-stack (IPv4-only posture: IPv6 denied by construction, #66;
+# its specs self-skip if the runner's kind assigns no IPv6 pod addresses).
+#
+# Decisions on record (owner, #93): no per-push job demotes to nightly for now.
+# Failure notification: GitHub's default for scheduled workflows — the workflow
+# author is emailed on failure and the red run shows on the Actions tab; revisit
+# if repo ownership broadens.
+name: Nightly Networking (multi-CNI)
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  calico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.23"
+          cache-dependency-path: go.sum
+
+      - name: Install kind
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: v0.31.0
+          install_only: true
+
+      # No --wait: the netpol config sets disableDefaultCNI, so the node stays
+      # NotReady until Calico lands (mirrors .devcontainer/kind-up.sh ensure_calico).
+      - name: Create Calico kind cluster
+        run: |
+          kind create cluster --name scrutineer-netpol --config .devcontainer/kind-config-netpol.yaml
+          kubectl config use-context kind-scrutineer-netpol
+          kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml
+          kubectl rollout status ds/calico-node -n kube-system --timeout=300s
+          kubectl wait node --all --for=condition=Ready --timeout=180s
+
+      - name: Install CRDs
+        run: make install
+
+      - name: Load data-plane images
+        run: KIND_CLUSTER_NAME=scrutineer-netpol make test-e2e-images
+
+      - name: Run networking e2e suite
+        run: make test-e2e-net
+
+  dual-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.23"
+          cache-dependency-path: go.sum
+
+      - name: Install kind
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: v0.31.0
+          install_only: true
+
+      - name: Create dual-stack kind cluster
+        run: |
+          kind create cluster --name scrutineer-dual --config .devcontainer/kind-config-dual.yaml --wait 90s
+          kubectl config use-context kind-scrutineer-dual
+
+      - name: Install CRDs
+        run: make install
+
+      - name: Load data-plane images
+        run: KIND_CLUSTER_NAME=scrutineer-dual make test-e2e-images
+
+      - name: Run networking e2e suite
+        run: make test-e2e-net
