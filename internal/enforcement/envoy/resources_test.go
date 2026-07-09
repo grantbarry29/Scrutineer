@@ -168,10 +168,10 @@ func TestPodWiresEgressReporter(t *testing.T) {
 	}
 
 	// Envoy writes the access log; the reporter reads it.
-	if !hasMount(envoyC, accessLogVolume, AccessLogDir, false) {
+	if !hasMount(envoyC, AccessLogVolumeName, AccessLogDir, false) {
 		t.Fatalf("envoy must mount the access-log volume writable: %+v", envoyC.VolumeMounts)
 	}
-	if !hasMount(rep, accessLogVolume, AccessLogDir, true) {
+	if !hasMount(rep, AccessLogVolumeName, AccessLogDir, true) {
 		t.Fatalf("egress-reporter must mount the access-log volume read-only: %+v", rep.VolumeMounts)
 	}
 	// Only the reporter container gets the identity token.
@@ -216,7 +216,7 @@ func TestPodWiresEgressReporter(t *testing.T) {
 	// unboundedly (overflow evicts the pod → routing lock fails closed).
 	var logVol *corev1.Volume
 	for i := range pod.Spec.Volumes {
-		if pod.Spec.Volumes[i].Name == accessLogVolume {
+		if pod.Spec.Volumes[i].Name == AccessLogVolumeName {
 			logVol = &pod.Spec.Volumes[i]
 		}
 	}

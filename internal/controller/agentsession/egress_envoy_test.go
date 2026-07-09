@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -270,6 +271,104 @@ var _ = Describe("Per-session Envoy egress proxy", func() {
 			var cm corev1.ConfigMap
 			return apierrors.IsNotFound(k8sClient.Get(testCtx, key, &cm))
 		}, "2s", controllerPollInterval).Should(BeTrue())
+	})
+
+	// #99: a kubelet-evicted (Failed-in-place) proxy pod must be surfaced, and handling is
+	// cause-aware — an access-log-volume overflow eviction must NOT silently restore
+	// egress with a fresh evidence volume (that would let an agent flood-rotate its own
+	// evidence away, #98); any other eviction recreates the pod for governance continuity.
+	It("surfaces an evidence-volume overflow eviction and refuses to recreate the pod (#99)", func() {
+		ns := newTestNamespace()
+		envoyProfile(ns, "egress")
+		session := minimalAgentSession(ns, "egress-evicted")
+		session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "egress"}
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), session)).To(Succeed())
+		waitForJob(ns, session)
+
+		key := types.NamespacedName{Namespace: ns, Name: envoy.ResourceName(session.Name)}
+		var pod corev1.Pod
+		Eventually(func() error {
+			return k8sClient.Get(testCtx, key, &pod)
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+		evictedUID := pod.UID
+
+		// Simulate the kubelet evicting the pod in place for emptyDir overflow.
+		pod.Status.Phase = corev1.PodFailed
+		pod.Status.Reason = "Evicted"
+		pod.Status.Message = `Usage of EmptyDir volume "` + envoy.AccessLogVolumeName + `" exceeds the limit "256Mi".`
+		Expect(k8sClient.Status().Update(testCtx, &pod)).To(Succeed())
+
+		By("setting EgressProxyHealthy=False naming the overflow")
+		Eventually(func(g Gomega) {
+			var got scrutineerv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
+			cond := meta.FindStatusCondition(got.Status.Conditions, ConditionEgressProxyHealthy)
+			g.Expect(cond).NotTo(BeNil(), "expected an EgressProxyHealthy condition")
+			g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(cond.Reason).To(Equal(ReasonProxyEvidenceOverflow))
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		By("emitting a Warning event naming the eviction")
+		Eventually(func(g Gomega) {
+			var events corev1.EventList
+			g.Expect(k8sClient.List(testCtx, &events, client.InNamespace(ns))).To(Succeed())
+			found := false
+			for _, e := range events.Items {
+				if e.Reason == EventReasonEgressProxyFailed && e.Type == corev1.EventTypeWarning {
+					found = true
+				}
+			}
+			g.Expect(found).To(BeTrue(), "expected a Warning event with reason %s", EventReasonEgressProxyFailed)
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		By("leaving the Failed pod in place — fail closed, no fresh evidence volume")
+		Consistently(func(g Gomega) {
+			var got corev1.Pod
+			g.Expect(k8sClient.Get(testCtx, key, &got)).To(Succeed())
+			g.Expect(got.UID).To(Equal(evictedUID), "overflow-evicted pod must not be recreated")
+			g.Expect(got.DeletionTimestamp).To(BeNil())
+		}, "2s", controllerPollInterval).Should(Succeed())
+	})
+
+	It("recreates the proxy pod after an eviction unrelated to the evidence volume (#99)", func() {
+		ns := newTestNamespace()
+		envoyProfile(ns, "egress")
+		session := minimalAgentSession(ns, "egress-pressure")
+		session.Spec.RuntimeProfileRef = &scrutineerv1alpha1.RuntimeProfileRef{Name: "egress"}
+		Expect(k8sClient.Create(testCtx, session)).To(Succeed())
+		Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), session)).To(Succeed())
+		waitForJob(ns, session)
+
+		key := types.NamespacedName{Namespace: ns, Name: envoy.ResourceName(session.Name)}
+		var pod corev1.Pod
+		Eventually(func() error {
+			return k8sClient.Get(testCtx, key, &pod)
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+		evictedUID := pod.UID
+
+		pod.Status.Phase = corev1.PodFailed
+		pod.Status.Reason = "Evicted"
+		pod.Status.Message = "The node was low on resource: memory."
+		Expect(k8sClient.Status().Update(testCtx, &pod)).To(Succeed())
+
+		By("recreating the pod (new UID) to restore the chokepoint")
+		Eventually(func(g Gomega) {
+			var got corev1.Pod
+			err := k8sClient.Get(testCtx, key, &got)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(got.UID).NotTo(Equal(evictedUID), "expected the Failed pod to be replaced")
+			g.Expect(got.Status.Phase).NotTo(Equal(corev1.PodFailed))
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
+
+		By("the condition recovering once the replacement is provisioned")
+		Eventually(func(g Gomega) {
+			var got scrutineerv1alpha1.AgentSession
+			g.Expect(k8sClient.Get(testCtx, client.ObjectKeyFromObject(session), &got)).To(Succeed())
+			cond := meta.FindStatusCondition(got.Status.Conditions, ConditionEgressProxyHealthy)
+			g.Expect(cond).NotTo(BeNil())
+			g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		}, controllerWaitTimeout, controllerPollInterval).Should(Succeed())
 	})
 })
 

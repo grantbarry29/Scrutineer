@@ -31,12 +31,15 @@ const (
 	tmpVolume       = "tmp"
 	tmpMountPath    = "/tmp"
 
-	// accessLogVolume is the shared emptyDir where Envoy writes the JSON access log and
-	// the egress-reporter container tails it (Slice C, #62). Size-bounded: overflow
+	// AccessLogVolumeName is the shared emptyDir where Envoy writes the JSON access log
+	// and the egress-reporter container tails it (Slice C, #62). Size-bounded: overflow
 	// evicts the pod, which fails closed — the routing lock leaves the agent without
-	// egress rather than egressing without evidence.
-	accessLogVolume    = "access-log"
-	accessLogSizeLimit = "256Mi"
+	// egress rather than egressing without evidence. Exported so the controller can
+	// recognize an overflow eviction of this specific volume in the kubelet's message
+	// and refuse to recreate the pod (#99: a fresh evidence volume on flood-eviction
+	// would let the agent rotate its own evidence away).
+	AccessLogVolumeName = "access-log"
+	accessLogSizeLimit  = "256Mi"
 
 	// reporterContainerName is the egress-reporter container beside Envoy.
 	reporterContainerName = "egress-reporter"
@@ -207,7 +210,7 @@ func Pod(sessionName, namespace string, cfg PodConfig) *corev1.Pod {
 			{Name: configVolume, MountPath: configMountPath, ReadOnly: true},
 			{Name: tmpVolume, MountPath: tmpMountPath},
 			// Writable: Envoy appends the JSON access log here (AccessLogPath).
-			{Name: accessLogVolume, MountPath: AccessLogDir},
+			{Name: AccessLogVolumeName, MountPath: AccessLogDir},
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
@@ -232,7 +235,7 @@ func Pod(sessionName, namespace string, cfg PodConfig) *corev1.Pod {
 			},
 		},
 		{Name: tmpVolume, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-		{Name: accessLogVolume, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &logSize}}},
+		{Name: AccessLogVolumeName, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &logSize}}},
 	}
 
 	containers := []corev1.Container{envoyContainer}
@@ -297,7 +300,7 @@ func egressReporterContainer(sessionName, namespace string, cfg PodConfig) corev
 		}, policyEnv(cfg.Bootstrap)...),
 		SecurityContext: hardenedSecurityContext(),
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: accessLogVolume, MountPath: AccessLogDir, ReadOnly: true},
+			{Name: AccessLogVolumeName, MountPath: AccessLogDir, ReadOnly: true},
 			{Name: reporterTokenVolume, MountPath: reporterTokenMountPath, ReadOnly: true},
 		},
 		Resources: corev1.ResourceRequirements{

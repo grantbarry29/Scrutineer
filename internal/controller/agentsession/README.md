@@ -116,8 +116,9 @@ against an unchanged cluster makes no API mutations.
   runtime identity), `jobName`/`podName` (`jobName` is a deprecated alias of
   `runtimeRef.name`), `egressProxyEndpoint` (the Envoy ClusterIP URL the agent proxies
   through), `conditions` (`Validated`, `PolicyResolved`, `RuntimeProfileResolved`,
-  `PolicyPropagated`, `RuntimeCreated`, `Completed`, `Ready`), `result`, and
-  reporter-populated `policyDecisions`/`violations`/`usage`.
+  `PolicyPropagated`, `RuntimeCreated`, `Completed`, `Ready`, `EgressLockVerified`,
+  `EgressProxyHealthy`), `result`, and reporter-populated
+  `policyDecisions`/`violations`/`usage`.
 - RBAC is generated from the `+kubebuilder:rbac` markers in `reconciler.go` via
   `make manifests` (into `config/rbac/`). The manager role is least-privilege —
   each verb maps to an actual client call (audited 2026-06-27):
@@ -155,6 +156,11 @@ against an unchanged cluster makes no API mutations.
   Its objects are create-if-missing and a function of the session name only, so provisioning
   and teardown share `egressBackend.desiredObjects`. Enablement is the `envoy` type in the
   `RuntimeProfile`.
+- A proxy pod the kubelet **failed in place** gets cause-aware handling (#99,
+  `handleFailedEgressPod`): an access-log-volume overflow eviction is surfaced
+  (`EgressProxyHealthy=False`/`EvidenceVolumeOverflow` + Warning event) but **never
+  auto-recreated** — a flood-evicted evidence volume must not be silently replaced with an
+  empty one; any other failure is surfaced and the pod replaced.
 - **Routing lock ⇄ ClusterIP ⇄ DNS are coupled:** the agent lock denies DNS, so the agent
   must reach Envoy by ClusterIP (`status.egressProxyEndpoint`, resolved before the Job is
   built and consumed by `../job`'s `agentEnvoyProxyURL`). Changing any one — the lock's

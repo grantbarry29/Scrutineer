@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -172,8 +173,10 @@ func (r *AgentSessionReconciler) resolveEgressProxyEndpoint(ctx context.Context,
 // egress-config hash still matches is left untouched. On a hash change: the ConfigMap is
 // updated in place, and the Pod is deleted so it is recreated with the new config on the
 // next reconcile (Envoy reads its bootstrap once at start; a mounted ConfigMap does not hot
-// reload). Service/ServiceAccount carry no policy, so their hash never changes. An object of
-// the same name not owned by the session is a hard conflict.
+// reload). A Pod that failed in place (kubelet eviction) gets cause-aware handling before
+// any of that (#99, handleFailedEgressPod). Service/ServiceAccount carry no policy, so
+// their hash never changes. An object of the same name not owned by the session is a hard
+// conflict.
 func (r *AgentSessionReconciler) ensureEgressObject(ctx context.Context, session *scrutineerv1alpha1.AgentSession, obj client.Object) error {
 	existing, ok := obj.DeepCopyObject().(client.Object)
 	if !ok {
@@ -184,6 +187,13 @@ func (r *AgentSessionReconciler) ensureEgressObject(ctx context.Context, session
 		if !metav1.IsControlledBy(existing, session) {
 			return fmt.Errorf("egress-proxy %T %q is not owned by AgentSession %q",
 				obj, obj.GetName(), session.Name)
+		}
+		if pod, isPod := existing.(*corev1.Pod); isPod {
+			if pod.Status.Phase == corev1.PodFailed {
+				return r.handleFailedEgressPod(ctx, session, pod)
+			}
+			setCondition(session, ConditionEgressProxyHealthy, metav1.ConditionTrue,
+				ReasonProxyProvisioned, "egress-proxy pod is provisioned")
 		}
 		if egressConfigHash(existing) == egressConfigHash(obj) {
 			return nil
@@ -214,6 +224,57 @@ func (r *AgentSessionReconciler) ensureEgressObject(ctx context.Context, session
 // egressConfigHash returns the FQDN-policy hash annotation, or "" if absent.
 func egressConfigHash(obj client.Object) string {
 	return obj.GetAnnotations()[envoy.ConfigHashAnnotation]
+}
+
+// handleFailedEgressPod is the cause-aware response to an egress-proxy pod the kubelet
+// failed in place — deletion-based eviction (drain, API-initiated) already recovers via
+// the pod watch, but a Failed pod object otherwise satisfies the existence check and the
+// session's egress would stay silently dead for its remaining lifetime (#99).
+//
+// The cause decides recovery (deliberate, per the #98/#99 threat reasoning):
+//   - Access-log volume overflow: NOT recreated. The log volume is the session's
+//     tamper-evidence; an agent that floods it to force eviction must not be rewarded
+//     with a fresh, empty evidence volume and restored egress. The session stays
+//     fail-closed (routing lock denies egress without the proxy) with the condition and
+//     a Warning event naming the overflow; a human decides.
+//   - Anything else (node memory/PID pressure, preemption, node shutdown): the pod is
+//     deleted so the next reconcile recreates it — governance continuity outweighs the
+//     (already lost) un-ingested tail of the old volume, and the gap is recorded in the
+//     event.
+func (r *AgentSessionReconciler) handleFailedEgressPod(ctx context.Context, session *scrutineerv1alpha1.AgentSession, pod *corev1.Pod) error {
+	cause := pod.Status.Reason
+	if cause == "" {
+		cause = "PodFailed"
+	}
+	detail := fmt.Sprintf("egress-proxy pod %q failed in place (%s: %s)", pod.Name, cause, pod.Status.Message)
+
+	if isEvidenceOverflowEviction(pod) {
+		setCondition(session, ConditionEgressProxyHealthy, metav1.ConditionFalse,
+			ReasonProxyEvidenceOverflow, detail+" — not recreated: evidence volume overflow fails closed")
+		r.recordWarning(session, EventReasonEgressProxyFailed,
+			detail+"; not recreating (evidence-volume overflow fails closed, #98/#99)")
+		return nil
+	}
+
+	setCondition(session, ConditionEgressProxyHealthy, metav1.ConditionFalse,
+		ReasonProxyPodFailed, detail+" — replacing")
+	r.recordWarning(session, EventReasonEgressProxyFailed,
+		detail+"; replacing the pod (evidence not yet ingested from the old volume is lost)")
+	if err := r.Delete(ctx, pod, client.GracePeriodSeconds(0)); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete failed egress-proxy Pod %q: %w", pod.Name, err)
+	}
+	return nil
+}
+
+// isEvidenceOverflowEviction reports whether the kubelet evicted the pod because the
+// access-log emptyDir exceeded its size limit. The kubelet encodes this only in the
+// human-readable message ("Usage of EmptyDir volume \"access-log\" exceeds the limit
+// ..."), so match the quoted volume name; anything ambiguous is treated as a
+// non-overflow failure (recreate) — the overflow hold is a targeted anti-flooding
+// stance, not the default.
+func isEvidenceOverflowEviction(pod *corev1.Pod) bool {
+	return pod.Status.Reason == "Evicted" &&
+		strings.Contains(pod.Status.Message, `"`+envoy.AccessLogVolumeName+`"`)
 }
 
 // reconcileEgressDrift propagates an FQDN-policy change to an existing egress object. The

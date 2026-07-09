@@ -27,6 +27,25 @@ const (
 	// CNI enforces NetworkPolicy (the routing lock's substrate). False holds
 	// enforced-mode sessions before runtime creation (verified-or-refused, #70).
 	ConditionEgressLockVerified = "EgressLockVerified"
+	// ConditionEgressProxyHealthy — whether the session's egress-proxy pod is
+	// provisioned and not Failed (#99). "Healthy" here means "not kubelet-failed";
+	// it is not a liveness probe. False surfaces a dead chokepoint: the routing
+	// lock keeps the agent fail-closed (no egress), but silent-and-permanent is
+	// not acceptable (dev-agent-rules/distributed-systems-networking.md rule 35).
+	ConditionEgressProxyHealthy = "EgressProxyHealthy"
+)
+
+// Reasons used on ConditionEgressProxyHealthy.
+const (
+	ReasonProxyProvisioned = "ProxyProvisioned"
+	// ReasonProxyEvidenceOverflow — the kubelet evicted the proxy pod because the
+	// access-log emptyDir exceeded its size limit. Deliberately NOT auto-recreated:
+	// a fresh evidence volume after a flood is exactly what a hostile agent wants
+	// (#98/#99); the session stays fail-closed until a human intervenes.
+	ReasonProxyEvidenceOverflow = "EvidenceVolumeOverflow"
+	// ReasonProxyPodFailed — the proxy pod failed for a cause unrelated to the
+	// evidence volume (node pressure, preemption); the controller replaces it.
+	ReasonProxyPodFailed = "ProxyPodFailed"
 )
 
 // Reasons used on ConditionEgressLockVerified.
@@ -80,6 +99,9 @@ const (
 	EventReasonNetworkPolicySynced = "NetworkPolicySynced"
 	// EventReasonEgressProxySynced — a per-session Envoy egress proxy object was created.
 	EventReasonEgressProxySynced = "EgressProxySynced"
+	// EventReasonEgressProxyFailed — the egress-proxy pod failed in place (warning);
+	// the message names the kubelet's eviction reason and whether it is replaced (#99).
+	EventReasonEgressProxyFailed = "EgressProxyFailed"
 	// EventReasonOutputsCollected — terminal session outputs were retained (logs/artifacts).
 	EventReasonOutputsCollected = "OutputsCollected"
 	// EventReasonOutputsCollectionFailed — output collection was requested but failed (warning).
