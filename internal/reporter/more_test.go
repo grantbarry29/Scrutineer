@@ -102,7 +102,7 @@ func TestHandler_rateLimited(t *testing.T) {
 		Writer:   cl.Status(),
 		Reader:   cl,
 		Verifier: stubVerifier{identity: CallerIdentity{Namespace: "ns", PodName: "p"}},
-		Limiter:  newSessionRateLimiter(time.Minute),
+		Limiter:  newSessionRateLimiter(time.Minute, 1),
 		Now:      func() time.Time { return ts.Time },
 	}
 	body := ReportRequest{

@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/reporterclient"
 )
 
 func TestObserveDecision_countsByAction(t *testing.T) {
@@ -64,6 +65,25 @@ func TestWrapSubmit_outcomesAndLatency(t *testing.T) {
 	}
 	if got := testutil.CollectAndCount(m.SubmitSeconds); got != 1 {
 		t.Fatalf("histogram series = %d, want 1", got)
+	}
+}
+
+// #100: a 429 is flow control the tailer paces around, not a delivery failure —
+// counting it as outcome="error" would page operators for healthy backpressure.
+func TestWrapSubmit_countsRateLimitAsFlowControl(t *testing.T) {
+	m := New(nil)
+	submit := m.WrapSubmit(func(context.Context, []scrutineerv1alpha1.PolicyDecision) error {
+		return &reporterclient.StatusError{StatusCode: http.StatusTooManyRequests}
+	})
+
+	if err := submit(context.Background(), nil); err == nil {
+		t.Fatal("expected wrapped error to propagate")
+	}
+	if got := testutil.ToFloat64(m.Submissions.WithLabelValues("rate_limited")); got != 1 {
+		t.Fatalf("rate_limited outcome = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.Submissions.WithLabelValues("error")); got != 0 {
+		t.Fatalf("error outcome = %v, want 0 (429 is not a failure)", got)
 	}
 }
 

@@ -15,10 +15,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/reporterclient"
@@ -699,6 +702,115 @@ func TestTailer_noRotationWithoutReopen(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("live log must be untouched: %v", err)
+	}
+}
+
+// #100: a 429 is flow control, not failure. The tailer honors the server's
+// Retry-After hint — it retries the same batch after the hinted wait and keeps that
+// pace for the rest of the flush — so a multi-batch backlog drains at the reporter's
+// sustained rate with a single 429, no evidence loss, and no error surfaced.
+func TestTailer_honorsRetryAfterAndFallsToServerPace(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	tailer.BatchMax = 1
+	rejected := 0
+	tailer.OnRejected = func(int, int) { rejected++ }
+
+	const hint = 20 * time.Millisecond
+	var calls []time.Time
+	limited := true
+	tailer.Submit = func(ctx context.Context, decisions []scrutineerv1alpha1.PolicyDecision) error {
+		calls = append(calls, time.Now())
+		if limited {
+			limited = false
+			return &reporterclient.StatusError{StatusCode: http.StatusTooManyRequests, RetryAfter: hint}
+		}
+		return sink.submit(ctx, decisions)
+	}
+	appendFile(t, path, logLine("a.example")+logLine("b.example")+logLine("c.example"))
+
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("poll must absorb a honored 429, got: %v", err)
+	}
+	want := []string{"a.example", "b.example", "c.example"}
+	if got := sink.targets(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("targets = %v, want %v (exactly once, in order)", got, want)
+	}
+	if rejected != 0 {
+		t.Fatalf("OnRejected fired %d times; 429 must never count as a permanent rejection", rejected)
+	}
+	if len(calls) != 4 {
+		t.Fatalf("submit calls = %d, want 4 (1 rate-limited + 3 delivered)", len(calls))
+	}
+	// Every call after the 429 — the retry AND the following batches — is paced.
+	for i := 1; i < len(calls); i++ {
+		if gap := calls[i].Sub(calls[i-1]); gap < hint {
+			t.Fatalf("call %d came %v after call %d, want ≥ %v (Retry-After pacing)", i+1, gap, i, hint)
+		}
+	}
+}
+
+// A reporter that keeps 429ing after its own Retry-After was honored is wrong or
+// overloaded; the tailer must not spin in flush forever. After a bounded number of
+// consecutive 429s for the same batch it surfaces the error like any transient
+// failure — pending is retained and the next healthy poll delivers everything.
+func TestTailer_persistent429SurfacesAsTransientAfterBoundedRetries(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	rejected := 0
+	tailer.OnRejected = func(int, int) { rejected++ }
+
+	attempts := 0
+	limited := true
+	tailer.Submit = func(ctx context.Context, decisions []scrutineerv1alpha1.PolicyDecision) error {
+		if limited {
+			attempts++
+			return &reporterclient.StatusError{StatusCode: http.StatusTooManyRequests, RetryAfter: time.Millisecond}
+		}
+		return sink.submit(ctx, decisions)
+	}
+	appendFile(t, path, logLine("a.example"))
+
+	err := tailer.Poll(context.Background())
+	var se *reporterclient.StatusError
+	if !errors.As(err, &se) || se.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("poll err = %v, want the persistent 429 surfaced", err)
+	}
+	if attempts != 1+maxRateLimitRetries {
+		t.Fatalf("submit attempts = %d, want %d (initial + bounded retries)", attempts, 1+maxRateLimitRetries)
+	}
+	if rejected != 0 {
+		t.Fatalf("OnRejected fired %d times; 429 must never drop evidence", rejected)
+	}
+
+	limited = false
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("recovery poll: %v", err)
+	}
+	if got := sink.targets(); !reflect.DeepEqual(got, []string{"a.example"}) {
+		t.Fatalf("targets = %v, want [a.example] (retained across the 429s)", got)
+	}
+}
+
+// The final drain on SIGTERM runs under a short deadline; honoring a long
+// Retry-After must not outlive the context.
+func TestTailer_rateLimitPacingRespectsContext(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	tailer.Submit = func(context.Context, []scrutineerv1alpha1.PolicyDecision) error {
+		return &reporterclient.StatusError{StatusCode: http.StatusTooManyRequests, RetryAfter: time.Minute}
+	}
+	appendFile(t, path, logLine("a.example"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := tailer.Poll(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("poll err = %v, want context deadline", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("poll blocked %v honoring Retry-After after the context expired", elapsed)
 	}
 }
 

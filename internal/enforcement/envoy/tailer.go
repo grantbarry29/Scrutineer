@@ -50,6 +50,19 @@ const (
 	maxPartialLine    = 1 << 20
 	finalDrainTimeout = 5 * time.Second
 
+	// A 429 is flow control, not failure (§4.4, #100): flush honors the server's
+	// Retry-After hint and retries the same batch at the server's pace.
+	// rateLimitDefaultWait substitutes for a missing/unparseable hint (the reporter
+	// sends "1", matching its 1 req/s sustained rate); rateLimitMaxWait bounds a
+	// hostile or buggy hint so pacing can never wedge the poll loop for long.
+	rateLimitDefaultWait = time.Second
+	rateLimitMaxWait     = 30 * time.Second
+	// maxRateLimitRetries bounds consecutive 429s for the same batch: once the hint
+	// was honored a healthy reporter has refilled a slot, so repeated 429s mean it is
+	// overloaded or misconfigured — surface the error like any transient failure and
+	// let the poll loop retry, keeping liveness visible in the logs.
+	maxRateLimitRetries = 3
+
 	// DefaultRotateAfterBytes is the live-log size that triggers a rotation cycle (#98)
 	// — well under the 256Mi emptyDir cap so the remainder + fresh growth during the
 	// drain fit comfortably. Rotation only ever removes fully-ingested bytes; overflow
@@ -70,7 +83,9 @@ const (
 // with a flush, so a backlog — restart catch-up or a reporter outage — waits in the file,
 // not in memory. A transiently failed Submit keeps the batch pending and retries next
 // poll; permanent reporter rejections (contract §4.4: 400/403/404/413) split or drop the
-// offending decisions instead of wedging the queue head (#96, counted via OnRejected).
+// offending decisions instead of wedging the queue head (#96, counted via OnRejected);
+// a 429 paces the flush at the reporter's Retry-After hint — flow control, not an error
+// and never evidence loss (#100).
 // The pending queue is additionally bounded by MaxPending, dropping the OLDEST entries
 // beyond it (logged and counted).
 type Tailer struct {
@@ -399,8 +414,12 @@ func (t *Tailer) queue(d scrutineerv1alpha1.PolicyDecision) {
 // classifying failures per the reporter contract §4.4 (#96): permanent rejections
 // (400/403/404/413) must not wedge the queue head — a too-large batch is split, a
 // too-large single decision is poison and dropped (counted via OnRejected), other
-// permanent rejections drop the batch. Everything else (network errors, 5xx, 429,
-// 401, 409) is transient: pending is retained and the error returned for retry.
+// permanent rejections drop the batch. A 429 is flow control (#100): the batch is
+// retried after the server's Retry-After hint, and the rest of the flush stays at
+// that pace — the reporter's burst allowance absorbs a small backlog, larger ones
+// drain at its sustained rate. Everything else (network errors, 5xx, 401, 409) is
+// transient: pending is retained and the error returned for retry. Each flush call
+// probes at full speed again; the first 429 re-enters pacing.
 func (t *Tailer) flush(ctx context.Context) error {
 	batchMax := t.BatchMax
 	if batchMax <= 0 {
@@ -411,8 +430,15 @@ func (t *Tailer) flush(ctx context.Context) error {
 		maxBytes = DefaultBatchMaxBytes
 	}
 
-	splitTo := 0 // when >0, a 413 told us to try at most this many decisions
+	splitTo := 0                // when >0, a 413 told us to try at most this many decisions
+	paceFor := time.Duration(0) // when >0, a 429 dropped us to the server's pace
+	limited := 0                // consecutive 429s for the batch at the queue head
 	for len(t.pending) > 0 {
+		if paceFor > 0 {
+			if err := sleepContext(ctx, paceFor); err != nil {
+				return err
+			}
+		}
 		n := t.batchLen(batchMax, maxBytes)
 		if splitTo > 0 && n > splitTo {
 			n = splitTo
@@ -421,6 +447,7 @@ func (t *Tailer) flush(ctx context.Context) error {
 		if err == nil {
 			t.pending = t.pending[n:]
 			splitTo = 0
+			limited = 0
 			continue
 		}
 
@@ -430,28 +457,56 @@ func (t *Tailer) flush(ctx context.Context) error {
 			status = se.StatusCode
 		}
 		switch status {
+		case http.StatusTooManyRequests:
+			// Flow control, not failure: honor the hint and retry the same batch.
+			// Never rejected, never logged as an error — but bounded: a reporter
+			// still 429ing after its hint was honored surfaces as transient.
+			limited++
+			if limited > maxRateLimitRetries {
+				return err
+			}
+			paceFor = rateLimitDefaultWait
+			if se.RetryAfter > 0 {
+				paceFor = min(se.RetryAfter, rateLimitMaxWait)
+			}
 		case http.StatusRequestEntityTooLarge:
 			if n > 1 {
 				// Our byte estimate undershot the server's cap: split and retry.
 				splitTo = n / 2
+				limited = 0
 				continue
 			}
 			// A single decision the reporter can never accept is poison: drop it,
 			// or it would block all newer evidence forever.
 			t.reject(1, status, err)
 			splitTo = 0
+			limited = 0
 		case http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound:
 			// Permanent for this batch (contract: fix payload / misconfiguration /
 			// session deleted) — retrying verbatim can never succeed.
 			t.reject(n, status, err)
 			splitTo = 0
+			limited = 0
 		default:
-			// Transient (network error, 5xx, 429, 401, 409): keep pending, retry
+			// Transient (network error, 5xx, 401, 409): keep pending, retry
 			// next poll — at-least-once.
 			return err
 		}
 	}
 	return nil
+}
+
+// sleepContext pauses for d unless ctx ends first — the SIGTERM final drain must
+// not sit out a Retry-After hint past its deadline.
+func sleepContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // batchLen returns how many pending decisions fit the count and byte caps. Always at

@@ -114,6 +114,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	decisionCount = len(req.Decisions)
 	if h.Limiter != nil && !h.Limiter.allow(sessionKey.String(), receivedAt) {
 		result = "rate_limited"
+		// The limiter's residual wait on a denial is at most one interval (1s), so
+		// the constant hint is always a correct ceiling — see sessionRateLimiter.allow.
 		w.Header().Set("Retry-After", "1")
 		writeError(w, ErrRateLimited, http.StatusTooManyRequests, "rate limit exceeded")
 		return

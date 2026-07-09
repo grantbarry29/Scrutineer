@@ -85,15 +85,17 @@ func NewRunnable(opts Options) manager.Runnable {
 		Reader:    opts.APIReader,
 		Verifier:  verifier,
 		Recorder:  opts.Recorder,
-		Limiter:   newSessionRateLimiter(time.Second),
+		Limiter:   newSessionRateLimiter(time.Second, DefaultReportRateBurst),
 		ReportIDs: newReportIDCache(DefaultReportIDCacheTTL),
 	}
 
 	approvals := &ApprovalHandler{
-		Client:         opts.Client,
-		Reader:         opts.APIReader,
-		Verifier:       verifier,
-		Limiter:        newSessionRateLimiter(DefaultApprovalRegisterInterval),
+		Client:   opts.Client,
+		Reader:   opts.APIReader,
+		Verifier: verifier,
+		// Burst 1: hold registration is a human-approval control point, not a
+		// batched evidence pipeline — strict spacing is the point.
+		Limiter:        newSessionRateLimiter(DefaultApprovalRegisterInterval, 1),
 		MaxOutstanding: DefaultMaxOutstandingApprovals,
 	}
 

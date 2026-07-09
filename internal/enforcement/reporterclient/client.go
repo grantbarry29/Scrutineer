@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,9 @@ const reportPath = "/v1/report"
 // be retried verbatim, transient ones (5xx, 429, 401, 409) keep at-least-once retry (#96).
 type StatusError struct {
 	StatusCode int
+	// RetryAfter is the server's Retry-After hint, zero when absent or unparseable.
+	// On 429 it is flow control, not failure: callers pace and retry (§4.4, #100).
+	RetryAfter time.Duration
 }
 
 func (e *StatusError) Error() string {
@@ -112,9 +116,30 @@ func (c *Client) Submit(ctx context.Context, session SessionRef, report enforcem
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode != http.StatusAccepted {
-		return &StatusError{StatusCode: resp.StatusCode}
+		return &StatusError{StatusCode: resp.StatusCode, RetryAfter: retryAfterHint(resp)}
 	}
 	return nil
+}
+
+// retryAfterHint parses the response's Retry-After header — integer seconds or the
+// RFC 7231 HTTP-date form — returning zero when absent, unparseable, or in the past.
+func retryAfterHint(resp *http.Response) time.Duration {
+	v := strings.TrimSpace(resp.Header.Get("Retry-After"))
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(v); err == nil {
+		if secs < 0 {
+			return 0
+		}
+		return time.Duration(secs) * time.Second
+	}
+	if at, err := http.ParseTime(v); err == nil {
+		if d := time.Until(at); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // NewRequest builds a request authenticated with the projected reporter token. Exported

@@ -77,7 +77,9 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   Job (label `LabelSessionRef` → `self-reported`) or the session's egress-proxy pod
   (AgentSession controller owner-ref + `envoy.ResourceName` name + dedicated SA →
   `observed`).
-- **Limits:** `MaxReportBytes` / `MaxApprovalBodyBytes`; per-session rate limiting;
+- **Limits:** `MaxReportBytes` / `MaxApprovalBodyBytes`; per-session rate limiting
+  (reports: 1 req/s, burst `DefaultReportRateBurst` = 5 per contract §8, token bucket,
+  #100; approval registration: strict 1/s, no burst);
   `DefaultMaxOutstandingApprovals` undecided holds; reportId dedup TTL.
 - RBAC from `+kubebuilder:rbac` markers in `server.go` (`tokenreviews: create`;
   `agentsessions: get` + `agentsessions/status: get;update;patch`; `approvalrequests:

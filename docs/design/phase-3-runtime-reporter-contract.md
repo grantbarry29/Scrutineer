@@ -260,7 +260,7 @@ Ordering: decisions are appended in arrival order; consumers sort by `time` for 
 |---------|---------|-----------|
 | `maxReportBytes` | 64 KiB | Bound memory per request; `413` beyond. |
 | `maxDecisionsPerReport` | 128 | Prevent a single call from blowing the status cap churn. |
-| Per-session rate limit | e.g. 1 req/s burst 5 | Prevent status-write floods; `429` + `Retry-After`. |
+| Per-session rate limit | 1 req/s, burst 5 (token bucket, #100) | Prevent status-write floods; `429` + `Retry-After`. Clients honor the hint: the egress-reporter retries the batch after `Retry-After` and keeps that pace for the rest of its flush. |
 | Status caps | `MaxPolicyDecisions` / `MaxViolations` (64) | Existing truncation with summary entry. |
 
 Rate limiting is per `(namespace, session)`. A noisy or hostile sidecar cannot degrade other sessions.

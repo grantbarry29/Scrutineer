@@ -246,7 +246,7 @@ func TestApprovalHandler_rateLimitsNewHolds(t *testing.T) {
 	h := &ApprovalHandler{
 		Client: cl, Reader: cl,
 		Verifier: stubVerifier{identity: CallerIdentity{Namespace: "ns1", PodName: "p"}},
-		Limiter:  newSessionRateLimiter(time.Second),
+		Limiter:  newSessionRateLimiter(time.Second, 1),
 		Now:      func() time.Time { return frozen },
 	}
 

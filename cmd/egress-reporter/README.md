@@ -31,6 +31,12 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
   is truncated (1KiB target / 2KiB message, deterministic) at decision creation — so a
   prompt-injected agent cannot wedge its own evidence pipeline with an oversized
   CONNECT authority.
+- A 429 is flow control, not failure (#100): the reporter allows a per-session burst
+  of 5 requests then 1/s sustained; the tailer honors the `Retry-After` hint —
+  retrying the same batch and keeping the server's pace for the rest of the flush —
+  so a backlog drains without evidence loss or error noise. A reporter that keeps
+  429ing after its hint was honored surfaces as a transient poll error (bounded
+  retries keep the loop live).
 - The access log rotates once its fully-ingested size passes the threshold (#98,
   default 64Mi): rename → Envoy admin `/reopen_logs` (loopback, same pod netns) →
   drain the remainder → delete. **Only ingested bytes are ever removed** — flooding
@@ -66,7 +72,8 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
 ## Operability
 
 Serves Prometheus metrics on `:9903` `/metrics` (container port `metrics`, #55):
-decisions by action, malformed access-log lines, submissions by outcome + latency,
+decisions by action, malformed access-log lines, submissions by outcome
+(`ok`/`error`/`rate_limited` — 429 flow control is not an error, #100) + latency,
 dropped decisions (pending-queue overflow = evidence lost), rejected decisions
 (permanent reporter rejection by HTTP status = evidence lost, #96), and completed
 log-rotation cycles (#98). Dedicated registry in

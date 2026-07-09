@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
@@ -82,6 +83,61 @@ func TestSubmit_nonAcceptedStatusErrors(t *testing.T) {
 		}
 		srv.Close()
 	}
+}
+
+// 429 responses carry the server's Retry-After hint (contract §4.4: "back off using
+// Retry-After") so the tailer can pace batch submission at the reporter's rate instead
+// of treating flow control as a failure (#100).
+func TestSubmit_exposesRetryAfterHint(t *testing.T) {
+	cases := []struct {
+		name   string
+		header string
+		want   time.Duration
+	}{
+		{"integer seconds", "2", 2 * time.Second},
+		{"absent", "", 0},
+		{"unparseable", "soon", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tc.header != "" {
+					w.Header().Set("Retry-After", tc.header)
+				}
+				w.WriteHeader(http.StatusTooManyRequests)
+			}))
+			defer srv.Close()
+
+			c := New(srv.URL, writeTempToken(t, "x"), enforcement.BackendEgressProxy, srv.Client())
+			err := c.Submit(context.Background(), SessionRef{Namespace: "ns", Name: "s"}, enforcement.RuntimeReport{})
+			var se *StatusError
+			if !errors.As(err, &se) || se.StatusCode != http.StatusTooManyRequests {
+				t.Fatalf("err = %v, want StatusError with code 429", err)
+			}
+			if se.RetryAfter != tc.want {
+				t.Fatalf("RetryAfter = %v, want %v", se.RetryAfter, tc.want)
+			}
+		})
+	}
+
+	// The RFC 7231 HTTP-date form is honored too (a proxy may rewrite the header).
+	t.Run("http date", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Retry-After", time.Now().Add(5*time.Second).UTC().Format(http.TimeFormat))
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer srv.Close()
+
+		c := New(srv.URL, writeTempToken(t, "x"), enforcement.BackendEgressProxy, srv.Client())
+		err := c.Submit(context.Background(), SessionRef{Namespace: "ns", Name: "s"}, enforcement.RuntimeReport{})
+		var se *StatusError
+		if !errors.As(err, &se) {
+			t.Fatalf("err = %v, want StatusError", err)
+		}
+		if se.RetryAfter <= 0 || se.RetryAfter > 5*time.Second {
+			t.Fatalf("RetryAfter = %v, want within (0s, 5s]", se.RetryAfter)
+		}
+	})
 }
 
 func TestNew_defaultsHTTPClientAndTrims(t *testing.T) {

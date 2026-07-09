@@ -23,6 +23,10 @@ const (
 	TokenAudience = "scrutineer-reporter"
 	// MaxReportBytes bounds the request body size.
 	MaxReportBytes = 64 * 1024
+	// DefaultReportRateBurst is the per-session token-bucket burst for POST /v1/report
+	// (contract §8: 1 req/s, burst 5) — a backlogged egress-reporter may flush several
+	// batches back-to-back before falling to the sustained pace (#100).
+	DefaultReportRateBurst = 5
 	// MaxDecisionsPerReport caps decisions in a single report payload.
 	MaxDecisionsPerReport = 128
 	// MaxEventsPerReport caps events in a single report payload.

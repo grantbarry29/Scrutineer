@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/reporterclient"
 )
 
 const (
@@ -43,7 +44,8 @@ type Metrics struct {
 	Decisions *prometheus.CounterVec
 	// Malformed counts skipped unparseable access-log lines.
 	Malformed prometheus.Counter
-	// Submissions counts reporter Submit calls by outcome (ok|error).
+	// Submissions counts reporter Submit calls by outcome (ok|error|rate_limited).
+	// rate_limited (429) is flow control, not a delivery failure (#100).
 	Submissions *prometheus.CounterVec
 	// SubmitSeconds observes reporter Submit latency.
 	SubmitSeconds prometheus.Histogram
@@ -108,7 +110,9 @@ func (m *Metrics) ObserveRejected(count, httpStatus int) {
 	m.Rejected.WithLabelValues(strconv.Itoa(httpStatus)).Add(float64(count))
 }
 
-// WrapSubmit instruments a Tailer Submit func with outcome counts and latency.
+// WrapSubmit instruments a Tailer Submit func with outcome counts and latency. A 429
+// counts as rate_limited, not error: it is flow control the tailer paces around (#100),
+// and folding it into error would page operators for healthy backpressure.
 func (m *Metrics) WrapSubmit(next func(context.Context, []scrutineerv1alpha1.PolicyDecision) error) func(context.Context, []scrutineerv1alpha1.PolicyDecision) error {
 	return func(ctx context.Context, decisions []scrutineerv1alpha1.PolicyDecision) error {
 		start := time.Now()
@@ -117,6 +121,10 @@ func (m *Metrics) WrapSubmit(next func(context.Context, []scrutineerv1alpha1.Pol
 		outcome := "ok"
 		if err != nil {
 			outcome = "error"
+			var se *reporterclient.StatusError
+			if errors.As(err, &se) && se.StatusCode == http.StatusTooManyRequests {
+				outcome = "rate_limited"
+			}
 		}
 		m.Submissions.WithLabelValues(outcome).Inc()
 		return err
