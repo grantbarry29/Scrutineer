@@ -19,11 +19,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
@@ -63,12 +67,19 @@ func main() {
 		Submit: func(ctx context.Context, decisions []scrutineerv1alpha1.PolicyDecision) error {
 			return client.Submit(ctx, session, enforcement.RuntimeReport{Decisions: decisions})
 		},
+		// Rotation (#98): once the fully-ingested log passes the threshold it is
+		// renamed, Envoy is asked to reopen via the loopback admin API (same pod
+		// netns), the remainder is drained, and only then deleted — a flood can never
+		// discard un-ingested evidence.
+		Reopen:           envoyReopenLogs,
+		RotateAfterBytes: rotateAfterBytesFromEnv(),
 	}
 
 	metrics := egressmetrics.New(func() float64 { return float64(tailer.Dropped()) })
 	tailer.OnDecision = metrics.ObserveDecision
 	tailer.OnMalformed = metrics.Malformed.Inc
 	tailer.OnRejected = metrics.ObserveRejected
+	tailer.OnRotated = metrics.Rotations.Inc
 	tailer.Submit = metrics.WrapSubmit(tailer.Submit)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -90,4 +101,42 @@ func main() {
 
 	log.Printf("scrutineer egress-reporter tailing %s (session %s/%s)", path, base.SessionNamespace, base.SessionName)
 	tailer.Run(ctx)
+}
+
+// envoyReopenLogs POSTs the Envoy admin /reopen_logs endpoint so a renamed access log
+// is replaced with a fresh file (#98). The admin API binds loopback-only inside the
+// Envoy container; this container shares the pod's network namespace, so 127.0.0.1
+// reaches it while nothing outside the pod can.
+func envoyReopenLogs(ctx context.Context) error {
+	url := fmt.Sprintf("http://127.0.0.1:%d/reopen_logs", envoy.AdminPort)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("envoy admin /reopen_logs returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// rotateAfterBytesFromEnv reads the optional rotation-threshold override the controller
+// sets on the container (sidecarenv.EnvRotateAfterBytes). Unset or invalid falls back
+// to the Tailer default; rotation itself is always on (Reopen is always wired).
+func rotateAfterBytesFromEnv() int64 {
+	raw := strings.TrimSpace(os.Getenv(sidecarenv.EnvRotateAfterBytes))
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		log.Printf("egress-reporter: ignoring invalid %s=%q", sidecarenv.EnvRotateAfterBytes, raw)
+		return 0
+	}
+	return n
 }

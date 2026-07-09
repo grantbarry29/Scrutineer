@@ -18,6 +18,8 @@ import (
 	"os"
 	"strings"
 
+	"strconv"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -53,6 +55,21 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// envInt64 reads an optional positive-integer env override; unset or invalid is 0
+// (callers treat 0 as "use the built-in default") with the invalid case logged.
+func envInt64(key string) int64 {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		setupLog.Info("ignoring invalid env override", "key", key, "value", raw)
+		return 0
+	}
+	return n
 }
 
 func init() {
@@ -204,6 +221,10 @@ func main() {
 			Notifier:            notifier,
 			LockVerifier:        verifier,
 			EgressBackstopCIDRs: splitCSV(egressBackstopCIDRs),
+			// Optional override for the egress-reporter's log-rotation threshold
+			// (#98): env, not a flag, so e2e/operators can `kubectl set env` the
+			// manager without an args patch. Invalid/unset ⇒ 0 ⇒ reporter default.
+			EgressRotateAfterBytes: envInt64("SCRUTINEER_EGRESS_ROTATE_AFTER_BYTES"),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "AgentSession")
 			os.Exit(1)

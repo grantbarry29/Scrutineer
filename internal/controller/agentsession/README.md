@@ -108,7 +108,10 @@ against an unchanged cluster makes no API mutations.
   objects — the agent routing lock and the Envoy egress backstop (all owner refs).
 - `--egress-backstop-cidrs` (manager flag → `EgressBackstopCIDRs`): CIDRs hard-denied to the
   Envoy proxy pod; empty ⇒ safe default `169.254.0.0/16` (cloud metadata). Operators add
-  cluster/service/API CIDRs. IPv6 entries are accepted but satisfied wholesale: the egress
+  cluster/service/API CIDRs.
+- `SCRUTINEER_EGRESS_ROTATE_AFTER_BYTES` (manager env → `EgressRotateAfterBytes`): optional
+  access-log rotation threshold pushed onto egress-reporter containers (#98); unset ⇒ the
+  reporter's 64Mi default. Env (not a flag) so it is `kubectl set env`-able. IPv6 entries are accepted but satisfied wholesale: the egress
   path is IPv4-only by posture (#66) — the backstop policy contains no v6 allow rule, so on
   dual-stack clusters ALL IPv6 egress from the proxy pod is denied by construction (v6
   CIDRs are never placed in the IPv4 block's except list, which the apiserver rejects).

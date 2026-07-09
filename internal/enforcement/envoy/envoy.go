@@ -38,9 +38,14 @@ const (
 	ProxyPort = 15001
 
 	// StatsPort is the pod-IP-bound listener exposing ONLY /stats/prometheus (routed to
-	// the loopback admin cluster, #55). The admin API itself stays on 127.0.0.1:9901.
+	// the loopback admin cluster, #55). The admin API itself stays on 127.0.0.1:AdminPort.
 	// The agent cannot reach it: the routing lock allows agent→Envoy on ProxyPort only.
 	StatsPort = 9902
+
+	// AdminPort is Envoy's loopback-only admin bind (config.go renders it into the
+	// bootstrap). Reachable from the egress-reporter container — same pod netns — which
+	// POSTs /reopen_logs during access-log rotation (#98). Never exposed on the pod IP.
+	AdminPort = 9901
 
 	// ReporterMetricsPort is the egress-reporter container's /metrics bind (#55),
 	// overridable via SCRUTINEER_METRICS_ADDR in cmd/egress-reporter.

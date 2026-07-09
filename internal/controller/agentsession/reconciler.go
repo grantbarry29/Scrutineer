@@ -68,6 +68,10 @@ type AgentSessionReconciler struct {
 	// depth even if Envoy is compromised). Empty ⇒ networkpolicy.DefaultBackstopCIDRs (cloud
 	// metadata). Operators extend it with cluster/service/API CIDRs via the manager flag.
 	EgressBackstopCIDRs []string
+	// EgressRotateAfterBytes overrides the egress-reporter's access-log rotation
+	// threshold on the pods this controller creates (#98). Zero keeps the reporter's
+	// default. Set from the manager env SCRUTINEER_EGRESS_ROTATE_AFTER_BYTES.
+	EgressRotateAfterBytes int64
 }
 
 // egressBackstopCIDRs returns the configured Envoy-pod egress backstops, or the safe default.

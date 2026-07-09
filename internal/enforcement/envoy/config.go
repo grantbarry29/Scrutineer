@@ -47,7 +47,7 @@ func BootstrapYAML(cfg BootstrapConfig) string {
   address:
     socket_address:
       address: 127.0.0.1
-      port_value: 9901
+      port_value: %[5]d
 static_resources:
   listeners:
   - name: http_proxy
@@ -160,6 +160,6 @@ static_resources:
             address:
               socket_address:
                 address: 127.0.0.1
-                port_value: 9901
-`, cfg.Port, AccessLogPath, rbacHTTPFilters(cfg), StatsPort)
+                port_value: %[5]d
+`, cfg.Port, AccessLogPath, rbacHTTPFilters(cfg), StatsPort, AdminPort)
 }

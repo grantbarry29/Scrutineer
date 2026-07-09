@@ -49,6 +49,14 @@ const (
 	// and buffering it unboundedly would recreate the O(file) memory path.
 	maxPartialLine    = 1 << 20
 	finalDrainTimeout = 5 * time.Second
+
+	// DefaultRotateAfterBytes is the live-log size that triggers a rotation cycle (#98)
+	// — well under the 256Mi emptyDir cap so the remainder + fresh growth during the
+	// drain fit comfortably. Rotation only ever removes fully-ingested bytes; overflow
+	// beyond what the reporter can ingest still evicts the pod (fail closed).
+	DefaultRotateAfterBytes = 64 << 20
+	// rotatingSuffix names the renamed, being-drained log during a rotation cycle.
+	rotatingSuffix = ".rotating"
 )
 
 // Tailer incrementally reads Envoy's JSON access log and submits parsed egress decisions
@@ -85,6 +93,17 @@ type Tailer struct {
 	// OnRejected, if set, observes decisions dropped after a permanent reporter
 	// rejection (contract §4.4: 400/403/404/413) — evidence lost, by HTTP status.
 	OnRejected func(count, httpStatus int)
+	// RotateAfterBytes triggers a rotation cycle once the fully-ingested live log
+	// reaches this size (#98). Defaults to DefaultRotateAfterBytes. Rotation runs only
+	// when Reopen is set.
+	RotateAfterBytes int64
+	// Reopen asks Envoy to reopen its access log (admin POST /reopen_logs) so a renamed
+	// log is replaced by a fresh file at Path. Nil disables starting rotations — the
+	// log then grows to the emptyDir cap and overflow evicts the pod (the fail-closed
+	// pre-rotation posture).
+	Reopen func(context.Context) error
+	// OnRotated, if set, observes each completed rotation cycle (metrics hook).
+	OnRotated func()
 	// Policy is the effective FQDN policy each observed authority is classified against
 	// (#32). Zero value classifies everything as allow.
 	Policy EgressPolicy
@@ -98,6 +117,13 @@ type Tailer struct {
 	partial []byte
 	pending []scrutineerv1alpha1.PolicyDecision
 	dropped int64
+
+	// rotating: the tailer is draining Path+rotatingSuffix (offset/partial refer to that
+	// file) before deleting it and switching back to Path. rotateStable: the remainder
+	// was already fully drained on an earlier poll — the one-cycle grace for Envoy's log
+	// flusher to land writes still buffered for the renamed file's fd.
+	rotating     bool
+	rotateStable bool
 }
 
 // Dropped reports how many parsed decisions were discarded because the pending queue
@@ -109,11 +135,15 @@ func (t *Tailer) Dropped() int64 { return t.dropped }
 // a Submit failure. Gating each read on the previous flush means the tailer never holds
 // more than roughly one chunk's decisions in memory — the access log itself buffers any
 // backlog. A missing file is not an error (Envoy has not received traffic yet). A Submit
-// failure is returned after retaining the batch for the next cycle.
+// failure is returned after retaining the batch for the next cycle. Once fully drained,
+// rotation state advances (#98): a live log past the threshold is renamed and Envoy
+// reopened; a renamed remainder that has stayed drained is deleted and tailing switches
+// back to the fresh live file.
 func (t *Tailer) Poll(ctx context.Context) error {
 	if err := t.flush(ctx); err != nil {
 		return err
 	}
+	t.detectRotationInProgress()
 	for {
 		more, err := t.readChunk()
 		if err != nil {
@@ -122,9 +152,21 @@ func (t *Tailer) Poll(ctx context.Context) error {
 		if err := t.flush(ctx); err != nil {
 			return err
 		}
-		if !more {
+		if more {
+			t.rotateStable = false
+			continue
+		}
+		// Fully drained: EOF reached and nothing pending.
+		if t.rotating {
+			if t.finishRotation(ctx) {
+				continue // switched to the live file; drain it too
+			}
 			return nil
 		}
+		if t.startRotation(ctx) {
+			continue // now draining the renamed remainder
+		}
+		return nil
 	}
 }
 
@@ -166,7 +208,7 @@ func (t *Tailer) readChunk() (more bool, err error) {
 		chunkSize = DefaultChunkSize
 	}
 
-	f, err := os.Open(t.Path)
+	f, err := os.Open(t.activePath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
@@ -237,6 +279,107 @@ func (t *Tailer) readChunk() (more bool, err error) {
 		t.partial = append([]byte(nil), data...)
 	}
 	return n == chunkSize, nil
+}
+
+// activePath is the file the offset/partial state refers to: the renamed remainder
+// while a rotation cycle is draining, the live log otherwise.
+func (t *Tailer) activePath() string {
+	if t.rotating {
+		return t.Path + rotatingSuffix
+	}
+	return t.Path
+}
+
+// detectRotationInProgress resumes a rotation a restart left on disk: a leftover
+// renamed file is drained before the live log. In-memory offsets were lost with the
+// restart, so the remainder is re-read from zero — at-least-once, absorbed by the
+// server-side dedup like any other restart re-delivery.
+func (t *Tailer) detectRotationInProgress() {
+	if t.rotating {
+		return
+	}
+	if _, err := os.Stat(t.Path + rotatingSuffix); err == nil {
+		t.rotating = true
+		t.rotateStable = false
+		t.offset = 0
+		t.partial = nil
+	}
+}
+
+// startRotation begins a rotation cycle once the fully-ingested live log passes the
+// threshold (#98): rename the log out of the way (Envoy keeps writing to the same inode
+// through its open fd) and ask Envoy to reopen, so new lines land in a fresh file at
+// Path. Everything in the renamed file — including lines written between the rename and
+// the reopen — is drained by the normal chunk loop before finishRotation deletes it, so
+// rotation never discards un-ingested evidence: an agent flooding the log gains nothing
+// (growth beyond what the reporter ingests still ends in fail-closed eviction).
+func (t *Tailer) startRotation(ctx context.Context) bool {
+	if t.Reopen == nil {
+		return false
+	}
+	threshold := t.RotateAfterBytes
+	if threshold <= 0 {
+		threshold = DefaultRotateAfterBytes
+	}
+	info, err := os.Stat(t.Path)
+	if err != nil || info.Size() < threshold {
+		return false
+	}
+	if err := os.Rename(t.Path, t.Path+rotatingSuffix); err != nil {
+		log.Printf("egress-reporter: access-log rotation: rename: %v", err)
+		return false
+	}
+	t.rotating = true
+	t.rotateStable = false
+	if err := t.Reopen(ctx); err != nil {
+		log.Printf("egress-reporter: access-log rotation: envoy reopen: %v", err)
+		// Restore the world and retry next cycle; if the rename-back fails too, stay
+		// in the rotating state — finishRotation keeps retrying the reopen.
+		if rerr := os.Rename(t.Path+rotatingSuffix, t.Path); rerr == nil {
+			t.rotating = false
+			return false
+		}
+	}
+	return true
+}
+
+// finishRotation completes a cycle once the renamed remainder is fully drained. It
+// requires the live file to exist (proof Envoy reopened — otherwise retry the reopen),
+// then one further drained poll as grace for Envoy's log flusher to land anything still
+// buffered for the old fd (flush interval ≪ poll interval), and only then deletes the
+// remainder and switches to the live file at offset zero. Reports whether the switch
+// happened.
+func (t *Tailer) finishRotation(ctx context.Context) bool {
+	if _, err := os.Stat(t.Path); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			log.Printf("egress-reporter: access-log rotation: stat live log: %v", err)
+			return false
+		}
+		// No live file: Envoy never reopened (crash between rename and reopen, or the
+		// reopen failed). Without it the proxy has nowhere to log — keep retrying.
+		if t.Reopen != nil {
+			if err := t.Reopen(ctx); err != nil {
+				log.Printf("egress-reporter: access-log rotation: envoy reopen: %v", err)
+			}
+		}
+		return false
+	}
+	if !t.rotateStable {
+		t.rotateStable = true
+		return false
+	}
+	if err := os.Remove(t.Path + rotatingSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("egress-reporter: access-log rotation: remove rotated log: %v", err)
+		return false
+	}
+	t.rotating = false
+	t.rotateStable = false
+	t.offset = 0
+	t.partial = nil
+	if t.OnRotated != nil {
+		t.OnRotated()
+	}
+	return true
 }
 
 func (t *Tailer) queue(d scrutineerv1alpha1.PolicyDecision) {

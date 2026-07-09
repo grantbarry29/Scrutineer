@@ -11,6 +11,8 @@ You may obtain a copy of the License at
 package envoy
 
 import (
+	"strconv"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,12 +34,14 @@ const (
 	tmpMountPath    = "/tmp"
 
 	// AccessLogVolumeName is the shared emptyDir where Envoy writes the JSON access log
-	// and the egress-reporter container tails it (Slice C, #62). Size-bounded: overflow
-	// evicts the pod, which fails closed — the routing lock leaves the agent without
-	// egress rather than egressing without evidence. Exported so the controller can
-	// recognize an overflow eviction of this specific volume in the kubelet's message
-	// and refuse to recreate the pod (#99: a fresh evidence volume on flood-eviction
-	// would let the agent rotate its own evidence away).
+	// and the egress-reporter container tails it (Slice C, #62). The reporter rotates
+	// the fully-ingested prefix away (#98), so a governed session can run indefinitely;
+	// the size bound stays as the fail-closed backstop — growth beyond what the
+	// reporter ingests (reporter outage, flooding) evicts the pod, and the routing lock
+	// leaves the agent without egress rather than egressing without evidence. Exported
+	// so the controller can recognize an overflow eviction of this specific volume in
+	// the kubelet's message and refuse to recreate the pod (#99: a fresh evidence
+	// volume on flood-eviction would let the agent rotate its own evidence away).
 	AccessLogVolumeName = "access-log"
 	accessLogSizeLimit  = "256Mi"
 
@@ -159,6 +163,9 @@ type PodConfig struct {
 	// drives the Envoy RBAC (ConfigMap) and the egress-reporter's evidence
 	// classification env, so enforcement and evidence agree (#32).
 	Bootstrap BootstrapConfig
+	// RotateAfterBytes overrides the egress-reporter's access-log rotation threshold
+	// (#98). Zero keeps the reporter's built-in default (DefaultRotateAfterBytes).
+	RotateAfterBytes int64
 }
 
 // hardenedSecurityContext is the shared container hardening for every container in the
@@ -283,6 +290,17 @@ func Pod(sessionName, namespace string, cfg PodConfig) *corev1.Pod {
 // the reporter, authenticated with the pod's projected per-session SA token. It is the
 // only container holding that token; Envoy itself never sees it.
 func egressReporterContainer(sessionName, namespace string, cfg PodConfig) corev1.Container {
+	env := append([]corev1.EnvVar{
+		{Name: sidecarenv.EnvSessionName, Value: sessionName},
+		{Name: sidecarenv.EnvSessionNamespace, Value: namespace},
+		{Name: sidecarenv.EnvReporterURL, Value: cfg.ReporterURL},
+		{Name: sidecarenv.EnvReporterToken, Value: reporterTokenMountPath + "/" + reporterTokenFileName},
+	}, policyEnv(cfg.Bootstrap)...)
+	if cfg.RotateAfterBytes > 0 {
+		env = append(env, corev1.EnvVar{
+			Name: sidecarenv.EnvRotateAfterBytes, Value: strconv.FormatInt(cfg.RotateAfterBytes, 10),
+		})
+	}
 	return corev1.Container{
 		Name:            reporterContainerName,
 		Image:           cfg.ReporterImage,
@@ -292,15 +310,13 @@ func egressReporterContainer(sessionName, namespace string, cfg PodConfig) corev
 			ContainerPort: ReporterMetricsPort,
 			Protocol:      corev1.ProtocolTCP,
 		}},
-		Env: append([]corev1.EnvVar{
-			{Name: sidecarenv.EnvSessionName, Value: sessionName},
-			{Name: sidecarenv.EnvSessionNamespace, Value: namespace},
-			{Name: sidecarenv.EnvReporterURL, Value: cfg.ReporterURL},
-			{Name: sidecarenv.EnvReporterToken, Value: reporterTokenMountPath + "/" + reporterTokenFileName},
-		}, policyEnv(cfg.Bootstrap)...),
+		Env:             env,
 		SecurityContext: hardenedSecurityContext(),
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: AccessLogVolumeName, MountPath: AccessLogDir, ReadOnly: true},
+			// Writable (not ReadOnly): rotation (#98) renames and deletes the
+			// fully-ingested log in this directory. Tamper surface is unchanged — the
+			// reporter is the ingest component itself, outside the agent's trust domain.
+			{Name: AccessLogVolumeName, MountPath: AccessLogDir},
 			{Name: reporterTokenVolume, MountPath: reporterTokenMountPath, ReadOnly: true},
 		},
 		Resources: corev1.ResourceRequirements{

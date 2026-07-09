@@ -141,6 +141,42 @@ func TestPodExposesMetricsPorts(t *testing.T) {
 	}
 }
 
+// #98: the controller can override the reporter's rotation threshold per pod; zero
+// keeps the reporter's built-in default (no env set).
+func TestPodPassesRotateThresholdEnv(t *testing.T) {
+	cfg := testPodConfig()
+	cfg.RotateAfterBytes = 12345
+	rep := findContainer(t, Pod("s", "ns", cfg), reporterContainerName)
+	found := ""
+	for _, e := range rep.Env {
+		if e.Name == sidecarenv.EnvRotateAfterBytes {
+			found = e.Value
+		}
+	}
+	if found != "12345" {
+		t.Fatalf("%s = %q, want 12345", sidecarenv.EnvRotateAfterBytes, found)
+	}
+
+	cfg.RotateAfterBytes = 0
+	rep = findContainer(t, Pod("s", "ns", cfg), reporterContainerName)
+	for _, e := range rep.Env {
+		if e.Name == sidecarenv.EnvRotateAfterBytes {
+			t.Fatalf("zero threshold must not set %s (reporter default applies)", sidecarenv.EnvRotateAfterBytes)
+		}
+	}
+}
+
+func findContainer(t *testing.T, pod *corev1.Pod, name string) corev1.Container {
+	t.Helper()
+	for _, c := range pod.Spec.Containers {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("missing container %q", name)
+	return corev1.Container{}
+}
+
 // TestPodWiresEgressReporter locks in the Slice C evidence plumbing: Envoy writes the
 // JSON access log into a shared volume; the egress-reporter container tails it and
 // authenticates to the reporter with the pod's projected per-session SA token.
@@ -167,12 +203,13 @@ func TestPodWiresEgressReporter(t *testing.T) {
 		t.Fatalf("reporter image = %q", rep.Image)
 	}
 
-	// Envoy writes the access log; the reporter reads it.
+	// Envoy writes the access log; the reporter tails it AND rotates the ingested
+	// prefix away (#98), so both mounts are writable.
 	if !hasMount(envoyC, AccessLogVolumeName, AccessLogDir, false) {
 		t.Fatalf("envoy must mount the access-log volume writable: %+v", envoyC.VolumeMounts)
 	}
-	if !hasMount(rep, AccessLogVolumeName, AccessLogDir, true) {
-		t.Fatalf("egress-reporter must mount the access-log volume read-only: %+v", rep.VolumeMounts)
+	if !hasMount(rep, AccessLogVolumeName, AccessLogDir, false) {
+		t.Fatalf("egress-reporter must mount the access-log volume writable (rotation renames/deletes): %+v", rep.VolumeMounts)
 	}
 	// Only the reporter container gets the identity token.
 	if !hasMount(rep, reporterTokenVolume, reporterTokenMountPath, true) {

@@ -13,6 +13,7 @@ package envoy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -475,6 +476,229 @@ func TestTailer_transientStatusKeepsPending(t *testing.T) {
 		if got := sink.inner.targets(); len(got) != 1 || got[0] != "keep.example" {
 			t.Fatalf("status %d: targets after retry = %v", status, got)
 		}
+	}
+}
+
+// fakeEnvoyWriter simulates Envoy's access-log writer: a kept-open O_APPEND fd that
+// keeps writing to the same inode across a rename (exactly what Envoy does until
+// /reopen_logs), and a reopen() that closes and re-opens the configured path (what
+// Envoy does when the admin endpoint is hit).
+type fakeEnvoyWriter struct {
+	t       *testing.T
+	path    string
+	f       *os.File
+	reopens int
+}
+
+func newFakeEnvoyWriter(t *testing.T, path string) *fakeEnvoyWriter {
+	t.Helper()
+	w := &fakeEnvoyWriter{t: t, path: path}
+	if err := w.reopen(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	w.reopens = 0
+	return w
+}
+
+func (w *fakeEnvoyWriter) write(line string) {
+	w.t.Helper()
+	if _, err := w.f.WriteString(line); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+func (w *fakeEnvoyWriter) reopen(context.Context) error {
+	if w.f != nil {
+		_ = w.f.Close()
+	}
+	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	w.f = f
+	w.reopens++
+	return nil
+}
+
+// #98: sustained traffic beyond the rotate threshold must rotate the ingested log away
+// (rename → reopen → drain → delete) with full evidence continuity — every line
+// delivered exactly once, in order, across multiple rotation cycles.
+func TestTailer_rotatesIngestedLogWithEvidenceContinuity(t *testing.T) {
+	sink := &capturingSubmit{}
+	path := filepath.Join(t.TempDir(), "access.json")
+	envoy := newFakeEnvoyWriter(t, path)
+	rotations := 0
+	tailer := &Tailer{
+		Path:             path,
+		Submit:           sink.submit,
+		RotateAfterBytes: 300, // ~3 lines
+		Reopen:           envoy.reopen,
+		OnRotated:        func() { rotations++ },
+	}
+
+	const n = 30
+	want := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		h := fmt.Sprintf("h%03d.example", i)
+		want = append(want, h)
+		envoy.write(logLine(h))
+		if err := tailer.Poll(context.Background()); err != nil {
+			t.Fatalf("poll %d: %v", i, err)
+		}
+	}
+	// Drain any in-flight rotation to a stable end state.
+	for i := 0; i < 6; i++ {
+		if err := tailer.Poll(context.Background()); err != nil {
+			t.Fatalf("drain poll: %v", err)
+		}
+	}
+
+	got := sink.targets()
+	if len(got) != n {
+		t.Fatalf("delivered %d decisions, want %d (loss or duplication across rotation)", len(got), n)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("targets[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if rotations == 0 {
+		t.Fatal("expected at least one rotation cycle")
+	}
+	if _, err := os.Stat(path + rotatingSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rotated file left behind: %v", err)
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() >= 30*int64(len(logLine("h000.example"))) {
+		t.Fatalf("live log was not rotated away (err=%v)", err)
+	}
+}
+
+// #98: rotation is gated on ingest — while the reporter is down, nothing may be renamed
+// or deleted no matter how large the log grows (an agent flooding the log must not be
+// able to discard un-ingested evidence; overflow beyond ingest still fails closed).
+func TestTailer_neverRotatesUningestedEvidence(t *testing.T) {
+	sink := &statusSubmit{status: 500, failWhen: func([]scrutineerv1alpha1.PolicyDecision) bool { return true }}
+	path := filepath.Join(t.TempDir(), "access.json")
+	envoy := newFakeEnvoyWriter(t, path)
+	tailer := &Tailer{
+		Path:             path,
+		Submit:           sink.submit,
+		RotateAfterBytes: 100,
+		Reopen:           envoy.reopen,
+	}
+
+	const n = 20
+	want := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		h := fmt.Sprintf("h%03d.example", i)
+		want = append(want, h)
+		envoy.write(logLine(h))
+		_ = tailer.Poll(context.Background()) // reporter down: polls error
+	}
+	if _, err := os.Stat(path + rotatingSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("rotation started while evidence was un-ingested")
+	}
+	if envoy.reopens != 0 {
+		t.Fatalf("reopen called %d times during reporter outage", envoy.reopens)
+	}
+
+	// Reporter recovers: everything is delivered, then rotation may proceed.
+	sink.failWhen = nil
+	for i := 0; i < 6; i++ {
+		if err := tailer.Poll(context.Background()); err != nil {
+			t.Fatalf("recovery poll: %v", err)
+		}
+	}
+	got := sink.inner.targets()
+	if len(got) != n {
+		t.Fatalf("delivered %d decisions after recovery, want %d", len(got), n)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("targets[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// #98: a reporter restart mid-rotation (offset lost, .rotating on disk, live file already
+// reopened by Envoy) must drain the rotated remainder first, then the live file — order
+// preserved, rotated file removed.
+func TestTailer_recoversRotationAfterRestart(t *testing.T) {
+	sink := &capturingSubmit{}
+	path := filepath.Join(t.TempDir(), "access.json")
+	appendFile(t, path+rotatingSuffix, logLine("old-a.example")+logLine("old-b.example"))
+	appendFile(t, path, logLine("new-c.example"))
+
+	tailer := &Tailer{Path: path, Submit: sink.submit} // fresh: offset 0, like a restart
+	for i := 0; i < 6; i++ {
+		if err := tailer.Poll(context.Background()); err != nil {
+			t.Fatalf("poll: %v", err)
+		}
+	}
+
+	got := sink.targets()
+	want := []string{"old-a.example", "old-b.example", "new-c.example"}
+	if len(got) != len(want) {
+		t.Fatalf("targets = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("targets[%d] = %q, want %q (rotated remainder must drain first)", i, got[i], want[i])
+		}
+	}
+	if _, err := os.Stat(path + rotatingSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("rotated file not cleaned up after recovery")
+	}
+}
+
+// #98: a crash after rename but before Envoy reopened (no live file) must retry the
+// reopen so the proxy resumes logging, then finish the rotation.
+func TestTailer_retriesReopenWhenLiveFileMissing(t *testing.T) {
+	sink := &capturingSubmit{}
+	path := filepath.Join(t.TempDir(), "access.json")
+	appendFile(t, path+rotatingSuffix, logLine("stranded.example"))
+
+	reopens := 0
+	tailer := &Tailer{Path: path, Submit: sink.submit,
+		Reopen: func(context.Context) error {
+			reopens++
+			return os.WriteFile(path, nil, 0o644) // Envoy recreates the live file
+		}}
+	for i := 0; i < 6; i++ {
+		if err := tailer.Poll(context.Background()); err != nil {
+			t.Fatalf("poll: %v", err)
+		}
+	}
+
+	if reopens == 0 {
+		t.Fatal("expected the tailer to retry the reopen")
+	}
+	if got := sink.targets(); len(got) != 1 || got[0] != "stranded.example" {
+		t.Fatalf("targets = %v, want [stranded.example]", got)
+	}
+	if _, err := os.Stat(path + rotatingSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("rotated file not cleaned up")
+	}
+}
+
+// #98: without a Reopen hook rotation is disabled entirely — the tailer must never
+// rename or delete the log it cannot ask Envoy to recreate.
+func TestTailer_noRotationWithoutReopen(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	tailer.RotateAfterBytes = 50
+
+	appendFile(t, path, logLine("a.example")+logLine("b.example"))
+	for i := 0; i < 3; i++ {
+		if err := tailer.Poll(context.Background()); err != nil {
+			t.Fatalf("poll: %v", err)
+		}
+	}
+	if _, err := os.Stat(path + rotatingSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("rotation ran without a Reopen hook")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("live log must be untouched: %v", err)
 	}
 }
 

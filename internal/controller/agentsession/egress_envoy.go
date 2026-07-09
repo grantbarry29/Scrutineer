@@ -49,13 +49,18 @@ type egressBackend interface {
 // (own identity, own netns) and routes the agent to it via explicit-proxy env. It is the
 // interim routing mechanism; the mandatory, non-bypassable lock is the default-deny egress
 // NetworkPolicy (Slice B, #61).
-type explicitProxyEgressBackend struct{}
+type explicitProxyEgressBackend struct {
+	// rotateAfterBytes overrides the egress-reporter's access-log rotation threshold
+	// (#98); zero keeps the reporter's default. Plumbed from the manager env so e2e and
+	// operators can tune it without an image rebuild.
+	rotateAfterBytes int64
+}
 
 func (explicitProxyEgressBackend) manages(profile *scrutineerv1alpha1.RuntimeProfile) bool {
 	return profileEnablesEnvoy(profile)
 }
 
-func (explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.AgentSession) []client.Object {
+func (b explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.AgentSession) []client.Object {
 	ns := session.Namespace
 	name := session.Name
 	// The Envoy config carries the session's effective FQDN policy so denied/not-allowed
@@ -77,6 +82,7 @@ func (explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.Age
 			ReporterURL:      scrutineerjob.DefaultReporterURL,
 			ReporterAudience: scrutineerjob.ReporterTokenAudience,
 			Bootstrap:        bootstrap,
+			RotateAfterBytes: b.rotateAfterBytes,
 		}),
 	}
 }
@@ -112,7 +118,7 @@ func profileEnablesEnvoy(profile *scrutineerv1alpha1.RuntimeProfile) bool {
 
 func (r *AgentSessionReconciler) ensureEgressBackend() {
 	if r.egress == nil {
-		r.egress = explicitProxyEgressBackend{}
+		r.egress = explicitProxyEgressBackend{rotateAfterBytes: r.EgressRotateAfterBytes}
 	}
 }
 

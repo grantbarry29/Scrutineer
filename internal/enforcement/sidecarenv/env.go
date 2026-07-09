@@ -30,6 +30,9 @@ const (
 	EnvSessionNamespace = "SCRUTINEER_SESSION_NAMESPACE"
 	EnvReporterURL      = "SCRUTINEER_REPORTER_URL"
 	EnvReporterToken    = "SCRUTINEER_REPORTER_TOKEN_PATH"
+	// EnvRotateAfterBytes overrides the egress-reporter's access-log rotation
+	// threshold (#98); set on the container by the controller (envoy.PodConfig).
+	EnvRotateAfterBytes = "SCRUTINEER_ROTATE_AFTER_BYTES"
 )
 
 // Base is the configuration common to every sidecar: which session it enforces and how

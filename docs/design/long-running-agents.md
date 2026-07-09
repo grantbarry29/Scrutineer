@@ -14,7 +14,7 @@
 ## Why today's model doesn't serve it
 
 - **Run-to-completion.** The `kubernetes-job` / `kubernetes-pod` backends are one-shot; the `AgentSession` lifecycle (`Pending → Running → Succeeded/Failed`, terminal-sticky) assumes the agent *completes*. A service agent never "Succeeds."
-- **Session-scoped and ephemeral.** Per-session Envoy pod, ephemeral workspace, and bounded `status`/evidence lists all assume a short, bounded run. A long-lived session breaks those assumptions (evidence grows unbounded; "one session = one task" stops holding).
+- **Session-scoped and ephemeral.** Per-session Envoy pod, ephemeral workspace, and bounded `status`/evidence lists all assume a short, bounded run. A long-lived session breaks those assumptions (evidence grows unbounded; "one session = one task" stops holding). One of these is already solved: the egress access log no longer caps session lifetime — the ingested prefix rotates away ([`access-log-rotation.md`](access-log-rotation.md), #98), so disk is bounded by ingest lag, not lifetime.
 - **Shape mismatch.** A continuously-serving agent is *Deployment*-shaped; Scrutineer models Job/Pod. There is no first-class "governed long-running agent" today.
 
 ## Open questions (for when/if this is scheduled)

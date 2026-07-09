@@ -31,6 +31,12 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
   is truncated (1KiB target / 2KiB message, deterministic) at decision creation — so a
   prompt-injected agent cannot wedge its own evidence pipeline with an oversized
   CONNECT authority.
+- The access log rotates once its fully-ingested size passes the threshold (#98,
+  default 64Mi): rename → Envoy admin `/reopen_logs` (loopback, same pod netns) →
+  drain the remainder → delete. **Only ingested bytes are ever removed** — flooding
+  cannot erase un-ingested evidence; growth beyond ingest still evicts the pod
+  (fail closed, surfaced by the controller per #99). Design:
+  [`docs/design/access-log-rotation.md`](../../docs/design/access-log-rotation.md).
 - On SIGTERM it makes a final best-effort drain so evidence written just before session
   teardown still lands.
 
@@ -53,6 +59,7 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
 | `SCRUTINEER_REPORTER_TOKEN_PATH` | Projected SA token file |
 | `SCRUTINEER_ACCESS_LOG_PATH` | Optional; defaults to `/var/log/envoy/access.json` |
 | `SCRUTINEER_METRICS_ADDR` | Optional Prometheus `/metrics` bind; defaults to `:9903` (`envoy.ReporterMetricsPort`); `disabled` turns it off |
+| `SCRUTINEER_ROTATE_AFTER_BYTES` | Optional access-log rotation threshold (#98); defaults to 64Mi (`envoy.DefaultRotateAfterBytes`); set per-pod by the controller from the manager env `SCRUTINEER_EGRESS_ROTATE_AFTER_BYTES` |
 | `AGENT_POLICY_MODE` | `enforced` ⇒ denials classified `deny`; otherwise `dry-run` |
 | `AGENT_POLICY_ALLOWED_DOMAINS` / `AGENT_POLICY_DENIED_DOMAINS` | CSV FQDN policy (exact or `*.` wildcard) classified per observed authority |
 
@@ -60,8 +67,9 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
 
 Serves Prometheus metrics on `:9903` `/metrics` (container port `metrics`, #55):
 decisions by action, malformed access-log lines, submissions by outcome + latency,
-dropped decisions (pending-queue overflow = evidence lost), and rejected decisions
-(permanent reporter rejection by HTTP status = evidence lost, #96). Dedicated registry in
+dropped decisions (pending-queue overflow = evidence lost), rejected decisions
+(permanent reporter rejection by HTTP status = evidence lost, #96), and completed
+log-rotation cycles (#98). Dedicated registry in
 [`internal/enforcement/egressmetrics`](../../internal/enforcement/egressmetrics/); a
 metrics bind failure is logged and never stops the evidence pipeline. The Envoy container
 beside it exposes `envoy_*` stats on `:9902` `/stats/prometheus` (stats-only listener;

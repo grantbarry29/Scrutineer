@@ -192,6 +192,10 @@ func startControllerManager() {
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
 		Recorder:  mgr.GetEventRecorderFor("scrutineer-e2e"),
+		// Small rotation threshold (#98) so the rotation spec can drive a real cycle
+		// with a few hundred requests. Well above what any other spec's probe traffic
+		// generates (~16KiB), so it does not perturb them.
+		EgressRotateAfterBytes: 48 << 10,
 	}
 	if lockVerifyEnabled() {
 		By("wiring the lock-verification gate (probe pods use the kind-loaded controller image)")

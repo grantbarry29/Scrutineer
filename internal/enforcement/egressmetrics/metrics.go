@@ -51,6 +51,8 @@ type Metrics struct {
 	// (contract §4.4: 400/403/404/413), by HTTP status — evidence lost (#96).
 	// Bounded cardinality: only those four codes are classified permanent.
 	Rejected *prometheus.CounterVec
+	// Rotations counts completed access-log rotation cycles (#98).
+	Rotations prometheus.Counter
 }
 
 // New builds the instrument set. dropped, when non-nil, is exported as the
@@ -81,8 +83,12 @@ func New(dropped func() float64) *Metrics {
 			Namespace: namespace, Subsystem: subsystem, Name: "rejected_decisions_total",
 			Help: "Decisions dropped after a permanent reporter rejection (evidence lost), by HTTP status.",
 		}, []string{"status"}),
+		Rotations: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystem, Name: "log_rotations_total",
+			Help: "Completed access-log rotation cycles (ingested prefix removed, Envoy reopened).",
+		}),
 	}
-	reg.MustRegister(m.Decisions, m.Malformed, m.Submissions, m.SubmitSeconds, m.Rejected)
+	reg.MustRegister(m.Decisions, m.Malformed, m.Submissions, m.SubmitSeconds, m.Rejected, m.Rotations)
 	if dropped != nil {
 		reg.MustRegister(prometheus.NewCounterFunc(prometheus.CounterOpts{
 			Namespace: namespace, Subsystem: subsystem, Name: "dropped_decisions_total",
