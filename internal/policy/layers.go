@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
 // LoadPolicyLayers fetches policy CRDs referenced by the session in declaration order.
@@ -57,6 +58,12 @@ func loadAgentPolicy(ctx context.Context, c client.Reader, namespace, name strin
 			return Layer{}, fmt.Errorf("spec.policyRefs: AgentPolicy %q not found in namespace %q", name, namespace)
 		}
 		return Layer{}, fmt.Errorf("spec.policyRefs: get AgentPolicy %q: %w", name, err)
+	}
+	// Referenced FQDN patterns get the same reconcile-time validation as inline ones
+	// (agentsession validateSpec): a hostile character must deny the session with a
+	// clear message, never reach the Envoy bootstrap YAML or the CSV env (#103).
+	if err := enforcement.ValidateDomainRules(ap.Spec.PolicyRules); err != nil {
+		return Layer{}, fmt.Errorf("AgentPolicy %q: %w", name, err)
 	}
 	return Layer{
 		Rules: ap.Spec.PolicyRules,

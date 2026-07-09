@@ -124,12 +124,21 @@ const (
 // PolicyRules are reusable governance rule fields shared by inline session policy,
 // AgentPolicy, and status.effectivePolicy.
 type PolicyRules struct {
-	// AllowedDomains is an FQDN allowlist for outbound network access.
+	// AllowedDomains is an FQDN allowlist for outbound network access. Patterns are an
+	// exact hostname or a single leading "*." wildcard — lowercase letters, digits,
+	// '.', '-' only (#103). The CRD pattern is the apply-time line of defense; the
+	// stricter shared validator is enforcement.ValidateDomainPattern (reconcile-time,
+	// also rejects empty labels) — keep the two in sync.
 	// +optional
+	// +kubebuilder:validation:items:MaxLength=253
+	// +kubebuilder:validation:items:Pattern=`^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`
 	AllowedDomains []string `json:"allowedDomains,omitempty"`
 
-	// DeniedDomains is an FQDN denylist for outbound network access.
+	// DeniedDomains is an FQDN denylist for outbound network access. Same pattern
+	// contract as AllowedDomains (#103).
 	// +optional
+	// +kubebuilder:validation:items:MaxLength=253
+	// +kubebuilder:validation:items:Pattern=`^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`
 	DeniedDomains []string `json:"deniedDomains,omitempty"`
 
 	// AllowedCIDRs is an IP/CIDR allowlist for outbound network access.

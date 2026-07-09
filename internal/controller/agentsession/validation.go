@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -53,6 +54,13 @@ func validateSpec(session *scrutineerv1alpha1.AgentSession) error {
 	}
 	if err := validateRuntimeProfileRef(spec.RuntimeProfileRef); err != nil {
 		return err
+	}
+	// Inline FQDN patterns feed the Envoy bootstrap YAML, the AGENT_POLICY_* CSV env,
+	// and MatchDomain — a hostile character must become a clear Denied here, not a
+	// crashlooping proxy or an evidence/enforcement divergence (#103). Referenced
+	// AgentPolicy rules get the same check at load time (internal/policy/layers.go).
+	if err := enforcement.ValidateDomainRules(spec.Policy.PolicyRules); err != nil {
+		return fmt.Errorf("spec.policy: %w", err)
 	}
 
 	if strings.TrimSpace(spec.Runtime.Image) == "" {

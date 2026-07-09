@@ -12,6 +12,7 @@ package policy
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,5 +103,41 @@ func TestLoadPolicyLayers_validationErrors(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected not found error")
+	}
+}
+
+// #103: a referenced AgentPolicy carrying a hostile domain pattern must fail the load
+// (→ session Denied with InvalidPolicy) before the pattern ever reaches the Envoy
+// bootstrap YAML or the CSV env.
+func TestLoadPolicyLayers_rejectsHostileDomainPatterns(t *testing.T) {
+	s := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(s)
+	_ = scrutineerv1alpha1.AddToScheme(s)
+
+	ap := &scrutineerv1alpha1.AgentPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "bad", Namespace: "ns"},
+		Spec: scrutineerv1alpha1.AgentPolicySpec{
+			Mode: scrutineerv1alpha1.PolicyModeEnforced,
+			PolicyRules: scrutineerv1alpha1.PolicyRules{
+				AllowedDomains: []string{"good.example", "a,b.example"},
+			},
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(ap).Build()
+
+	session := &scrutineerv1alpha1.AgentSession{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "sess"},
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			PolicyRefs: []scrutineerv1alpha1.PolicyRef{{Name: "bad"}},
+		},
+	}
+	_, err := LoadPolicyLayers(context.Background(), cl, session)
+	if err == nil {
+		t.Fatal("expected hostile pattern in referenced AgentPolicy to fail the load")
+	}
+	for _, want := range []string{`AgentPolicy "bad"`, "allowedDomains[1]", "a,b.example"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q must contain %q", err.Error(), want)
+		}
 	}
 }

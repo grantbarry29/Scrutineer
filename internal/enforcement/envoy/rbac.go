@@ -67,6 +67,11 @@ func (c BootstrapConfig) hasFQDNPolicy() bool {
 // matches a request :authority against the FQDN patterns, mirroring enforcement.MatchDomain:
 // exact hosts, "*." wildcards (subdomains only, apex excluded), case-insensitive, with an
 // optional ":port" suffix. Returns "" when no usable pattern is present.
+//
+// Precondition (#103): patterns passed the shared enforcement.ValidateDomainPattern at
+// reconcile time. The rendered regex is embedded in a SINGLE-QUOTED YAML scalar in the
+// bootstrap and regexp.QuoteMeta does not escape quotes or newlines — an unvalidated
+// pattern containing either would produce an invalid bootstrap and a crashlooping proxy.
 func authorityRegex(patterns []string) string {
 	var alts []string
 	for _, p := range patterns {

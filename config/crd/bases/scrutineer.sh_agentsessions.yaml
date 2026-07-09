@@ -140,9 +140,15 @@ spec:
                       type: string
                     type: array
                   allowedDomains:
-                    description: AllowedDomains is an FQDN allowlist for outbound
-                      network access.
+                    description: |-
+                      AllowedDomains is an FQDN allowlist for outbound network access. Patterns are an
+                      exact hostname or a single leading "*." wildcard — lowercase letters, digits,
+                      '.', '-' only (#103). The CRD pattern is the apply-time line of defense; the
+                      stricter shared validator is enforcement.ValidateDomainPattern (reconcile-time,
+                      also rejects empty labels) — keep the two in sync.
                     items:
+                      maxLength: 253
+                      pattern: ^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$
                       type: string
                     type: array
                   deniedCIDRs:
@@ -152,9 +158,12 @@ spec:
                       type: string
                     type: array
                   deniedDomains:
-                    description: DeniedDomains is an FQDN denylist for outbound network
-                      access.
+                    description: |-
+                      DeniedDomains is an FQDN denylist for outbound network access. Same pattern
+                      contract as AllowedDomains (#103).
                     items:
+                      maxLength: 253
+                      pattern: ^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$
                       type: string
                     type: array
                   requireHumanApproval:
@@ -647,9 +656,15 @@ spec:
                       type: string
                     type: array
                   allowedDomains:
-                    description: AllowedDomains is an FQDN allowlist for outbound
-                      network access.
+                    description: |-
+                      AllowedDomains is an FQDN allowlist for outbound network access. Patterns are an
+                      exact hostname or a single leading "*." wildcard — lowercase letters, digits,
+                      '.', '-' only (#103). The CRD pattern is the apply-time line of defense; the
+                      stricter shared validator is enforcement.ValidateDomainPattern (reconcile-time,
+                      also rejects empty labels) — keep the two in sync.
                     items:
+                      maxLength: 253
+                      pattern: ^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$
                       type: string
                     type: array
                   deniedCIDRs:
@@ -659,9 +674,12 @@ spec:
                       type: string
                     type: array
                   deniedDomains:
-                    description: DeniedDomains is an FQDN denylist for outbound network
-                      access.
+                    description: |-
+                      DeniedDomains is an FQDN denylist for outbound network access. Same pattern
+                      contract as AllowedDomains (#103).
                     items:
+                      maxLength: 253
+                      pattern: ^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$
                       type: string
                     type: array
                   mode:

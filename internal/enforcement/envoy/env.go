@@ -43,6 +43,11 @@ func PolicyFromEnv() EgressPolicy {
 // policyEnv renders the FQDN-policy env vars for the egress-reporter container from a
 // BootstrapConfig (the same source that drives the Envoy RBAC), so enforcement and
 // evidence classification always see the same policy.
+//
+// Precondition (#103): patterns passed the shared enforcement.ValidateDomainPattern at
+// reconcile time. The comma join round-trips through containerenv.SplitCSV — an
+// unvalidated pattern containing a comma would silently split into two different
+// patterns on the evidence side only, making evidence disagree with enforcement.
 func policyEnv(cfg BootstrapConfig) []corev1.EnvVar {
 	mode := string(scrutineerv1alpha1.PolicyModeAuditOnly)
 	if cfg.Enforce {

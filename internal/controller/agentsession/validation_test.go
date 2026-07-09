@@ -133,6 +133,45 @@ var _ = Describe("validateSpec", func() {
 		Expect(validateSpec(session)).To(MatchError(ContainSubstring(`policyRefs[0].kind "ToolPolicy" is not supported (allowed: AgentPolicy)`)))
 	})
 
+	// #103: inline domain patterns feed the Envoy bootstrap YAML, the CSV env, and
+	// MatchDomain — hostile characters must be rejected here (phase=Denied) instead of
+	// crashlooping the proxy or silently splitting the evidence-side policy.
+	It("rejects inline domain patterns with hostile characters", func() {
+		session := &scrutineerv1alpha1.AgentSession{
+			Spec: scrutineerv1alpha1.AgentSessionSpec{
+				Task:    scrutineerv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   scrutineerv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime: scrutineerv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				Policy: scrutineerv1alpha1.InlinePolicySpec{
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
+						DeniedDomains: []string{"evil'co.example"},
+					},
+				},
+			},
+		}
+		Expect(validateSpec(session)).To(MatchError(SatisfyAll(
+			ContainSubstring("spec.policy"),
+			ContainSubstring("deniedDomains[0]"),
+			ContainSubstring("evil'co.example"),
+		)))
+	})
+
+	It("accepts valid inline domain patterns", func() {
+		session := &scrutineerv1alpha1.AgentSession{
+			Spec: scrutineerv1alpha1.AgentSessionSpec{
+				Task:    scrutineerv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   scrutineerv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime: scrutineerv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				Policy: scrutineerv1alpha1.InlinePolicySpec{
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
+						AllowedDomains: []string{"*.example.com", "api.example.net"},
+					},
+				},
+			},
+		}
+		Expect(validateSpec(session)).To(Succeed())
+	})
+
 	It("accepts AgentPolicy and empty policyRefs kinds", func() {
 		session := &scrutineerv1alpha1.AgentSession{
 			Spec: scrutineerv1alpha1.AgentSessionSpec{
