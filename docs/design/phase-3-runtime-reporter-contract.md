@@ -262,6 +262,8 @@ Ordering: decisions are appended in arrival order; consumers sort by `time` for 
 | `maxDecisionsPerReport` | 128 | Prevent a single call from blowing the status cap churn. |
 | Per-session rate limit | 1 req/s, burst 5 (token bucket, #100) | Prevent status-write floods; `429` + `Retry-After`. Clients honor the hint: the egress-reporter retries the batch after `Retry-After` and keeps that pace for the rest of its flush. |
 | Status caps | `MaxPolicyDecisions` / `MaxViolations` (64) | Existing truncation with summary entry. |
+| Identity-verification bound | 15s verified-identity cache + global 50/s (burst 100) on cache misses (#104) | Bound TokenReview/pod-GET apiserver amplification pre-auth; cache TTL = revocation-staleness ceiling; excess → `503` + `Retry-After`. |
+| Server connection timeouts | read-header 5s / read 10s / write 10s / idle 2m (#107) | Terminate slowloris / trickled-body connections; the body-size cap bounds bytes, not time. |
 
 Rate limiting is per `(namespace, session)`. A noisy or hostile sidecar cannot degrade other sessions.
 

@@ -358,6 +358,10 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		status = http.StatusForbidden
 	case errors.Is(err, ErrUnauthorized):
 		status = http.StatusUnauthorized
+	case errors.Is(err, ErrVerifyThrottled):
+		// Global verification budget spent (#104): transient for the caller.
+		w.Header().Set("Retry-After", "1")
+		status = http.StatusServiceUnavailable
 	default:
 		status = http.StatusInternalServerError
 	}

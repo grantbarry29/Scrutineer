@@ -81,6 +81,21 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
   (reports: 1 req/s, burst `DefaultReportRateBurst` = 5 per contract §8, token bucket,
   #100; approval registration: strict 1/s, no burst);
   `DefaultMaxOutstandingApprovals` undecided holds; reportId dedup TTL.
+- **Identity verification bounds (#104):** the default `KubeIdentityVerifier` is wrapped
+  in a `cachingVerifier` — a verified identity is cached for `DefaultIdentityCacheTTL`
+  (15s) keyed by hash(token, pod claim, session), so steady-state callers cost ~1
+  TokenReview + ownership lookup per TTL instead of per request. **Revocation
+  semantics:** the TTL is the maximum staleness window — a deleted pod or rotated SA
+  keeps reporting for at most 15s. Cache misses (the requests that actually hit the
+  apiserver) are additionally bounded by a global limit (50/s, burst 100); excess gets
+  `503` + `Retry-After` (`ErrVerifyThrottled`) before any TokenReview. Failures are
+  never cached. Trade-off: during an active flood, *new* (uncached) legitimate callers
+  compete with the attacker for the verification budget; established callers are
+  unaffected.
+- **Connection timeouts (#107):** the `:8088` server bounds every connection phase
+  (`ReadHeaderTimeout` 5s / `ReadTimeout` 10s / `WriteTimeout` 10s / `IdleTimeout`
+  2m) — slowloris and trickled-body connections are terminated instead of
+  accumulating goroutines in the manager.
 - RBAC from `+kubebuilder:rbac` markers in `server.go` (`tokenreviews: create`;
   `agentsessions: get` + `agentsessions/status: get;update;patch`; `approvalrequests:
   get;list;create`; `jobs`/`pods: get`) via `make manifests`. These render into a

@@ -27,4 +27,8 @@ var (
 	ErrPayloadTooLarge = errors.New("payload too large")
 	// ErrRateLimited indicates per-session rate limit exceeded.
 	ErrRateLimited = errors.New("rate limited")
+	// ErrVerifyThrottled indicates the global identity-verification budget is spent
+	// (#104): the request was rejected before any TokenReview. Maps to 503 +
+	// Retry-After — transient for well-behaved clients.
+	ErrVerifyThrottled = errors.New("identity verification throttled")
 )

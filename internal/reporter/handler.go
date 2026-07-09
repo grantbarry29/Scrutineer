@@ -99,6 +99,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrForbidden) {
 			status = http.StatusForbidden
 			result = "forbidden"
+		} else if errors.Is(err, ErrVerifyThrottled) {
+			// Global verification budget spent (#104): transient — the tailer
+			// classifies 5xx as retryable, so evidence waits and retries.
+			status = http.StatusServiceUnavailable
+			result = "verify_throttled"
+			w.Header().Set("Retry-After", "1")
 		} else if !errors.Is(err, ErrUnauthorized) {
 			status = http.StatusInternalServerError
 			result = "internal_error"

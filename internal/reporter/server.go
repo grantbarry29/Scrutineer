@@ -73,11 +73,18 @@ func NewRunnable(opts Options) manager.Runnable {
 
 	verifier := opts.Verifier
 	if verifier == nil {
-		verifier = &KubeIdentityVerifier{
+		// Both caller-facing handlers share one cached, flood-bounded verifier
+		// (#104): re-verifying the same caller costs the apiserver nothing within
+		// the TTL (the TTL is the revocation-staleness ceiling), and garbage-token
+		// floods are rate-bounded before any TokenReview. The wrap is tied to the
+		// default KubeIdentityVerifier because both bounds exist to protect its
+		// apiserver calls and its cache key assumes bearer-token auth; an injected
+		// Verifier brings its own cost model and wraps itself if it wants this.
+		verifier = newCachingVerifier(&KubeIdentityVerifier{
 			Client:   opts.Client,
 			Reader:   opts.APIReader,
 			Audience: opts.Audience,
-		}
+		}, DefaultIdentityCacheTTL)
 	}
 
 	handler := &Handler{
@@ -110,17 +117,39 @@ func NewRunnable(opts Options) manager.Runnable {
 	}
 }
 
+// Connection-phase timeouts (#107): :8088 is deliberately reachable by workload
+// pods, so the server itself must bound every phase — a slowloris or trickled-body
+// client is disconnected instead of accumulating goroutines in the manager
+// (MaxBytesReader bounds bytes, not time). Requests are small JSON POSTs (≤64KiB)
+// answered from memory + a few apiserver round-trips, so single-digit-second
+// read/write bounds never touch legitimate traffic. Idle keep-alives get longer:
+// the egress-reporter reuses its connection across 2s polls.
+const (
+	serverReadHeaderTimeout = 5 * time.Second
+	serverReadTimeout       = 10 * time.Second
+	serverWriteTimeout      = 10 * time.Second
+	serverIdleTimeout       = 2 * time.Minute
+)
+
 type httpServer struct {
 	addr string
 	mux  http.Handler
 	srv  *http.Server
 }
 
-func (s *httpServer) Start(ctx context.Context) error {
-	s.srv = &http.Server{
-		Addr:    s.addr,
-		Handler: s.mux,
+func (s *httpServer) newServer() *http.Server {
+	return &http.Server{
+		Addr:              s.addr,
+		Handler:           s.mux,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
 	}
+}
+
+func (s *httpServer) Start(ctx context.Context) error {
+	s.srv = s.newServer()
 
 	errCh := make(chan error, 1)
 	go func() {
