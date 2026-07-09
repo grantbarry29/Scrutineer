@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package enforcement
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -145,7 +146,7 @@ func TestAppendRuntimeDecisions_keepsMostRecentDenies(t *testing.T) {
 	const cap = 3 // 2 runtime slots + summary
 	var runtime []scrutineerv1alpha1.PolicyDecision
 	for i := int64(1); i <= 5; i++ {
-		runtime = append(runtime, netDecision(scrutineerv1alpha1.PolicyDecisionDeny, "deny"+itoa(int(i))+".example", i))
+		runtime = append(runtime, netDecision(scrutineerv1alpha1.PolicyDecisionDeny, fmt.Sprintf("deny%d.example", i), i))
 	}
 
 	got := AppendRuntimeDecisions(nil, runtime, cap)

@@ -11,6 +11,8 @@ You may obtain a copy of the License at
 package enforcement
 
 import (
+	"fmt"
+
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
@@ -127,19 +129,5 @@ func isTruncationSummary(d scrutineerv1alpha1.PolicyDecision) bool {
 }
 
 func formatTruncationMessage(omitted, maxTotal int) string {
-	return "runtime policy decisions truncated: omitted " + itoa(omitted) + " entries (max " + itoa(maxTotal) + ")"
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
+	return fmt.Sprintf("runtime policy decisions truncated: omitted %d entries (max %d)", omitted, maxTotal)
 }

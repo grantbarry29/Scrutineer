@@ -11,6 +11,8 @@ You may obtain a copy of the License at
 package enforcement
 
 import (
+	"fmt"
+
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
 
@@ -98,5 +100,5 @@ func AppendViolations(existing, incoming []scrutineerv1alpha1.PolicyViolation, m
 }
 
 func formatViolationTruncationMessage(omitted, maxTotal int) string {
-	return "violations truncated: omitted " + itoa(omitted) + " entries (max " + itoa(maxTotal) + ")"
+	return fmt.Sprintf("violations truncated: omitted %d entries (max %d)", omitted, maxTotal)
 }
