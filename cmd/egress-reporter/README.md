@@ -19,7 +19,10 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
   enforcement agree (#32).
 - Delivery is **at-least-once**: offsets are in-memory, so a restart re-reads the file;
   the controller's status merge dedups (times are pinned from Envoy's `%START_TIME%`).
-  Failed submits retry next poll; the pending queue is bounded (oldest dropped + logged).
+  Reads are chunk-bounded (256KiB) and gated on delivery (#97): a backlog — restart
+  catch-up or a reporter outage — waits in the file, not in memory, so the log growing
+  to its 256Mi emptyDir limit cannot OOM this 128Mi-capped container. Failed submits
+  retry next poll; the pending queue stays bounded (oldest dropped + logged).
 - On SIGTERM it makes a final best-effort drain so evidence written just before session
   teardown still lands.
 

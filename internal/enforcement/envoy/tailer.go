@@ -27,7 +27,17 @@ const (
 	DefaultBatchMax     = 128
 	DefaultPollInterval = 2 * time.Second
 	DefaultMaxPending   = 4096
-	finalDrainTimeout   = 5 * time.Second
+	// DefaultChunkSize bounds a single read from the access log. Catch-up (e.g. a
+	// restart re-reading the whole file, #97) happens chunk-by-chunk with a flush
+	// between chunks, so memory stays O(chunk), never O(file) — the log can reach its
+	// 256Mi emptyDir sizeLimit while this container is capped at 128Mi (resources.go).
+	// 256KiB is well under a thousand access-log lines, comfortably inside MaxPending.
+	DefaultChunkSize = 256 << 10
+	// maxPartialLine caps the buffered tail of an incomplete line. A well-formed access
+	// log line is a few hundred bytes; a newline-free run this long is a corrupt log,
+	// and buffering it unboundedly would recreate the O(file) memory path.
+	maxPartialLine    = 1 << 20
+	finalDrainTimeout = 5 * time.Second
 )
 
 // Tailer incrementally reads Envoy's JSON access log and submits parsed egress decisions
@@ -36,10 +46,12 @@ const (
 //
 // Delivery is at-least-once: the in-memory offset is lost on container restart, so the
 // whole file is re-read and re-submitted — the controller's status merge dedups decisions
-// by key (time is pinned from %START_TIME%, so re-delivered records are identical). A
-// failed Submit keeps the batch pending and retries next poll; the pending queue is
-// bounded by MaxPending, dropping the OLDEST entries beyond it (logged and counted) so a
-// long reporter outage cannot grow memory unboundedly.
+// by key (time is pinned from %START_TIME%, so re-delivered records are identical).
+// Reads are bounded and gated on delivery (#97): each cycle alternates a ≤ChunkSize read
+// with a flush, so a backlog — restart catch-up or a reporter outage — waits in the file,
+// not in memory. A failed Submit keeps the batch pending and retries next poll; the
+// pending queue is additionally bounded by MaxPending, dropping the OLDEST entries beyond
+// it (logged and counted).
 type Tailer struct {
 	// Path is the access-log file (AccessLogPath in the shared emptyDir).
 	Path string
@@ -51,6 +63,9 @@ type Tailer struct {
 	PollInterval time.Duration
 	// MaxPending bounds the undelivered-decision queue. Defaults to DefaultMaxPending.
 	MaxPending int
+	// ChunkSize caps the bytes pulled from the access log per read. Defaults to
+	// DefaultChunkSize.
+	ChunkSize int
 	// Policy is the effective FQDN policy each observed authority is classified against
 	// (#32). Zero value classifies everything as allow.
 	Policy EgressPolicy
@@ -70,14 +85,28 @@ type Tailer struct {
 // overflowed MaxPending (i.e. evidence lost to a prolonged reporter outage).
 func (t *Tailer) Dropped() int64 { return t.dropped }
 
-// Poll performs one read-parse-submit cycle. A missing file is not an error (Envoy has
-// not received traffic yet). A Submit failure is returned after retaining the batch for
-// the next cycle.
+// Poll performs one catch-up cycle: it first retries any decisions left pending by an
+// earlier failed Submit, then alternates bounded chunk reads with flushes until EOF or
+// a Submit failure. Gating each read on the previous flush means the tailer never holds
+// more than roughly one chunk's decisions in memory — the access log itself buffers any
+// backlog. A missing file is not an error (Envoy has not received traffic yet). A Submit
+// failure is returned after retaining the batch for the next cycle.
 func (t *Tailer) Poll(ctx context.Context) error {
-	if err := t.readNew(); err != nil {
+	if err := t.flush(ctx); err != nil {
 		return err
 	}
-	return t.flush(ctx)
+	for {
+		more, err := t.readChunk()
+		if err != nil {
+			return err
+		}
+		if err := t.flush(ctx); err != nil {
+			return err
+		}
+		if !more {
+			return nil
+		}
+	}
 }
 
 // Run polls until ctx is cancelled, then makes a final best-effort drain so evidence
@@ -107,39 +136,48 @@ func (t *Tailer) Run(ctx context.Context) {
 	}
 }
 
-// readNew reads bytes appended since the last poll, parses complete lines, and queues
-// their decisions. Partial trailing lines are buffered until completed. A file shorter
-// than the current offset means truncation/recreation: restart from the beginning.
-func (t *Tailer) readNew() error {
+// readChunk reads at most ChunkSize bytes appended since the last read, parses complete
+// lines, and queues their decisions. Partial trailing lines are buffered (bounded by
+// maxPartialLine) until completed. A file shorter than the current offset means
+// truncation/recreation: restart from the beginning. The returned more reports whether
+// the chunk was full, i.e. further bytes may remain past the offset.
+func (t *Tailer) readChunk() (more bool, err error) {
+	chunkSize := t.ChunkSize
+	if chunkSize <= 0 {
+		chunkSize = DefaultChunkSize
+	}
+
 	f, err := os.Open(t.Path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if info.Size() < t.offset {
 		t.offset = 0
 		t.partial = nil
 	}
 	if info.Size() == t.offset {
-		return nil
+		return false, nil
 	}
 
 	if _, err := f.Seek(t.offset, io.SeekStart); err != nil {
-		return err
+		return false, err
 	}
-	buf, err := io.ReadAll(f)
-	if err != nil {
-		return err
+	buf := make([]byte, chunkSize)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return false, err
 	}
-	t.offset += int64(len(buf))
+	buf = buf[:n]
+	t.offset += int64(n)
 
 	data := append(t.partial, buf...)
 	for {
@@ -166,8 +204,20 @@ func (t *Tailer) readNew() error {
 		}
 		t.queue(d)
 	}
-	t.partial = data
-	return nil
+	switch {
+	case len(data) > maxPartialLine:
+		log.Printf("egress-reporter: dropping oversized partial access-log line (%d bytes; corrupt log?)", len(data))
+		if t.OnMalformed != nil {
+			t.OnMalformed()
+		}
+		t.partial = nil
+	case len(data) == 0:
+		t.partial = nil
+	default:
+		// Copy the tail so the retained partial line does not pin the chunk buffer.
+		t.partial = append([]byte(nil), data...)
+	}
+	return n == chunkSize, nil
 }
 
 func (t *Tailer) queue(d scrutineerv1alpha1.PolicyDecision) {

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
@@ -215,6 +216,127 @@ func TestTailer_missingFileIsNotAnError(t *testing.T) {
 	}
 	if len(sink.batches) != 0 {
 		t.Fatalf("batches = %v", sink.batches)
+	}
+}
+
+// #97: catch-up over a file larger than one chunk must read in bounded chunks —
+// per-cycle memory O(chunk), never O(file) — while preserving order and completeness.
+// ChunkSize is set smaller than one log line, so every line spans chunk boundaries.
+func TestTailer_multiChunkCatchUpSpanningChunkBoundaries(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	tailer.BatchMax = 64
+	tailer.ChunkSize = 48
+
+	const n = 100
+	var lines string
+	want := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		h := fmt.Sprintf("h%03d.example", i)
+		want = append(want, h)
+		lines += logLine(h)
+	}
+	appendFile(t, path, lines)
+
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	got := sink.targets()
+	if len(got) != n {
+		t.Fatalf("delivered %d decisions, want %d", len(got), n)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("targets[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if tailer.Dropped() != 0 {
+		t.Fatalf("dropped = %d, want 0", tailer.Dropped())
+	}
+
+	// No re-delivery once caught up.
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("re-poll: %v", err)
+	}
+	if len(sink.targets()) != n {
+		t.Fatalf("re-poll duplicated deliveries: %d, want %d", len(sink.targets()), n)
+	}
+}
+
+// #97: reading is gated on delivery — while the reporter is down the tailer must not
+// pull the backlog into the pending queue (the file, not memory, buffers it). With the
+// old read-everything behavior a tiny MaxPending would drop most of this backlog; now
+// nothing is lost.
+func TestTailer_backlogWaitsInFileWhileSubmitFails(t *testing.T) {
+	sink := &capturingSubmit{fail: true}
+	tailer, path := newTestTailer(t, sink)
+	tailer.ChunkSize = 64
+	tailer.MaxPending = 4
+
+	const n = 50
+	var lines string
+	want := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		h := fmt.Sprintf("h%03d.example", i)
+		want = append(want, h)
+		lines += logLine(h)
+	}
+	appendFile(t, path, lines)
+
+	if err := tailer.Poll(context.Background()); err == nil {
+		t.Fatal("expected poll to surface the submit failure")
+	}
+	if len(tailer.pending) > tailer.MaxPending {
+		t.Fatalf("pending = %d decisions during outage, want <= MaxPending (%d)", len(tailer.pending), tailer.MaxPending)
+	}
+
+	sink.fail = false
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("recovery poll: %v", err)
+	}
+	got := sink.targets()
+	if len(got) != n {
+		t.Fatalf("delivered %d decisions after recovery, want %d (none dropped)", len(got), n)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("targets[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if tailer.Dropped() != 0 {
+		t.Fatalf("dropped = %d, want 0 (backlog must wait in the file)", tailer.Dropped())
+	}
+}
+
+// #97: a newline-free run longer than maxPartialLine (corrupt log) must not accumulate
+// unboundedly in the partial buffer — it is dropped and counted malformed, and tailing
+// resumes at the next complete line.
+func TestTailer_dropsOversizedPartialLine(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	malformed := 0
+	tailer.OnMalformed = func() { malformed++ }
+
+	appendFile(t, path, strings.Repeat("x", maxPartialLine+1))
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("poll over garbage: %v", err)
+	}
+	if len(tailer.partial) > maxPartialLine {
+		t.Fatalf("partial buffer grew to %d bytes, want <= %d", len(tailer.partial), maxPartialLine)
+	}
+	if malformed == 0 {
+		t.Fatal("oversized partial line was not counted malformed")
+	}
+	if len(sink.batches) != 0 {
+		t.Fatalf("garbage produced deliveries: %v", sink.batches)
+	}
+
+	appendFile(t, path, "\n"+logLine("ok.example"))
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("poll after newline: %v", err)
+	}
+	if got := sink.targets(); len(got) != 1 || got[0] != "ok.example" {
+		t.Fatalf("targets = %v, want [ok.example]", got)
 	}
 }
 
