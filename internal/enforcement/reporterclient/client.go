@@ -33,6 +33,18 @@ import (
 
 const reportPath = "/v1/report"
 
+// StatusError is a non-202 reporter response. It exposes the HTTP status so callers can
+// classify per the contract's §4.4 response table (docs/design/
+// phase-3-runtime-reporter-contract.md): permanent rejections (400/403/404/413) must not
+// be retried verbatim, transient ones (5xx, 429, 401, 409) keep at-least-once retry (#96).
+type StatusError struct {
+	StatusCode int
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("reporter returned %d", e.StatusCode)
+}
+
 // SessionRef identifies the AgentSession a report or approval is scoped to.
 type SessionRef struct {
 	Namespace string `json:"namespace"`
@@ -100,7 +112,7 @@ func (c *Client) Submit(ctx context.Context, session SessionRef, report enforcem
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("reporter returned %d", resp.StatusCode)
+		return &StatusError{StatusCode: resp.StatusCode}
 	}
 	return nil
 }

@@ -14,9 +14,60 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 )
+
+// #96: the authority is agent-controlled (CONNECT authorities can approach Envoy's 60KiB
+// header cap), and it lands in both Target and Message. Unbounded, a single decision's
+// JSON can exceed the reporter's 64KiB body cap and wedge the pipeline. Decisions must be
+// bounded at creation — deterministically, so re-delivered records still dedup.
+func TestDecision_boundsAgentControlledFields(t *testing.T) {
+	huge := strings.Repeat("a", 50<<10) + ".evil.example:443"
+	entry := AccessLogEntry{
+		Method:       "CONNECT",
+		Authority:    huge,
+		ResponseCode: 403,
+		StartTime:    "2026-07-01T05:00:00.123Z",
+	}
+	policy := EgressPolicy{Enforce: true, DeniedDomains: []string{"*.evil.example"}}
+
+	d := entry.Decision(policy)
+	if len(d.Target) > maxDecisionTargetBytes {
+		t.Fatalf("target = %d bytes, want <= %d", len(d.Target), maxDecisionTargetBytes)
+	}
+	if !strings.HasSuffix(d.Target, truncationMarker) {
+		t.Fatalf("truncated target missing marker: %q", d.Target[len(d.Target)-40:])
+	}
+	if len(d.Message) > maxDecisionMessageBytes {
+		t.Fatalf("message = %d bytes, want <= %d", len(d.Message), maxDecisionMessageBytes)
+	}
+	// Classification must see the FULL authority, not the truncated one.
+	if d.Action != scrutineerv1alpha1.PolicyDecisionDeny || d.Reason != ReasonDeniedDomains {
+		t.Fatalf("action/reason = %s/%s, want Deny/%s (classified on full authority)", d.Action, d.Reason, ReasonDeniedDomains)
+	}
+	// Deterministic: a re-parsed (re-delivered) record must be identical for dedup.
+	if d2 := entry.Decision(policy); d2 != d {
+		t.Fatal("truncation is not deterministic across re-parses")
+	}
+}
+
+// Truncation must not split a multi-byte rune (CR status strings must stay valid UTF-8).
+func TestDecision_truncationKeepsValidUTF8(t *testing.T) {
+	entry := AccessLogEntry{
+		Method:    "GET",
+		Authority: strings.Repeat("ü", maxDecisionTargetBytes), // 2 bytes each
+		StartTime: "2026-07-01T05:00:00.123Z",
+	}
+	d := entry.Decision(EgressPolicy{})
+	if !utf8.ValidString(d.Target) {
+		t.Fatal("truncated target is not valid UTF-8")
+	}
+	if !utf8.ValidString(d.Message) {
+		t.Fatal("truncated message is not valid UTF-8")
+	}
+}
 
 func TestParseAccessLogLine_connect(t *testing.T) {
 	line := `{"method":"CONNECT","authority":"api.example.com:443","response_code":200,"flags":"-","bytes_sent":5120,"bytes_received":940,"duration_ms":812,"start_time":"2026-07-01T05:00:00.123Z"}`

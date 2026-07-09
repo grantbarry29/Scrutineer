@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -46,6 +47,10 @@ type Metrics struct {
 	Submissions *prometheus.CounterVec
 	// SubmitSeconds observes reporter Submit latency.
 	SubmitSeconds prometheus.Histogram
+	// Rejected counts decisions dropped after a permanent reporter rejection
+	// (contract §4.4: 400/403/404/413), by HTTP status — evidence lost (#96).
+	// Bounded cardinality: only those four codes are classified permanent.
+	Rejected *prometheus.CounterVec
 }
 
 // New builds the instrument set. dropped, when non-nil, is exported as the
@@ -72,8 +77,12 @@ func New(dropped func() float64) *Metrics {
 			Help:    "Latency of evidence batch submissions to the controller reporter.",
 			Buckets: prometheus.DefBuckets,
 		}),
+		Rejected: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystem, Name: "rejected_decisions_total",
+			Help: "Decisions dropped after a permanent reporter rejection (evidence lost), by HTTP status.",
+		}, []string{"status"}),
 	}
-	reg.MustRegister(m.Decisions, m.Malformed, m.Submissions, m.SubmitSeconds)
+	reg.MustRegister(m.Decisions, m.Malformed, m.Submissions, m.SubmitSeconds, m.Rejected)
 	if dropped != nil {
 		reg.MustRegister(prometheus.NewCounterFunc(prometheus.CounterOpts{
 			Namespace: namespace, Subsystem: subsystem, Name: "dropped_decisions_total",
@@ -86,6 +95,11 @@ func New(dropped func() float64) *Metrics {
 // ObserveDecision is the Tailer OnDecision hook.
 func (m *Metrics) ObserveDecision(d scrutineerv1alpha1.PolicyDecision) {
 	m.Decisions.WithLabelValues(string(d.Action)).Inc()
+}
+
+// ObserveRejected is the Tailer OnRejected hook.
+func (m *Metrics) ObserveRejected(count, httpStatus int) {
+	m.Rejected.WithLabelValues(strconv.Itoa(httpStatus)).Add(float64(count))
 }
 
 // WrapSubmit instruments a Tailer Submit func with outcome counts and latency.

@@ -13,6 +13,7 @@ package reporterclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -62,15 +63,24 @@ func TestSubmit_tagsBackendAndAuthenticates(t *testing.T) {
 	}
 }
 
+// Non-202 responses surface as a typed StatusError so callers can classify permanent
+// rejections (413/404/…) vs transient failures per the reporter contract §4.4 (#96).
 func TestSubmit_nonAcceptedStatusErrors(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
+	for _, status := range []int{http.StatusInternalServerError, http.StatusRequestEntityTooLarge, http.StatusNotFound} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+		}))
 
-	c := New(srv.URL, writeTempToken(t, "x"), enforcement.BackendEgressProxy, srv.Client())
-	if err := c.Submit(context.Background(), SessionRef{Namespace: "ns", Name: "s"}, enforcement.RuntimeReport{}); err == nil {
-		t.Fatal("expected error for non-202 response")
+		c := New(srv.URL, writeTempToken(t, "x"), enforcement.BackendEgressProxy, srv.Client())
+		err := c.Submit(context.Background(), SessionRef{Namespace: "ns", Name: "s"}, enforcement.RuntimeReport{})
+		if err == nil {
+			t.Fatalf("expected error for %d response", status)
+		}
+		var se *StatusError
+		if !errors.As(err, &se) || se.StatusCode != status {
+			t.Fatalf("err = %v, want StatusError with code %d", err, status)
+		}
+		srv.Close()
 	}
 }
 

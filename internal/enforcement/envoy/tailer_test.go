@@ -12,6 +12,7 @@ package envoy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"testing"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/reporterclient"
 )
 
 func logLine(authority string) string {
@@ -337,6 +339,142 @@ func TestTailer_dropsOversizedPartialLine(t *testing.T) {
 	}
 	if got := sink.targets(); len(got) != 1 || got[0] != "ok.example" {
 		t.Fatalf("targets = %v, want [ok.example]", got)
+	}
+}
+
+// #96: batches must be capped by encoded bytes as well as count — a 128-decision batch
+// of long-target decisions can cross the reporter's 64KiB body cap.
+func TestTailer_flushCapsBatchesByBytes(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	tailer.BatchMax = 100
+	tailer.BatchMaxBytes = 2048
+
+	const n = 10
+	var lines string
+	for i := 0; i < n; i++ {
+		lines += logLine(fmt.Sprintf("h%02d.%s.example", i, strings.Repeat("x", 300)))
+	}
+	appendFile(t, path, lines)
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+
+	if len(sink.targets()) != n {
+		t.Fatalf("delivered %d decisions, want %d", len(sink.targets()), n)
+	}
+	if len(sink.batches) < 2 {
+		t.Fatalf("expected byte cap to split into multiple batches, got %d", len(sink.batches))
+	}
+	for i, b := range sink.batches {
+		size := 0
+		for _, d := range b {
+			enc, err := json.Marshal(d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			size += len(enc) + 1
+		}
+		if size > tailer.BatchMaxBytes {
+			t.Fatalf("batch %d encodes to %d bytes, want <= %d", i, size, tailer.BatchMaxBytes)
+		}
+	}
+}
+
+// statusSubmit fails with a given HTTP status error until a predicate stops matching.
+type statusSubmit struct {
+	inner  capturingSubmit
+	status int
+	// failWhen decides whether a batch gets the status error.
+	failWhen func(decisions []scrutineerv1alpha1.PolicyDecision) bool
+}
+
+func (s *statusSubmit) submit(ctx context.Context, decisions []scrutineerv1alpha1.PolicyDecision) error {
+	if s.failWhen != nil && s.failWhen(decisions) {
+		return fmt.Errorf("submit: %w", &reporterclient.StatusError{StatusCode: s.status})
+	}
+	return s.inner.submit(ctx, decisions)
+}
+
+// #96: a 413 on a multi-decision batch splits; a 413 on a single decision is poison —
+// dropped and counted, never retried forever. The pipeline must keep flowing.
+func TestTailer_splitsOn413AndDropsPoisonDecision(t *testing.T) {
+	sink := &statusSubmit{status: 413}
+	poison := "poison.example"
+	sink.failWhen = func(ds []scrutineerv1alpha1.PolicyDecision) bool {
+		if len(ds) > 1 {
+			return true // force splitting all the way down to singles
+		}
+		return ds[0].Target == poison
+	}
+
+	path := filepath.Join(t.TempDir(), "access.json")
+	var rejected []int
+	tailer := &Tailer{Path: path, Submit: sink.submit, BatchMax: 4,
+		OnRejected: func(count, status int) { rejected = append(rejected, count, status) }}
+
+	appendFile(t, path, logLine("a.example")+logLine(poison)+logLine("b.example"))
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+
+	got := sink.inner.targets()
+	want := []string{"a.example", "b.example"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("targets = %v, want %v", got, want)
+	}
+	if len(rejected) != 2 || rejected[0] != 1 || rejected[1] != 413 {
+		t.Fatalf("OnRejected calls = %v, want [1 413]", rejected)
+	}
+}
+
+// #96 / contract §4.4: 404 means the AgentSession is gone — drop the report, do not
+// wedge. Delivery resumes if the rejection clears (not typical for 404, but flush must
+// not remember).
+func TestTailer_dropsBatchOnSessionNotFound(t *testing.T) {
+	sink := &statusSubmit{status: 404, failWhen: func([]scrutineerv1alpha1.PolicyDecision) bool { return true }}
+	path := filepath.Join(t.TempDir(), "access.json")
+	dropped := 0
+	tailer := &Tailer{Path: path, Submit: sink.submit, BatchMax: 2,
+		OnRejected: func(count, _ int) { dropped += count }}
+
+	appendFile(t, path, logLine("a.example")+logLine("b.example")+logLine("c.example"))
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("poll must not surface a permanent rejection as retryable: %v", err)
+	}
+	if len(sink.inner.batches) != 0 {
+		t.Fatalf("unexpected deliveries: %v", sink.inner.batches)
+	}
+	if dropped != 3 {
+		t.Fatalf("dropped = %d, want 3", dropped)
+	}
+	if err := tailer.Poll(context.Background()); err != nil {
+		t.Fatalf("re-poll: %v", err)
+	}
+	if dropped != 3 {
+		t.Fatalf("re-poll re-processed dropped decisions: %d", dropped)
+	}
+}
+
+// #96: 5xx and 429 stay transient — pending is retained and retried, at-least-once.
+func TestTailer_transientStatusKeepsPending(t *testing.T) {
+	for _, status := range []int{500, 429} {
+		sink := &statusSubmit{status: status, failWhen: func([]scrutineerv1alpha1.PolicyDecision) bool { return true }}
+		path := filepath.Join(t.TempDir(), "access.json")
+		tailer := &Tailer{Path: path, Submit: sink.submit}
+
+		appendFile(t, path, logLine("keep.example"))
+		if err := tailer.Poll(context.Background()); err == nil {
+			t.Fatalf("status %d: expected poll to surface the transient error", status)
+		}
+
+		sink.failWhen = nil
+		if err := tailer.Poll(context.Background()); err != nil {
+			t.Fatalf("status %d: retry poll: %v", status, err)
+		}
+		if got := sink.inner.targets(); len(got) != 1 || got[0] != "keep.example" {
+			t.Fatalf("status %d: targets after retry = %v", status, got)
+		}
 	}
 }
 

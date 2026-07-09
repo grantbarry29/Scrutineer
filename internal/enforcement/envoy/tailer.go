@@ -13,13 +13,16 @@ package envoy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/reporterclient"
 )
 
 // Tailer defaults; BatchMax mirrors the reporter's MaxDecisionsPerReport cap.
@@ -27,6 +30,14 @@ const (
 	DefaultBatchMax     = 128
 	DefaultPollInterval = 2 * time.Second
 	DefaultMaxPending   = 4096
+	// DefaultBatchMaxBytes caps a batch by encoded size (#96): the reporter rejects
+	// bodies over MaxReportBytes (64KiB, internal/reporter/types.go — keep in sync);
+	// 48KiB leaves headroom for the request envelope and JSON scaffolding, so a
+	// count-capped batch of long-target decisions can never draw a 413.
+	DefaultBatchMaxBytes = 48 << 10
+	// batchEnvelopeBytes overestimates the non-decision part of a report body
+	// (session ref ≤ ~320B of names, backend, field names).
+	batchEnvelopeBytes = 1 << 10
 	// DefaultChunkSize bounds a single read from the access log. Catch-up (e.g. a
 	// restart re-reading the whole file, #97) happens chunk-by-chunk with a flush
 	// between chunks, so memory stays O(chunk), never O(file) — the log can reach its
@@ -49,9 +60,11 @@ const (
 // by key (time is pinned from %START_TIME%, so re-delivered records are identical).
 // Reads are bounded and gated on delivery (#97): each cycle alternates a ≤ChunkSize read
 // with a flush, so a backlog — restart catch-up or a reporter outage — waits in the file,
-// not in memory. A failed Submit keeps the batch pending and retries next poll; the
-// pending queue is additionally bounded by MaxPending, dropping the OLDEST entries beyond
-// it (logged and counted).
+// not in memory. A transiently failed Submit keeps the batch pending and retries next
+// poll; permanent reporter rejections (contract §4.4: 400/403/404/413) split or drop the
+// offending decisions instead of wedging the queue head (#96, counted via OnRejected).
+// The pending queue is additionally bounded by MaxPending, dropping the OLDEST entries
+// beyond it (logged and counted).
 type Tailer struct {
 	// Path is the access-log file (AccessLogPath in the shared emptyDir).
 	Path string
@@ -66,6 +79,12 @@ type Tailer struct {
 	// ChunkSize caps the bytes pulled from the access log per read. Defaults to
 	// DefaultChunkSize.
 	ChunkSize int
+	// BatchMaxBytes caps the encoded size of one Submit batch. Defaults to
+	// DefaultBatchMaxBytes.
+	BatchMaxBytes int
+	// OnRejected, if set, observes decisions dropped after a permanent reporter
+	// rejection (contract §4.4: 400/403/404/413) — evidence lost, by HTTP status.
+	OnRejected func(count, httpStatus int)
 	// Policy is the effective FQDN policy each observed authority is classified against
 	// (#32). Zero value classifies everything as allow.
 	Policy EgressPolicy
@@ -233,20 +252,93 @@ func (t *Tailer) queue(d scrutineerv1alpha1.PolicyDecision) {
 	}
 }
 
+// flush submits pending decisions in batches capped by count and encoded bytes,
+// classifying failures per the reporter contract §4.4 (#96): permanent rejections
+// (400/403/404/413) must not wedge the queue head — a too-large batch is split, a
+// too-large single decision is poison and dropped (counted via OnRejected), other
+// permanent rejections drop the batch. Everything else (network errors, 5xx, 429,
+// 401, 409) is transient: pending is retained and the error returned for retry.
 func (t *Tailer) flush(ctx context.Context) error {
 	batchMax := t.BatchMax
 	if batchMax <= 0 {
 		batchMax = DefaultBatchMax
 	}
+	maxBytes := t.BatchMaxBytes
+	if maxBytes <= 0 {
+		maxBytes = DefaultBatchMaxBytes
+	}
+
+	splitTo := 0 // when >0, a 413 told us to try at most this many decisions
 	for len(t.pending) > 0 {
-		n := len(t.pending)
-		if n > batchMax {
-			n = batchMax
+		n := t.batchLen(batchMax, maxBytes)
+		if splitTo > 0 && n > splitTo {
+			n = splitTo
 		}
-		if err := t.Submit(ctx, t.pending[:n]); err != nil {
+		err := t.Submit(ctx, t.pending[:n])
+		if err == nil {
+			t.pending = t.pending[n:]
+			splitTo = 0
+			continue
+		}
+
+		status := 0
+		var se *reporterclient.StatusError
+		if errors.As(err, &se) {
+			status = se.StatusCode
+		}
+		switch status {
+		case http.StatusRequestEntityTooLarge:
+			if n > 1 {
+				// Our byte estimate undershot the server's cap: split and retry.
+				splitTo = n / 2
+				continue
+			}
+			// A single decision the reporter can never accept is poison: drop it,
+			// or it would block all newer evidence forever.
+			t.reject(1, status, err)
+			splitTo = 0
+		case http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound:
+			// Permanent for this batch (contract: fix payload / misconfiguration /
+			// session deleted) — retrying verbatim can never succeed.
+			t.reject(n, status, err)
+			splitTo = 0
+		default:
+			// Transient (network error, 5xx, 429, 401, 409): keep pending, retry
+			// next poll — at-least-once.
 			return err
 		}
-		t.pending = t.pending[n:]
 	}
 	return nil
+}
+
+// batchLen returns how many pending decisions fit the count and byte caps. Always at
+// least 1 when pending is non-empty: an oversized head decision must still be attempted
+// (and then handled by the 413 poison path) or the queue could never advance.
+func (t *Tailer) batchLen(maxCount, maxBytes int) int {
+	n := 0
+	size := batchEnvelopeBytes
+	for n < len(t.pending) && n < maxCount {
+		enc, err := json.Marshal(t.pending[n])
+		sz := len(enc) + 1
+		if err != nil {
+			sz = maxBytes // unsizeable: isolate it in its own batch
+		}
+		if n > 0 && size+sz > maxBytes {
+			break
+		}
+		size += sz
+		n++
+	}
+	return n
+}
+
+// reject drops the first n pending decisions after a permanent reporter rejection,
+// logging and reporting the loss (OnRejected). This is deliberate evidence loss in the
+// same class as pending-queue overflow: recorded, bounded, never silent.
+func (t *Tailer) reject(n, status int, err error) {
+	log.Printf("egress-reporter: dropping %d decision(s) after permanent reporter rejection (%v)", n, err)
+	if t.OnRejected != nil {
+		t.OnRejected(n, status)
+	}
+	t.pending = t.pending[n:]
 }

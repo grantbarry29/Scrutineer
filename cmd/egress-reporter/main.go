@@ -68,6 +68,7 @@ func main() {
 	metrics := egressmetrics.New(func() float64 { return float64(tailer.Dropped()) })
 	tailer.OnDecision = metrics.ObserveDecision
 	tailer.OnMalformed = metrics.Malformed.Inc
+	tailer.OnRejected = metrics.ObserveRejected
 	tailer.Submit = metrics.WrapSubmit(tailer.Submit)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -34,6 +35,17 @@ const (
 
 	// accessLogTimeLayout matches Envoy's default %START_TIME% rendering.
 	accessLogTimeLayout = "2006-01-02T15:04:05.000Z"
+
+	// maxDecisionTargetBytes / maxDecisionMessageBytes bound the agent-controlled fields
+	// of a decision at creation (#96). The authority comes from the agent's own request
+	// (a CONNECT authority can approach Envoy's 60KiB header cap) and lands in both
+	// Target and Message; unbounded, one decision's JSON can exceed the reporter's 64KiB
+	// body cap and permanently wedge the evidence pipeline. Legitimate authorities are
+	// ≤ ~260 bytes (DNS max + port), so truncation only ever fires on hostile input.
+	// Truncation is deterministic: re-delivered records still dedup by Target.
+	maxDecisionTargetBytes  = 1024
+	maxDecisionMessageBytes = 2048
+	truncationMarker        = "...[truncated]"
 )
 
 // AccessLogEntry is one line of the Envoy JSON access log, as configured by
@@ -115,6 +127,7 @@ func (e AccessLogEntry) Decision(policy EgressPolicy) scrutineerv1alpha1.PolicyD
 		ts = metav1.NewTime(t)
 	}
 
+	// Classify on the full authority; bound only what is recorded (#96).
 	action, reason := policy.classify(e.Authority)
 	return scrutineerv1alpha1.PolicyDecision{
 		Time:   ts,
@@ -122,9 +135,23 @@ func (e AccessLogEntry) Decision(policy EgressPolicy) scrutineerv1alpha1.PolicyD
 		Type:   "network",
 		Action: action,
 		Actor:  AccessLogActor,
-		Target: e.Authority,
+		Target: truncate(e.Authority, maxDecisionTargetBytes),
 		Reason: reason,
-		Message: fmt.Sprintf("egress %s %s -> %d (%s) tx=%dB rx=%dB %dms",
+		Message: truncate(fmt.Sprintf("egress %s %s -> %d (%s) tx=%dB rx=%dB %dms",
 			e.Method, e.Authority, e.ResponseCode, e.ResponseFlags, e.BytesSent, e.BytesReceived, e.DurationMS),
+			maxDecisionMessageBytes),
 	}
+}
+
+// truncate bounds s to max bytes, replacing the tail with truncationMarker. The cut
+// lands on a rune boundary so the result stays valid UTF-8 (CR status strings must be).
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	cut := max - len(truncationMarker)
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + truncationMarker
 }

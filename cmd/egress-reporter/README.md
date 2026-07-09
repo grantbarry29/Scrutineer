@@ -21,8 +21,16 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
   the controller's status merge dedups (times are pinned from Envoy's `%START_TIME%`).
   Reads are chunk-bounded (256KiB) and gated on delivery (#97): a backlog — restart
   catch-up or a reporter outage — waits in the file, not in memory, so the log growing
-  to its 256Mi emptyDir limit cannot OOM this 128Mi-capped container. Failed submits
-  retry next poll; the pending queue stays bounded (oldest dropped + logged).
+  to its 256Mi emptyDir limit cannot OOM this 128Mi-capped container. Transiently
+  failed submits retry next poll; the pending queue stays bounded (oldest dropped +
+  logged).
+- Submit failures are classified per the reporter contract §4.4 (#96): permanent
+  rejections (400/403/404/413) split or drop the offending decisions (logged +
+  `rejected_decisions_total`) instead of retrying the head batch forever; batches are
+  capped by encoded bytes (48KiB) as well as count; and the agent-controlled authority
+  is truncated (1KiB target / 2KiB message, deterministic) at decision creation — so a
+  prompt-injected agent cannot wedge its own evidence pipeline with an oversized
+  CONNECT authority.
 - On SIGTERM it makes a final best-effort drain so evidence written just before session
   teardown still lands.
 
@@ -51,8 +59,9 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
 ## Operability
 
 Serves Prometheus metrics on `:9903` `/metrics` (container port `metrics`, #55):
-decisions by action, malformed access-log lines, submissions by outcome + latency, and
-dropped decisions (pending-queue overflow = evidence lost). Dedicated registry in
+decisions by action, malformed access-log lines, submissions by outcome + latency,
+dropped decisions (pending-queue overflow = evidence lost), and rejected decisions
+(permanent reporter rejection by HTTP status = evidence lost, #96). Dedicated registry in
 [`internal/enforcement/egressmetrics`](../../internal/enforcement/egressmetrics/); a
 metrics bind failure is logged and never stops the evidence pipeline. The Envoy container
 beside it exposes `envoy_*` stats on `:9902` `/stats/prometheus` (stats-only listener;
