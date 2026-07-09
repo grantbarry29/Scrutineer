@@ -19,6 +19,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
@@ -131,7 +132,10 @@ type Tailer struct {
 	offset  int64
 	partial []byte
 	pending []scrutineerv1alpha1.PolicyDecision
-	dropped int64
+	// dropped is read by the metrics scrape goroutine (CounterFunc over Dropped in
+	// cmd/egress-reporter) concurrently with the poll goroutine's writes (#105);
+	// everything else on Tailer stays single-goroutine.
+	dropped atomic.Int64
 
 	// rotating: the tailer is draining Path+rotatingSuffix (offset/partial refer to that
 	// file) before deleting it and switching back to Path. rotateStable: the remainder
@@ -143,7 +147,7 @@ type Tailer struct {
 
 // Dropped reports how many parsed decisions were discarded because the pending queue
 // overflowed MaxPending (i.e. evidence lost to a prolonged reporter outage).
-func (t *Tailer) Dropped() int64 { return t.dropped }
+func (t *Tailer) Dropped() int64 { return t.dropped.Load() }
 
 // Poll performs one catch-up cycle: it first retries any decisions left pending by an
 // earlier failed Submit, then alternates bounded chunk reads with flushes until EOF or
@@ -405,8 +409,8 @@ func (t *Tailer) queue(d scrutineerv1alpha1.PolicyDecision) {
 	t.pending = append(t.pending, d)
 	if over := len(t.pending) - maxPending; over > 0 {
 		t.pending = t.pending[over:]
-		t.dropped += int64(over)
-		log.Printf("egress-reporter: pending queue overflow, dropped %d oldest decisions (total dropped %d)", over, t.dropped)
+		total := t.dropped.Add(int64(over))
+		log.Printf("egress-reporter: pending queue overflow, dropped %d oldest decisions (total dropped %d)", over, total)
 	}
 }
 

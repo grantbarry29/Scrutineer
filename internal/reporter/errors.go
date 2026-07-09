@@ -31,4 +31,8 @@ var (
 	// (#104): the request was rejected before any TokenReview. Maps to 503 +
 	// Retry-After — transient for well-behaved clients.
 	ErrVerifyThrottled = errors.New("identity verification throttled")
+	// ErrDuplicateInFlight indicates a reportId whose original request is still being
+	// processed (#106): acking it could orphan the report if the original fails.
+	// Maps to 503 + Retry-After — the retry is acked once the original commits.
+	ErrDuplicateInFlight = errors.New("report with this reportId is being processed")
 )

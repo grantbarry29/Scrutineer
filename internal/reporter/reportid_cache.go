@@ -22,11 +22,50 @@ import (
 // In-process only; controller restart clears the cache (clients may safely retry).
 const DefaultReportIDCacheTTL = 24 * time.Hour
 
-// reportIDCache remembers recently accepted reportIds per session for cheap idempotency.
+// reportIDState is the outcome of reserve: the caller either owns processing of a
+// fresh reportId, raced a still-in-flight original, or hit an already-merged
+// duplicate.
+type reportIDState int
+
+const (
+	// reportIDNew: the caller now owns processing — it must commit on success or
+	// release on failure.
+	reportIDNew reportIDState = iota
+	// reportIDInFlight: another request holds the reservation and has not committed.
+	// The caller must NOT ack 202 — the original can still fail and release, which
+	// would leave an acked-but-lost report (#106). Surface a transient retry instead.
+	reportIDInFlight
+	// reportIDCommitted: the report was merged within the TTL — safe to ack 202
+	// without touching status (contract §7 idempotency).
+	reportIDCommitted
+)
+
+type reportIDEntry struct {
+	expiry    time.Time
+	committed bool
+}
+
+// expiryRecord is one insertion in the eviction FIFO.
+type expiryRecord struct {
+	key    string
+	expiry time.Time
+}
+
+// reportIDCache remembers recently accepted reportIds per session for cheap
+// idempotency (contract §7). Entries move reserved → committed (or are released on
+// failure); duplicates are only ever acked from a committed entry.
 type reportIDCache struct {
 	mu      sync.Mutex
 	ttl     time.Duration
-	entries map[string]time.Time // cache key -> expiry
+	entries map[string]reportIDEntry
+	// order is a FIFO of insertions. The TTL is a per-cache constant, so expiries
+	// are monotone (wall-clock skew aside) and expired entries are always at the
+	// head: each operation pops only already-expired records, making eviction
+	// amortized O(1) per operation regardless of backlog (#106) — a full-map sweep
+	// at the 24h TTL would rescan the whole day's reportIds on every request. A
+	// record whose key was released and re-reserved no longer matches the live
+	// entry's expiry and is skipped when popped.
+	order []expiryRecord
 }
 
 func newReportIDCache(ttl time.Duration) *reportIDCache {
@@ -35,7 +74,7 @@ func newReportIDCache(ttl time.Duration) *reportIDCache {
 	}
 	return &reportIDCache{
 		ttl:     ttl,
-		entries: make(map[string]time.Time),
+		entries: make(map[string]reportIDEntry),
 	}
 }
 
@@ -47,50 +86,47 @@ func normalizeReportID(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
-// contains reports whether reportId was already accepted for session within TTL.
-func (c *reportIDCache) contains(key string, now time.Time) bool {
+// reserve atomically claims a reportId for processing. It returns reportIDNew when
+// the caller now owns it (recorded until now+TTL; commit or release it),
+// reportIDInFlight when an uncommitted original holds it, and reportIDCommitted when
+// the report was already merged within the TTL. A nil cache or empty key always
+// grants ownership (idempotency disabled).
+func (c *reportIDCache) reserve(key string, now time.Time) reportIDState {
 	if c == nil || key == "" {
-		return false
+		return reportIDNew
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.evictExpiredLocked(now)
-	exp, ok := c.entries[key]
-	return ok && now.Before(exp)
+	if e, ok := c.entries[key]; ok && now.Before(e.expiry) {
+		if e.committed {
+			return reportIDCommitted
+		}
+		return reportIDInFlight
+	}
+	expiry := now.Add(c.ttl)
+	c.entries[key] = reportIDEntry{expiry: expiry}
+	c.order = append(c.order, expiryRecord{key: key, expiry: expiry})
+	return reportIDNew
 }
 
-// mark records a successfully processed reportId until now+TTL.
-func (c *reportIDCache) mark(key string, now time.Time) {
+// commit marks a reserved reportId as merged: duplicates get 202 for the rest of the
+// reservation's TTL. No-op if the reservation is gone (released or expired).
+func (c *reportIDCache) commit(key string) {
 	if c == nil || key == "" {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.evictExpiredLocked(now)
-	c.entries[key] = now.Add(c.ttl)
-}
-
-// reserve atomically reports whether key is newly recorded: it records key until
-// now+TTL and returns true when key is absent/expired, or returns false when key
-// is already present within TTL. The check and set happen under a single lock
-// acquisition, closing the TOCTOU window where two concurrent identical reportIds
-// could both pass contains() before either called mark().
-func (c *reportIDCache) reserve(key string, now time.Time) bool {
-	if c == nil || key == "" {
-		return true
+	if e, ok := c.entries[key]; ok {
+		e.committed = true
+		c.entries[key] = e
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.evictExpiredLocked(now)
-	if exp, ok := c.entries[key]; ok && now.Before(exp) {
-		return false
-	}
-	c.entries[key] = now.Add(c.ttl)
-	return true
 }
 
 // release removes a key recorded by reserve, used to roll back a reservation when
-// processing fails so the report can be retried.
+// processing fails so the report can be retried. The FIFO record it leaves behind is
+// skipped on pop (expiry mismatch with any later re-reservation).
 func (c *reportIDCache) release(key string) {
 	if c == nil || key == "" {
 		return
@@ -101,9 +137,14 @@ func (c *reportIDCache) release(key string) {
 }
 
 func (c *reportIDCache) evictExpiredLocked(now time.Time) {
-	for k, exp := range c.entries {
-		if !now.Before(exp) {
-			delete(c.entries, k)
+	for len(c.order) > 0 && !now.Before(c.order[0].expiry) {
+		rec := c.order[0]
+		// Zero the popped slot so the key string is collectable even while the
+		// backing array is still referenced by the shrinking slice header.
+		c.order[0] = expiryRecord{}
+		c.order = c.order[1:]
+		if e, ok := c.entries[rec.key]; ok && e.expiry.Equal(rec.expiry) {
+			delete(c.entries, rec.key)
 		}
 	}
 }

@@ -80,7 +80,9 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
 - **Limits:** `MaxReportBytes` / `MaxApprovalBodyBytes`; per-session rate limiting
   (reports: 1 req/s, burst `DefaultReportRateBurst` = 5 per contract §8, token bucket,
   #100; approval registration: strict 1/s, no burst);
-  `DefaultMaxOutstandingApprovals` undecided holds; reportId dedup TTL.
+  `DefaultMaxOutstandingApprovals` undecided holds; reportId dedup TTL (24h; amortized
+  O(1) eviction via a FIFO expiry queue, and in-flight duplicates get `503` +
+  `Retry-After` rather than a premature `202` — #106).
 - **Identity verification bounds (#104):** the default `KubeIdentityVerifier` is wrapped
   in a `cachingVerifier` — a verified identity is cached for `DefaultIdentityCacheTTL`
   (15s) keyed by hash(token, pod claim, session), so steady-state callers cost ~1
@@ -170,6 +172,7 @@ manager.
 
 Metrics via `metrics.ObserveRuntimeReport(result, latency)`; traces `runtime.report` /
 `runtime.approval`; `RuntimeViolation` Kubernetes events; `audit.RuntimeReport` records.
-Response/result codes: `accepted`, `duplicate`, `rate_limited`, `unauthorized`,
+Response/result codes: `accepted`, `duplicate`, `duplicate_in_flight` (#106),
+`verify_throttled` (#104), `rate_limited`, `unauthorized`,
 `forbidden`, `not_found`, `conflict`, `payload_too_large`, `bad_request`,
 `internal_error`.

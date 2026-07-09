@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -811,6 +812,48 @@ func TestTailer_rateLimitPacingRespectsContext(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("poll blocked %v honoring Retry-After after the context expired", elapsed)
+	}
+}
+
+// #105: Dropped() is read by the Prometheus scrape goroutine (CounterFunc in
+// cmd/egress-reporter) while queue() increments the counter from the poll goroutine.
+// This test makes the two overlap so `go test -race` (the CI unit tier) proves the
+// counter is synchronized.
+func TestTailer_droppedIsRaceFreeUnderConcurrentScrape(t *testing.T) {
+	sink := &capturingSubmit{}
+	tailer, path := newTestTailer(t, sink)
+	tailer.MaxPending = 2 // a single chunk overflows the queue → drops during Poll
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { // the metrics scrape
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = tailer.Dropped()
+			}
+		}
+	}()
+
+	for round := 0; round < 10; round++ {
+		var lines strings.Builder
+		for i := 0; i < 20; i++ {
+			lines.WriteString(logLine(fmt.Sprintf("r%d-h%d.example", round, i)))
+		}
+		appendFile(t, path, lines.String())
+		if err := tailer.Poll(context.Background()); err != nil {
+			t.Fatalf("poll %d: %v", round, err)
+		}
+	}
+	close(stop)
+	wg.Wait()
+
+	if tailer.Dropped() == 0 {
+		t.Fatal("expected queue-overflow drops with MaxPending=2")
 	}
 }
 

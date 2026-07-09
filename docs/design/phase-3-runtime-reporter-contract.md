@@ -248,7 +248,7 @@ Idempotency:
 
 - `ApplyRuntimePolicyReport` already de-duplicates decisions by `(time, phase, type, reason, target, action)` and violations by their key, so **re-delivering the same report is safe** and converges.
 - **Usage-only reports** (token deltas without decisions) are **not** deduplicated by merge helpers; clients **should** set `reportId` when retrying token-only payloads.
-- When `reportId` is set, the reporter keeps an in-process seen-cache keyed by `(namespace, session, reportId)` for **24 hours** (`DefaultReportIDCacheTTL`). A cache hit returns `202 Accepted` without patching status. The cache is cleared on controller restart (safe client retry). Reports without `reportId` behave as before.
+- When `reportId` is set, the reporter keeps an in-process seen-cache keyed by `(namespace, session, reportId)` for **24 hours** (`DefaultReportIDCacheTTL`). A hit on a **committed** entry returns `202 Accepted` without patching status; a duplicate arriving while the original is **still in flight** gets `503` + `Retry-After` instead — acking it early could orphan the report if the original fails and releases its reservation (#106). A failed original always leaves the reportId retriable, so no client ever holds a `202` for an unmerged report. Eviction is amortized O(1) via a FIFO expiry queue (never a per-request scan of the 24h backlog). The cache is cleared on controller restart (safe client retry). Reports without `reportId` behave as before.
 
 Ordering: decisions are appended in arrival order; consumers sort by `time` for display. The contract does **not** guarantee global ordering across sidecars.
 

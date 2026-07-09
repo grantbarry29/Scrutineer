@@ -168,10 +168,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Atomically reserve the reportId so concurrent identical reports can't both
 		// pass the dedup check before either records it. Released below if the status
 		// patch fails, so a failed report can still be retried.
-		if !h.ReportIDs.reserve(reportKey, receivedAt) {
+		switch h.ReportIDs.reserve(reportKey, receivedAt) {
+		case reportIDCommitted:
 			result = "duplicate"
 			w.WriteHeader(http.StatusAccepted)
 			return
+		case reportIDInFlight:
+			// The original is still being processed. Acking 202 now could orphan
+			// the report if the original later fails and releases the reservation
+			// (acked-but-lost, #106) — tell the caller to retry; once the original
+			// commits, the retry is answered as a duplicate.
+			result = "duplicate_in_flight"
+			w.Header().Set("Retry-After", "1")
+			writeError(w, ErrDuplicateInFlight, http.StatusServiceUnavailable, "")
+			return
+		case reportIDNew:
+			// This request owns processing.
 		}
 	}
 
@@ -191,6 +203,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to merge report", http.StatusInternalServerError)
 		return
 	}
+	// Only now is the duplicate ack safe: the merge is committed, so a 202 answered
+	// from the cache can never reference an unmerged report (#106).
+	h.ReportIDs.commit(reportKey)
 
 	// Emit a RuntimeViolation event whenever *this* report carries a violating
 	// (Deny/DryRun) decision — independent of how many violations the session has
