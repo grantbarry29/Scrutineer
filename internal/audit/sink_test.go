@@ -17,11 +17,15 @@ import (
 
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/log/logtest"
+	"go.opentelemetry.io/otel/log/noop"
 )
 
+// NOT t.Parallel(): this test and TestEmit_otlpSink both mutate the package-global
+// activeSink (Setup writes it under setupOnce; the other test swaps it directly), so
+// running them in parallel is a data race under -race and cross-test sink pollution
+// otherwise (#111). Production is race-free by contract — Setup completes before any
+// Emit-calling goroutine starts — but tests poking the global must stay sequential.
 func TestSetup_noopWhenEndpointEmpty(t *testing.T) {
-	t.Parallel()
-
 	shutdown, err := Setup(context.Background(), Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -32,12 +36,15 @@ func TestSetup_noopWhenEndpointEmpty(t *testing.T) {
 	}
 }
 
+// NOT t.Parallel(): mutates the package-global activeSink — see TestSetup_noopWhenEndpointEmpty.
 func TestEmit_otlpSink(t *testing.T) {
-	t.Parallel()
-
 	recorder := logtest.NewRecorder()
 	global.SetLoggerProvider(recorder)
 	activeSink = otlpSink{logger: recorder.Logger(loggerName)}
+	t.Cleanup(func() {
+		activeSink = noopSink{}
+		global.SetLoggerProvider(noop.NewLoggerProvider())
+	})
 
 	at := time.Unix(1_700_000_000, 0)
 	Emit(context.Background(), SessionPhaseChange("team-a", "session-1", "Pending", "Running", at))
