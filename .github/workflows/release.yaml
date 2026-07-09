@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes the five first-party images to ghcr when a version tag is pushed.
+# Publishes the two first-party images (scrutineer, scrutineer-egress-reporter) to ghcr when a version tag is pushed.
 # The upstream Envoy image is not built here — it is pinned by digest in the
 # Makefile (ENVOY_IMG) and pulled from upstream at deploy time.
 
@@ -13,27 +13,22 @@ permissions:
   packages: write
 
 jobs:
-  # The controller binary bakes in the sidecar/proxy image defaults
-  # (internal/enforcement/**), and the deploy overlays pin newTag. Publishing a
-  # tag that disagrees with those would ship a controller that injects images
-  # from a different (possibly unpublished) version — fail fast instead.
+  # The deploy overlays pin newTag and the Makefile records the release VERSION;
+  # publishing a tag that disagrees with them would ship manifests referencing a
+  # different (possibly unpublished) version — fail fast instead. The controller's
+  # self-referential image defaults no longer need checking here: they derive from
+  # internal/version.Version, which the build step below bakes in from the tag (#112).
   verify-version:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
-      - name: Tag matches Makefile VERSION, image defaults, and overlays
+      - name: Tag matches Makefile VERSION and overlay newTags
         run: |
           tag="${GITHUB_REF_NAME}"
           fail=0
           grep -q "^VERSION ?= ${tag}\$" Makefile \
             || { echo "Makefile VERSION does not match tag ${tag}"; fail=1; }
-          for f in \
-            internal/enforcement/envoy/resources.go \
-            internal/enforcement/lockverify/lockverify.go; do
-            grep -q ":${tag}\"" "$f" \
-              || { echo "$f image default does not match tag ${tag}"; fail=1; }
-          done
           for f in \
             config/manager/kustomization.yaml \
             config/reporter-standalone/kustomization.yaml; do
@@ -73,6 +68,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/grantbarry29/${{ matrix.image }}:${{ github.ref_name }}
+          # Bake the release tag as the binary's build version so the controller's
+          # self-referential image defaults point at this same release (#112).
+          build-args: |
+            VERSION=${{ github.ref_name }}
           # Keep the pushed artifact a plain two-arch OCI index (no provenance
           # manifest) so digest pins and node image matching stay predictable.
           provenance: false

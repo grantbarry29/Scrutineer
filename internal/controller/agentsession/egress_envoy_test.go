@@ -98,7 +98,7 @@ var _ = Describe("Per-session Envoy egress proxy", func() {
 			podContainers[c.Name] = c
 		}
 		Expect(podContainers).To(HaveKey("egress-reporter"))
-		Expect(podContainers["egress-reporter"].Image).To(Equal(envoy.DefaultEgressReporterImage))
+		Expect(podContainers["egress-reporter"].Image).To(Equal(envoy.DefaultEgressReporterImage()))
 		var hasToken bool
 		for _, v := range pod.Spec.Volumes {
 			if v.Projected != nil {

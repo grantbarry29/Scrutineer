@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/lockverify"
 )
 
 const (
@@ -42,12 +43,16 @@ const (
 	e2eReporterClusterRole    = "scrutineer-e2e-runtime-reporter"
 )
 
-// scrutineerE2EImage is the controller image loaded into kind for the in-cluster reporter.
+// scrutineerE2EImage is the controller image loaded into kind for the in-cluster
+// reporter. The fallback derives from this test binary's baked version: under the make
+// targets (which pass VERSION_LDFLAGS) it is the dev image test-e2e-images built and
+// loaded; under a bare `go test` it resolves to the nonexistent v0.0.0-dev image and
+// the live specs skip with a pointer to the make target (#112).
 func scrutineerE2EImage() string {
 	if img := os.Getenv("SCRUTINEER_E2E_IMG"); img != "" {
 		return img
 	}
-	return "ghcr.io/grantbarry29/scrutineer:v0.1.0"
+	return lockverify.DefaultProbeImage()
 }
 
 // requireLiveEgressEvidenceImages skips the spec unless the Envoy egress-proxy images
@@ -58,7 +63,7 @@ func requireLiveEgressEvidenceImages(ctx SpecContext) {
 	if !clusterImageRunnable(ctx, envoy.DefaultEnvoyImage) {
 		Skip("envoy image not available in cluster — run: make kind-load-envoy")
 	}
-	if !clusterImageRunnable(ctx, envoy.DefaultEgressReporterImage) {
+	if !clusterImageRunnable(ctx, envoy.DefaultEgressReporterImage()) {
 		Skip("egress-reporter image not available in cluster — run: make kind-load-egress-reporter")
 	}
 }

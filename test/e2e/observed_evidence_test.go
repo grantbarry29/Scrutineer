@@ -36,7 +36,7 @@ var _ = Describe("Live observed egress evidence", Label(labelNetworking), func()
 		if !clusterImageRunnable(ctx, envoy.DefaultEnvoyImage) {
 			Skip("envoy image not available in cluster — run: make kind-load-envoy")
 		}
-		if !clusterImageRunnable(ctx, envoy.DefaultEgressReporterImage) {
+		if !clusterImageRunnable(ctx, envoy.DefaultEgressReporterImage()) {
 			Skip("egress-reporter image not available in cluster — run: make kind-load-egress-reporter")
 		}
 		deployInClusterReporter(ctx)

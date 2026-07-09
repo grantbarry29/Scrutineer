@@ -2,6 +2,10 @@
 FROM golang:1.23 AS builder
 ARG TARGETOS
 ARG TARGETARCH
+# Build identity (#112); see Dockerfile for semantics. The egress-reporter does not
+# (yet) self-reference images, but its baked version keeps dev/release provenance
+# inspectable and symmetric with the manager image.
+ARG VERSION=v0.0.0-dev
 
 WORKDIR /workspace
 COPY go.mod go.mod
@@ -12,7 +16,9 @@ COPY cmd/egress-reporter/ cmd/egress-reporter/
 COPY api/ api/
 COPY internal/ internal/
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o egress-reporter ./cmd/egress-reporter
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a \
+    -ldflags "-X github.com/grantbarry29/scrutineer/internal/version.Version=${VERSION}" \
+    -o egress-reporter ./cmd/egress-reporter
 
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /

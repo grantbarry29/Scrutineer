@@ -25,6 +25,8 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/grantbarry29/scrutineer/internal/version"
 )
 
 // Verdict is the cached outcome of the differential probe.
@@ -54,11 +56,18 @@ const (
 	labelLocked = "locked"
 	labelCtrl   = "control"
 
-	// DefaultProbeImage is the controller's own image — already pullable wherever the
-	// controller runs, so the probe adds no registry/airgap surface. Keep in sync with
-	// VERSION in the Makefile (the release workflow's verify-version guard checks it).
-	DefaultProbeImage = "ghcr.io/grantbarry29/scrutineer:v0.1.0"
+	// probeImageRepo is the controller image repository; the tag comes from the
+	// binary's own build version (internal/version) so dev builds probe with dev
+	// images and release builds with release images (#112).
+	probeImageRepo = "ghcr.io/grantbarry29/scrutineer"
 )
+
+// DefaultProbeImage is the controller's own image at this binary's build version —
+// already pullable (or kind-loaded) wherever the controller runs, so the probe adds
+// no registry/airgap surface.
+func DefaultProbeImage() string {
+	return probeImageRepo + ":" + version.Version
+}
 
 // DenyAllPolicy is the deny-all-egress NetworkPolicy selecting only the locked probe pod.
 func DenyAllPolicy(namespace string) *networkingv1.NetworkPolicy {

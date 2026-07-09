@@ -35,9 +35,12 @@ Each of these is a separately built/deployed component and keeps a README at its
   the README and these sites consistent.
 - Adding/removing a binary also means updating the **release matrix** in
   [`.github/workflows/release.yaml`](../.github/workflows/release.yaml) (publishes
-  every first-party image on a `v*` tag) and the image-default constant + Makefile
-  `VERSION` pair its `verify-version` guard checks — otherwise the new image is
-  pinned in code but never published.
+  every first-party image on a `v*` tag) — otherwise the new image is referenced in
+  code but never published. Image references derive from the binary's build version
+  (`internal/version`, ldflags-injected — #112): make targets bake a `dev-<describe>`
+  tag, the release workflow bakes the `v*` tag, and the `verify-version` guard checks
+  the Makefile `VERSION` + overlay `newTag` pins against the pushed tag. Dev builds
+  must never produce a bare `vX.Y.Z` image tag.
 
 ## Validation
 

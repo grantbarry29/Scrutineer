@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
+	"github.com/grantbarry29/scrutineer/internal/version"
 )
 
 // Kubernetes object builders for a session's out-of-pod Envoy egress proxy. These are
@@ -47,9 +48,12 @@ const (
 	reporterTokenFileName      = "token"
 	reporterTokenExpirationSec = int64(600)
 
-	// DefaultEgressReporterImage is the first-party egress-reporter image
-	// (cmd/egress-reporter, built by Dockerfile.egress-reporter).
-	DefaultEgressReporterImage = "ghcr.io/grantbarry29/scrutineer-egress-reporter:v0.1.0"
+	// egressReporterImageRepo is the first-party egress-reporter image repository
+	// (cmd/egress-reporter, built by Dockerfile.egress-reporter); the tag comes from
+	// the controller binary's own build version (internal/version) so a dev-built
+	// controller injects the matching dev-built reporter and a release controller the
+	// release one (#112).
+	egressReporterImageRepo = "ghcr.io/grantbarry29/scrutineer-egress-reporter"
 
 	labelName      = "app.kubernetes.io/name"
 	labelComponent = "app.kubernetes.io/component"
@@ -61,6 +65,13 @@ const (
 	// runAsUser is an arbitrary non-root UID; Envoy runs fine under any UID.
 	runAsUser = int64(101)
 )
+
+// DefaultEgressReporterImage is the egress-reporter image at this controller binary's
+// build version — the pairing the controller injects into egress-proxy pods unless the
+// caller overrides PodConfig.ReporterImage.
+func DefaultEgressReporterImage() string {
+	return egressReporterImageRepo + ":" + version.Version
+}
 
 // ResourceName is the shared name of a session's Envoy Pod/Service/ConfigMap (63-char safe).
 func ResourceName(sessionName string) string { return ServiceName(sessionName) }

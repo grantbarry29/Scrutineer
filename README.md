@@ -33,7 +33,9 @@ than degrading silently.
 One command from a fresh clone to a running Scrutineer on a local
 [kind](https://kind.sigs.k8s.io/) cluster (needs Docker, kind, kubectl; builds the
 first-party images from your checkout so the controller always matches the
-manifests it is deployed with):
+manifests it is deployed with — tagged `dev-<git describe>`, so what a cluster runs
+is never confusable with a published `vX.Y.Z` release image, which only the release
+workflow produces):
 
 ```sh
 make quickstart

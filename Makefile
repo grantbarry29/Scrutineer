@@ -1,10 +1,23 @@
-# VERSION is the tag for all first-party images (controller + sidecars/proxy). Pinned
-# instead of :latest for reproducibility; keep in sync with the Default*Image constants in
-# internal/enforcement/** that the controller injects. Bump on a release.
+# VERSION is the RELEASE version only: it names the published artifacts a `v*` tag
+# push produces and pins the committed overlay newTags (config/manager,
+# config/reporter-standalone). The release workflow's verify-version guard checks it
+# against the pushed tag. It is deliberately NOT what local builds are tagged with.
 VERSION ?= v0.1.0
 
-# Image URL to use all building/pushing image targets
-IMG ?= ghcr.io/grantbarry29/scrutineer:$(VERSION)
+# Everything built by this Makefile is a DEV build (#112): tagged dev-<git describe>
+# so it can never shadow (or be shadowed by) a published release tag — release
+# `vX.Y.Z` images are produced only by .github/workflows/release.yaml. The tag is
+# baked into the manager binary (VERSION_LDFLAGS) so its self-referential image
+# defaults (lock-probe pods, injected egress-reporter) point at the images built
+# beside it; a mismatch fails loudly (ImagePullBackOff) instead of silently running
+# stale release content.
+DEV_TAG := dev-$(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
+VERSION_PKG := github.com/grantbarry29/scrutineer/internal/version
+VERSION_LDFLAGS := -ldflags "-X $(VERSION_PKG).Version=$(DEV_TAG)"
+
+# Image URL for all build/load/deploy targets — a dev image by default. Override IMG
+# explicitly only if you know the referenced image's baked-in version matches its tag.
+IMG ?= ghcr.io/grantbarry29/scrutineer:$(DEV_TAG)
 
 # CONTAINER_TOOL defines the container tool to be used for building images.
 CONTAINER_TOOL ?= docker
@@ -69,14 +82,18 @@ test-e2e: manifests install ## Run the standard e2e suite (excludes networking) 
 	@echo ">> running standard e2e suite against $$(kubectl config current-context)"
 	@echo ">> ensure no other scrutineer controller is running (no concurrent 'make run')"
 	@echo ">> live evidence specs need images in kind: run 'make test-e2e-images' once"
-	go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='!networking'
+	@# VERSION_LDFLAGS bakes DEV_TAG into the test binary's in-process manager so the
+	@# images it injects (lock probe, egress-reporter) are the ones test-e2e-images
+	@# built and loaded (#112).
+	go test $(VERSION_LDFLAGS) -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='!networking'
 
 .PHONY: test-e2e-net
 test-e2e-net: manifests ## Run the CNI-generic networking e2e suite against the CURRENT cluster (assumes it is prepped).
 	@echo ">> running networking e2e suite against $$(kubectl config current-context)"
 	@# SCRUTINEER_E2E_LOCK_VERIFY wires the verified-or-refused lock gate (#70) into the
 	@# in-process manager; the gate spec asserts opposite outcomes per CNI.
-	SCRUTINEER_E2E_LOCK_VERIFY=1 go test -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='networking'
+	@# VERSION_LDFLAGS: see test-e2e (#112).
+	SCRUTINEER_E2E_LOCK_VERIFY=1 go test $(VERSION_LDFLAGS) -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='networking'
 
 .PHONY: test-e2e-net-kindnet
 test-e2e-net-kindnet: ## Run the networking e2e suite on the kindnet cluster.
@@ -107,16 +124,17 @@ test-e2e-net-all: test-e2e-net-kindnet test-e2e-net-calico test-e2e-net-dual ## 
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+build: manifests generate fmt vet ## Build manager binary (dev version baked in).
+	go build $(VERSION_LDFLAGS) -o bin/manager cmd/main.go
 
 .PHONY: run
-run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+run: manifests generate fmt vet ## Run a controller from your host (dev version baked in).
+	go run $(VERSION_LDFLAGS) ./cmd/main.go
 
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+docker-build: ## Build the manager dev image ($(IMG)).
+	@echo ">> dev build: $(IMG)"
+	$(CONTAINER_TOOL) build --build-arg VERSION=$(DEV_TAG) -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -203,10 +221,13 @@ kind-load: docker-build ## Build the controller image and load it into kind.
 	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 
 .PHONY: docker-build-egress-reporter kind-load-egress-reporter
-EGRESS_REPORTER_IMG ?= ghcr.io/grantbarry29/scrutineer-egress-reporter:$(VERSION)
+# Dev image like IMG (#112): same DEV_TAG so the manager's baked-in default
+# (envoy.DefaultEgressReporterImage) resolves to the image built beside it.
+EGRESS_REPORTER_IMG ?= ghcr.io/grantbarry29/scrutineer-egress-reporter:$(DEV_TAG)
 
-docker-build-egress-reporter: ## Build the egress-reporter image (runs beside Envoy in the egress-proxy pod).
-	$(CONTAINER_TOOL) build -f Dockerfile.egress-reporter -t ${EGRESS_REPORTER_IMG} .
+docker-build-egress-reporter: ## Build the egress-reporter dev image (runs beside Envoy in the egress-proxy pod).
+	@echo ">> dev build: $(EGRESS_REPORTER_IMG)"
+	$(CONTAINER_TOOL) build --build-arg VERSION=$(DEV_TAG) -f Dockerfile.egress-reporter -t ${EGRESS_REPORTER_IMG} .
 
 kind-load-egress-reporter: docker-build-egress-reporter ## Build and load egress-reporter image into kind.
 	kind load docker-image $(EGRESS_REPORTER_IMG) --name $(KIND_CLUSTER_NAME)

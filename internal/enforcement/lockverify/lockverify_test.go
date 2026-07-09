@@ -59,7 +59,7 @@ func TestDecide(t *testing.T) {
 
 func TestDenyAllPolicy_selectsOnlyLockedPod(t *testing.T) {
 	np := DenyAllPolicy("scrutineer-system")
-	locked, control := ProbePods("scrutineer-system", DefaultProbeImage, "10.0.0.1:443")
+	locked, control := ProbePods("scrutineer-system", DefaultProbeImage(), "10.0.0.1:443")
 
 	sel := np.Spec.PodSelector.MatchLabels
 	if len(sel) == 0 {

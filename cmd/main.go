@@ -108,8 +108,8 @@ func main() {
 		"Comma-separated CIDRs hard-denied to per-session Envoy egress-proxy pods (defense in depth even if Envoy is compromised). Empty uses the safe default (cloud metadata 169.254.0.0/16); add cluster/service/API CIDRs for your environment.")
 	flag.StringVar(&lockProbeTarget, "lock-probe-target", "",
 		"Probe mode: attempt one TCP connection to host:port and exit 0 (connected) or 1 (blocked). Used by the lock-verification canary pods; not a manager flag.")
-	flag.StringVar(&lockProbeImage, "lock-probe-image", lockverify.DefaultProbeImage,
-		"Image for the lock-verification probe pods (the controller's own image).")
+	flag.StringVar(&lockProbeImage, "lock-probe-image", lockverify.DefaultProbeImage(),
+		"Image for the lock-verification probe pods (the controller's own image at this build's version).")
 	flag.StringVar(&lockProbeNamespace, "lock-probe-namespace", "scrutineer-system",
 		"Namespace the lock-verification probe pods run in (the controller's namespace).")
 

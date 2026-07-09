@@ -36,7 +36,7 @@ var _ = Describe("Live FQDN egress policy at Envoy", Label(labelNetworking), fun
 		if !clusterImageRunnable(ctx, envoy.DefaultEnvoyImage) {
 			Skip("envoy image not available — run: make kind-load-envoy")
 		}
-		if !clusterImageRunnable(ctx, envoy.DefaultEgressReporterImage) {
+		if !clusterImageRunnable(ctx, envoy.DefaultEgressReporterImage()) {
 			Skip("egress-reporter image not available — run: make kind-load-egress-reporter")
 		}
 		deployInClusterReporter(ctx)

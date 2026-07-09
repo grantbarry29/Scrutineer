@@ -72,7 +72,7 @@ func (explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.Age
 		envoy.Pod(name, ns, envoy.PodConfig{
 			ServiceAccount:   envoy.ResourceName(name),
 			Image:            envoy.DefaultEnvoyImage,
-			ReporterImage:    envoy.DefaultEgressReporterImage,
+			ReporterImage:    envoy.DefaultEgressReporterImage(),
 			ReporterURL:      scrutineerjob.DefaultReporterURL,
 			ReporterAudience: scrutineerjob.ReporterTokenAudience,
 			Bootstrap:        bootstrap,
