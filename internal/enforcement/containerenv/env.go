@@ -8,12 +8,16 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 */
 
-// Package sidecarenv holds the session/reporter/mode configuration an enforcement
-// sidecar loads from its container environment. Today its one consumer is the
-// egress-reporter, which runs as a sidecar beside Envoy in the per-session out-of-pod
-// egress-proxy pod. A consumer embeds Base in its own RuntimeEnv and adds its
-// listen-address and policy specifics, so a new shared env var is added in one place.
-package sidecarenv
+// Package containerenv is the env-var contract between the controller — which sets
+// these variables on the containers of the enforcement components it creates — and the
+// component binaries, which load them at startup. Both sides import the same constants,
+// so the two ends cannot drift apart. Today its one consumer is the egress-reporter
+// container beside Envoy in the per-session out-of-pod egress-proxy pod; future
+// out-of-pod chokepoints (tools pod #76, llm-gateway #77) plug in the same way. A
+// consumer embeds Base in its own RuntimeEnv and adds its listen-address and policy
+// specifics, so a new shared env var is added in one place. (Renamed from sidecarenv:
+// the cooperative in-pod sidecar tier was removed in #71.)
+package containerenv
 
 import (
 	"fmt"
@@ -24,7 +28,7 @@ import (
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
 )
 
-// Shared sidecar env keys (mirrors the job builder's propagation).
+// Shared enforcement-container env keys (set by the controller's pod builders).
 const (
 	EnvSessionName      = "SCRUTINEER_SESSION_NAME"
 	EnvSessionNamespace = "SCRUTINEER_SESSION_NAMESPACE"
@@ -35,8 +39,8 @@ const (
 	EnvRotateAfterBytes = "SCRUTINEER_ROTATE_AFTER_BYTES"
 )
 
-// Base is the configuration common to every sidecar: which session it enforces and how
-// to reach the reporter, plus the effective policy mode.
+// Base is the configuration common to every enforcement container: which session it
+// enforces and how to reach the reporter, plus the effective policy mode.
 type Base struct {
 	SessionNamespace string
 	SessionName      string
@@ -46,7 +50,7 @@ type Base struct {
 }
 
 // LoadBase reads and validates the shared fields from the process environment. rawMode is
-// the raw policy-mode env value (the key lives with each sidecar's policy env vars);
+// the raw policy-mode env value (the key lives with each consumer's policy env vars);
 // an empty mode defaults to audit-only.
 func LoadBase(rawMode string) (Base, error) {
 	b := Base{
@@ -69,7 +73,7 @@ func LoadBase(rawMode string) (Base, error) {
 }
 
 // SessionContext returns enforcement input for policy evaluation and reporting, combining
-// the shared session/mode fields with a sidecar's resolved policy.
+// the shared session/mode fields with the consumer's resolved policy.
 func (b Base) SessionContext(policy scrutineerv1alpha1.PolicyRules) enforcement.SessionContext {
 	return enforcement.SessionContext{
 		SessionNamespace: b.SessionNamespace,

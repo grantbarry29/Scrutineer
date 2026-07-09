@@ -31,10 +31,10 @@ import (
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/containerenv"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/egressmetrics"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/envoy"
 	"github.com/grantbarry29/scrutineer/internal/enforcement/reporterclient"
-	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
 )
 
 const (
@@ -48,7 +48,7 @@ const (
 )
 
 func main() {
-	base, err := sidecarenv.LoadBase("")
+	base, err := containerenv.LoadBase("")
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
@@ -126,16 +126,16 @@ func envoyReopenLogs(ctx context.Context) error {
 }
 
 // rotateAfterBytesFromEnv reads the optional rotation-threshold override the controller
-// sets on the container (sidecarenv.EnvRotateAfterBytes). Unset or invalid falls back
+// sets on the container (containerenv.EnvRotateAfterBytes). Unset or invalid falls back
 // to the Tailer default; rotation itself is always on (Reopen is always wired).
 func rotateAfterBytesFromEnv() int64 {
-	raw := strings.TrimSpace(os.Getenv(sidecarenv.EnvRotateAfterBytes))
+	raw := strings.TrimSpace(os.Getenv(containerenv.EnvRotateAfterBytes))
 	if raw == "" {
 		return 0
 	}
 	n, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || n <= 0 {
-		log.Printf("egress-reporter: ignoring invalid %s=%q", sidecarenv.EnvRotateAfterBytes, raw)
+		log.Printf("egress-reporter: ignoring invalid %s=%q", containerenv.EnvRotateAfterBytes, raw)
 		return 0
 	}
 	return n

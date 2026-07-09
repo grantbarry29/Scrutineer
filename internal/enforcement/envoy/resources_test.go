@@ -16,7 +16,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/containerenv"
 )
 
 func testPodConfig() PodConfig {
@@ -149,19 +149,19 @@ func TestPodPassesRotateThresholdEnv(t *testing.T) {
 	rep := findContainer(t, Pod("s", "ns", cfg), reporterContainerName)
 	found := ""
 	for _, e := range rep.Env {
-		if e.Name == sidecarenv.EnvRotateAfterBytes {
+		if e.Name == containerenv.EnvRotateAfterBytes {
 			found = e.Value
 		}
 	}
 	if found != "12345" {
-		t.Fatalf("%s = %q, want 12345", sidecarenv.EnvRotateAfterBytes, found)
+		t.Fatalf("%s = %q, want 12345", containerenv.EnvRotateAfterBytes, found)
 	}
 
 	cfg.RotateAfterBytes = 0
 	rep = findContainer(t, Pod("s", "ns", cfg), reporterContainerName)
 	for _, e := range rep.Env {
-		if e.Name == sidecarenv.EnvRotateAfterBytes {
-			t.Fatalf("zero threshold must not set %s (reporter default applies)", sidecarenv.EnvRotateAfterBytes)
+		if e.Name == containerenv.EnvRotateAfterBytes {
+			t.Fatalf("zero threshold must not set %s (reporter default applies)", containerenv.EnvRotateAfterBytes)
 		}
 	}
 }
@@ -223,14 +223,14 @@ func TestPodWiresEgressReporter(t *testing.T) {
 	for _, e := range rep.Env {
 		env[e.Name] = e.Value
 	}
-	if env[sidecarenv.EnvSessionName] != "sess-a" || env[sidecarenv.EnvSessionNamespace] != "ns1" {
+	if env[containerenv.EnvSessionName] != "sess-a" || env[containerenv.EnvSessionNamespace] != "ns1" {
 		t.Fatalf("session env = %v", env)
 	}
-	if env[sidecarenv.EnvReporterURL] != cfg.ReporterURL {
-		t.Fatalf("reporter URL env = %q", env[sidecarenv.EnvReporterURL])
+	if env[containerenv.EnvReporterURL] != cfg.ReporterURL {
+		t.Fatalf("reporter URL env = %q", env[containerenv.EnvReporterURL])
 	}
-	if env[sidecarenv.EnvReporterToken] != reporterTokenMountPath+"/"+reporterTokenFileName {
-		t.Fatalf("token path env = %q", env[sidecarenv.EnvReporterToken])
+	if env[containerenv.EnvReporterToken] != reporterTokenMountPath+"/"+reporterTokenFileName {
+		t.Fatalf("token path env = %q", env[containerenv.EnvReporterToken])
 	}
 
 	// The token volume is projected with the reporter audience — the identity the

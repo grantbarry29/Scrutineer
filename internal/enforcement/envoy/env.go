@@ -17,7 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
-	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/containerenv"
 )
 
 // Policy env keys the egress-reporter reads. Values mirror the agent/sidecar convention
@@ -35,8 +35,8 @@ const (
 func PolicyFromEnv() EgressPolicy {
 	return EgressPolicy{
 		Enforce:        os.Getenv(EnvPolicyMode) == string(scrutineerv1alpha1.PolicyModeEnforced),
-		AllowedDomains: sidecarenv.SplitCSV(os.Getenv(EnvPolicyAllowedDomains)),
-		DeniedDomains:  sidecarenv.SplitCSV(os.Getenv(EnvPolicyDeniedDomains)),
+		AllowedDomains: containerenv.SplitCSV(os.Getenv(EnvPolicyAllowedDomains)),
+		DeniedDomains:  containerenv.SplitCSV(os.Getenv(EnvPolicyDeniedDomains)),
 	}
 }
 

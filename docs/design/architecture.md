@@ -294,7 +294,7 @@ Detailed designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-ar
 | `internal/controller/agentsession/` | The reconciler and its helpers: `reconciler.go`, `status.go` (patch strategy), `runtime_backend.go` (backend interface + registry + `kubernetes-job`), `backend_pod.go` (`kubernetes-pod`), `policy.go`/`policy_decisions.go`, `violations.go`, `networkpolicy.go`, `egress_envoy.go` (per-session proxy provisioning), `lock_gate.go` (verified-or-refused), `runtimeprofile*.go`, `pod*.go`, watches. |
 | `internal/controller/job/` | Pure Job/Pod template construction: `builder.go`, `sidecars.go` (envoy proxy-env wiring), `constants.go` (labels). No cluster I/O. |
 | `internal/policy/` | Policy layer loading, merge/resolve, status application. Backend-neutral. |
-| `internal/enforcement/` | Enforcement contract + mode semantics + report/violation helpers; sub-packages: `networkpolicy/`, `envoy/`, `lockverify/`, `reporterclient/`, `sidecarenv/`. |
+| `internal/enforcement/` | Enforcement contract + mode semantics + report/violation helpers; sub-packages: `networkpolicy/`, `envoy/`, `lockverify/`, `reporterclient/`, `containerenv/`. |
 | `internal/reporter/` | Runtime reporter HTTP endpoint (identity verification, caller-class assurance stamping, approval channel). |
 | `cmd/main.go` | Manager setup, flags (incl. `--lock-probe-*`), `SetupWithManager`, health checks. |
 | `cmd/egress-reporter/` | The out-of-pod evidence producer beside Envoy (own image). |

@@ -18,7 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/grantbarry29/scrutineer/internal/enforcement/sidecarenv"
+	"github.com/grantbarry29/scrutineer/internal/enforcement/containerenv"
 	"github.com/grantbarry29/scrutineer/internal/version"
 )
 
@@ -291,14 +291,14 @@ func Pod(sessionName, namespace string, cfg PodConfig) *corev1.Pod {
 // only container holding that token; Envoy itself never sees it.
 func egressReporterContainer(sessionName, namespace string, cfg PodConfig) corev1.Container {
 	env := append([]corev1.EnvVar{
-		{Name: sidecarenv.EnvSessionName, Value: sessionName},
-		{Name: sidecarenv.EnvSessionNamespace, Value: namespace},
-		{Name: sidecarenv.EnvReporterURL, Value: cfg.ReporterURL},
-		{Name: sidecarenv.EnvReporterToken, Value: reporterTokenMountPath + "/" + reporterTokenFileName},
+		{Name: containerenv.EnvSessionName, Value: sessionName},
+		{Name: containerenv.EnvSessionNamespace, Value: namespace},
+		{Name: containerenv.EnvReporterURL, Value: cfg.ReporterURL},
+		{Name: containerenv.EnvReporterToken, Value: reporterTokenMountPath + "/" + reporterTokenFileName},
 	}, policyEnv(cfg.Bootstrap)...)
 	if cfg.RotateAfterBytes > 0 {
 		env = append(env, corev1.EnvVar{
-			Name: sidecarenv.EnvRotateAfterBytes, Value: strconv.FormatInt(cfg.RotateAfterBytes, 10),
+			Name: containerenv.EnvRotateAfterBytes, Value: strconv.FormatInt(cfg.RotateAfterBytes, 10),
 		})
 	}
 	return corev1.Container{
