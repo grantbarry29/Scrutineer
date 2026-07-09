@@ -279,9 +279,14 @@ endif
 	@echo "Tear down:              make quickstart-down"
 
 .PHONY: quickstart-images
-quickstart-images: ## Ensure controller + egress-reporter + Envoy images exist locally (pull released, else build) and load them into the quickstart cluster.
-	$(CONTAINER_TOOL) pull $(IMG) || $(MAKE) docker-build
-	$(CONTAINER_TOOL) pull $(EGRESS_REPORTER_IMG) || $(MAKE) docker-build-egress-reporter
+quickstart-images: ## Build controller + egress-reporter images from this checkout and load them (plus pinned Envoy) into the quickstart cluster.
+	@# Always build from source — never pull the released tag (#109). The quickstart
+	@# deploys THIS checkout's manifests/CRDs/demo, which assume this checkout's
+	@# controller behavior; a released image can silently predate it (v0.1.0 predates
+	@# the verified-or-refused lock gate, so the verdict wait times out). Envoy is the
+	@# exception: upstream, digest-pinned, independent of the checkout.
+	$(MAKE) docker-build
+	$(MAKE) docker-build-egress-reporter
 	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME_QUICKSTART)
 	kind load docker-image $(EGRESS_REPORTER_IMG) --name $(KIND_CLUSTER_NAME_QUICKSTART)
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) $(MAKE) kind-load-envoy

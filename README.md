@@ -31,8 +31,9 @@ than degrading silently.
 ## Quickstart
 
 One command from a fresh clone to a running Scrutineer on a local
-[kind](https://kind.sigs.k8s.io/) cluster (needs Docker, kind, kubectl; uses the
-released images when pullable, otherwise builds them locally):
+[kind](https://kind.sigs.k8s.io/) cluster (needs Docker, kind, kubectl; builds the
+first-party images from your checkout so the controller always matches the
+manifests it is deployed with):
 
 ```sh
 make quickstart
@@ -652,8 +653,8 @@ workflows — **E2E** (standard + kindnet networking enforcement suite) and
 **Quickstart Smoke** (`make quickstart && make demo` end-to-end) — skip docs-only
 changes (#86). Nightly (+ manual dispatch): **Nightly Networking** cross-checks the
 enforcement suite on Calico and a dual-stack cluster (#93). All cluster jobs build
-images cold while the ghcr packages are private; they switch to registry pulls
-automatically once the packages are public.
+the first-party images from the checkout under test — never registry pulls, which
+can silently predate the checkout's behavior (#109).
 
 ## Developing with the dev container (recommended for contributors)
 

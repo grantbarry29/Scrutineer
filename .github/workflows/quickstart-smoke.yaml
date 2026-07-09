@@ -1,10 +1,12 @@
 # Front-door smoke (#78): prove the fresh-clone experience stays green.
-# Runs the real thing — `make quickstart` (dedicated kind cluster, images pull-or-build,
-# controller deployed, lock-gate verdict must come back VERIFIED) followed by `make demo`
-# (both demo sessions must reach Succeeded and print the expected evidence). Both targets
-# exit non-zero on any deviation, so no extra assertions are needed here.
-# While the ghcr packages are private the image pulls fail and the job exercises the
-# local-build fallback — the same path a contributor without registry access hits.
+# Runs the real thing — `make quickstart` (dedicated kind cluster, first-party images
+# built from this checkout, controller deployed, lock-gate verdict must come back
+# VERIFIED) followed by `make demo` (both demo sessions must reach Succeeded and print
+# the expected evidence). Both targets exit non-zero on any deviation, so no extra
+# assertions are needed here.
+# Images are always built from source, never pulled from ghcr (#109): a released tag
+# can silently predate this checkout's controller behavior (v0.1.0 predates the lock
+# gate and broke every run once the packages went public).
 name: Quickstart Smoke
 
 # Path scoping (#86): cluster-heavy job — skip pushes that cannot change runtime
