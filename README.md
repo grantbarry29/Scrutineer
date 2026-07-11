@@ -184,14 +184,14 @@ we never claim more than these boundaries support. (Design:
 - **IP/CIDR policy covers canonical IP-literal dials only.** `allowedCIDRs`/`deniedCIDRs`
   are enforced at the same proxy chokepoint
   ([#125](https://github.com/grantbarry29/scrutineer/issues/125)) by matching the request
-  authority when it is a canonical IPv4 literal (e.g. `CONNECT 10.2.3.4:5432`). A hostname
-  that *resolves into* a range is **not** matched — govern hostnames with the domain
-  fields; resolved-address enforcement is a separate future design. The **robust** control
-  is an **allow-list** (default-deny — any authority that isn't a recognized in-range
-  literal is denied); a **deny-list** matches canonical spellings best-effort (a
-  leading-zero form like `010.2.3.4` can still resolve), so lean on allow-lists, and note
-  that cloud metadata is denied by resolved IP at the kernel backstop regardless of
-  spelling. IPv6 egress is denied by construction
+  authority when it is a canonical IPv4 literal (e.g. `CONNECT 10.2.3.4:5432`).
+  Non-canonical numeric spellings a resolver would expand into a range (leading-zero
+  octets like `010.2.3.4`, short forms like `10.1`) are **refused fail-closed** when CIDR
+  policy is active ([#126](https://github.com/grantbarry29/scrutineer/issues/126)), so they
+  can't evade a deny-list. What is **not** matched is a *hostname* that resolves into a
+  range — govern hostnames with the domain fields; resolved-address enforcement is a
+  separate future design, and cloud metadata is denied by resolved IP at the kernel
+  backstop regardless of spelling. IPv6 egress is denied by construction
   ([#66](https://github.com/grantbarry29/scrutineer/issues/66) posture); under any
   allow-list a request must match the domain allow-list **or** the CIDR allow-list.
 - **`observed` means "independent of the agent," not "tamper-proof."** It is only as

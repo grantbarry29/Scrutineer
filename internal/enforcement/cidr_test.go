@@ -43,13 +43,13 @@ func TestValidateCIDRPattern(t *testing.T) {
 	}{
 		{"", "empty"},
 		{"   ", "empty"},
-		{"fd00::/8", "IPv6"},     // posture #66: the egress path is IPv4-only
-		{"2001:db8::1", "IPv6"},  // ditto for bare v6 addresses
+		{"fd00::/8", "IPv6"},    // posture #66: the egress path is IPv4-only
+		{"2001:db8::1", "IPv6"}, // ditto for bare v6 addresses
 		{"::ffff:10.2.3.4", "IPv6"},
-		{"010.2.3.4", "canonical"},   // leading zero (octal ambiguity)
+		{"010.2.3.4", "canonical"}, // leading zero (octal ambiguity)
 		{"10.020.3.4/8", "canonical"},
-		{"0x0a.0.0.1", "not allowed"}, // hex form is outside the [0-9./] charset
-		{"167772161", "canonical"},    // single-integer form of 10.0.0.1
+		{"0x0a.0.0.1", "not allowed"},     // hex form is outside the [0-9./] charset
+		{"167772161", "canonical"},        // single-integer form of 10.0.0.1
 		{"db.example.com", "not allowed"}, // hostname — belongs in the domain fields
 		{"10.0.0.0 /8", "whitespace"},     // inner whitespace
 		{"10.1.2.3/8", "network address"}, // host bits set: must be the masked form
@@ -148,6 +148,48 @@ func TestMatchIPCIDR(t *testing.T) {
 	for _, tc := range cases {
 		if got := MatchIPCIDR(tc.patterns, tc.host); got != tc.want {
 			t.Errorf("%s: MatchIPCIDR(%v, %q) = %v, want %v", tc.name, tc.patterns, tc.host, got, tc.want)
+		}
+	}
+}
+
+// #126: the forms that evade a canonical CIDR deny-regex because a permissive resolver
+// still expands them into the range — flagged so the proxy can refuse them fail-closed.
+func TestIsNonCanonicalNumericAuthority(t *testing.T) {
+	nonCanonical := []string{
+		"010.0.0.1",      // leading-zero octet 1 (→ 10.0.0.1)
+		"10.00.0.1",      // leading-zero octet 2
+		"10.0.0.010",     // leading-zero octet 4
+		"010.0.0.1:8080", // port ignored
+		"10.1",           // 2-part inet_aton short form (→ 10.0.0.1)
+		"10.0.1",         // 3-part short form
+		"167772161",      // 1-part integer form
+		"1.2.3.4.5",      // 5 parts
+		"10.0.0.1.",      // trailing dot on a short/long form is stripped, but this is canonical → see below
+	}
+	// "10.0.0.1." normalizes to the canonical quad — correct it out of the list.
+	nonCanonical = nonCanonical[:len(nonCanonical)-1]
+	for _, h := range nonCanonical {
+		if !IsNonCanonicalNumericAuthority(h) {
+			t.Errorf("IsNonCanonicalNumericAuthority(%q) = false, want true", h)
+		}
+	}
+
+	canonicalOrHostname := []string{
+		"10.0.0.1",     // canonical quad — governed by the CIDR match, not this rule
+		"10.0.0.1:443", // canonical + port
+		"10.0.0.1.",    // canonical + trailing dot (stripped)
+		"255.255.255.255",
+		"0.0.0.0",
+		"db.internal",       // hostname
+		"10.0.0.1.evil.com", // IP-prefixed hostname (has letters)
+		"10.0.0.256",        // over-255 octet: fails closed at the resolver, not our concern
+		"10..0.1",           // empty part: malformed, fails closed
+		"",                  // empty
+		"a.b.c.d",           // letters
+	}
+	for _, h := range canonicalOrHostname {
+		if IsNonCanonicalNumericAuthority(h) {
+			t.Errorf("IsNonCanonicalNumericAuthority(%q) = true, want false", h)
 		}
 	}
 }

@@ -112,7 +112,7 @@ func TestEgressAuthorityRegex_union(t *testing.T) {
 	for _, host := range []string{
 		"bad.example", "api.example", // apex excluded by the wildcard
 		"11.0.0.1", "9.255.255.255", "203.0.113.6",
-		"10.2.3.4.evil.com", // IP-prefixed hostname
+		"10.2.3.4.evil.com",                    // IP-prefixed hostname
 		"010.2.3.4", "0x0a.2.3.4", "167772161", // non-canonical IP forms
 	} {
 		if rx.MatchString(host) {
@@ -169,23 +169,73 @@ func TestRBACHTTPFilters_cidrSplitPerPermission(t *testing.T) {
 	}
 	out := rbacHTTPFilters(cfg)
 
-	// One deny filter, holding one permission for the domains plus one per CIDR (4 total).
+	// One deny filter, holding one permission for the domains, one per CIDR, and the two
+	// non-canonical-numeric refusal permissions that CIDR policy adds (#126) — 6 total.
 	if got := strings.Count(out, "- name: scrutineer-egress-deny"); got != 1 {
 		t.Fatalf("want exactly one deny filter, got %d:\n%s", got, out)
 	}
-	if got := strings.Count(out, `name: ":authority"`); got != 4 {
-		t.Fatalf("want 4 authority permissions (1 domains + 3 CIDRs), got %d:\n%s", got, out)
+	if got := strings.Count(out, `name: ":authority"`); got != 6 {
+		t.Fatalf("want 6 authority permissions (1 domains + 3 CIDRs + 2 non-canonical), got %d:\n%s", got, out)
 	}
 
-	// No single rendered regex may union multiple CIDRs (that is what overflows the RE2
-	// program cap). Each safe_regex line carries at most one CIDR's leading octet anchor.
-	for _, line := range strings.Split(out, "\n") {
-		if !strings.Contains(line, "regex:") {
-			continue
+	// Each CIDR is its own permission — no single safe_regex unions multiple CIDRs (the
+	// union of full-range octet expansions is what overflows the RE2 program cap). The
+	// live proof that the whole config stays under the cap is the networking e2e + the
+	// real-Envoy spike; here we assert the structural split that makes that hold.
+	perCIDR := 0
+	for _, cidr := range cfg.DeniedCIDRs {
+		re := wrapAuthority(cidrAlternations([]string{cidr}))
+		if strings.Contains(out, "regex: '"+re+"'") {
+			perCIDR++
 		}
-		if n := strings.Count(line, `\.(`) + strings.Count(line, `\.[`); n > 4 {
-			t.Fatalf("a single safe_regex unions too many octet ranges (%d), risking the RE2 cap:\n%s", n, line)
+	}
+	if perCIDR != len(cfg.DeniedCIDRs) {
+		t.Fatalf("each CIDR must render as its own permission (found %d of %d):\n%s", perCIDR, len(cfg.DeniedCIDRs), out)
+	}
+}
+
+// #126: when CIDR policy is present the DENY filter gains the non-canonical-numeric
+// refusal permission, so resolver-expandable spellings can't evade the CIDR rules. An
+// FQDN-only policy must NOT gain it (a numeric authority there is governed like its
+// canonical form).
+func TestRBACHTTPFilters_nonCanonicalNumericDeny(t *testing.T) {
+	// A CIDR-only allow-list has no explicit deny list, yet must still render a DENY
+	// filter carrying the non-canonical refusal (so 010.x can't reach an allowed range).
+	allowOnly := rbacHTTPFilters(BootstrapConfig{Enforce: true, AllowedCIDRs: []string{"10.0.0.0/8"}})
+	if !strings.Contains(allowOnly, "scrutineer-egress-deny") {
+		t.Fatalf("CIDR allow-list must still render a deny filter for the non-canonical refusal:\n%s", allowOnly)
+	}
+	// Each non-canonical regex must be embedded in the deny filter, and collectively they
+	// match an evasion but not the canonical form.
+	nonCanon := nonCanonicalNumericAuthorityRegexes()
+	matchesAny := func(h string) bool {
+		for _, re := range nonCanon {
+			if regexp.MustCompile(`\A(?:` + re + `)\z`).MatchString(h) {
+				return true
+			}
 		}
+		return false
+	}
+	if !matchesAny("010.0.0.1") || matchesAny("10.0.0.1") {
+		t.Fatal("non-canonical regexes must match 010.0.0.1 but not the canonical 10.0.0.1")
+	}
+	for _, re := range nonCanon {
+		if !strings.Contains(allowOnly, "regex: '"+re+"'") {
+			t.Fatalf("deny filter must embed non-canonical regex %q:\n%s", re, allowOnly)
+		}
+	}
+
+	// FQDN-only policy: no CIDR intent, so no non-canonical refusal.
+	fqdnOnly := rbacHTTPFilters(BootstrapConfig{Enforce: true, DeniedDomains: []string{"evil.example"}})
+	for _, re := range nonCanon {
+		if strings.Contains(fqdnOnly, "regex: '"+re+"'") {
+			t.Fatalf("FQDN-only policy must not add the non-canonical numeric refusal:\n%s", fqdnOnly)
+		}
+	}
+
+	// Audit mode renders no RBAC at all.
+	if got := rbacHTTPFilters(BootstrapConfig{Enforce: false, DeniedCIDRs: []string{"10.0.0.0/8"}}); got != "" {
+		t.Fatalf("audit mode must render no RBAC, got:\n%s", got)
 	}
 }
 

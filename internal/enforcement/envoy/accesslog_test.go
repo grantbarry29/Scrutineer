@@ -207,6 +207,27 @@ func TestDecision_classifiesCIDRs(t *testing.T) {
 	// Domain-only allow-list keeps its existing reason (no behavior change without CIDRs).
 	domainOnly := EgressPolicy{Enforce: true, AllowedDomains: []string{"good.example"}}
 	check("domain-only reason unchanged", domainOnly, "other.example:443", want{deny, ReasonNotInAllowedDomains})
+
+	// #126: a non-canonical numeric authority is refused when CIDR policy is present, so
+	// it cannot evade the CIDR rules via a resolver-expanded spelling.
+	denyCIDR := EgressPolicy{Enforce: true, DeniedCIDRs: []string{"10.0.0.0/8"}}
+	check("leading-zero evasion refused", denyCIDR, "010.0.0.1:9999", want{deny, ReasonNonCanonicalIP})
+	check("short-form evasion refused", denyCIDR, "10.1", want{deny, ReasonNonCanonicalIP})
+	check("canonical in-range still denied by CIDR", denyCIDR, "10.2.3.4:443", want{deny, ReasonDeniedCIDRs})
+	check("out-of-range canonical flows", denyCIDR, "11.0.0.1:443", want{allow, ReasonEgressObserved})
+	check("hostname unaffected", denyCIDR, "good.example:443", want{allow, ReasonEgressObserved})
+
+	// Refusal also applies under a CIDR allow-list (before the allow-union), and audit
+	// mode records it as dry-run.
+	allowCIDR := EgressPolicy{Enforce: true, AllowedCIDRs: []string{"10.0.0.0/8"}}
+	check("non-canonical refused under allow-list", allowCIDR, "010.0.0.1", want{deny, ReasonNonCanonicalIP})
+	auditCIDR := EgressPolicy{Enforce: false, DeniedCIDRs: []string{"10.0.0.0/8"}}
+	check("non-canonical dry-run in audit", auditCIDR, "10.0.1", want{dryRun, ReasonNonCanonicalIP})
+
+	// Without any CIDR policy, a numeric authority is NOT specially refused (governed like
+	// its canonical form — here, allowed through under a domain-only deny-list).
+	domainDeny := EgressPolicy{Enforce: true, DeniedDomains: []string{"evil.example"}}
+	check("no cidr policy: numeric not refused", domainDeny, "010.0.0.1", want{allow, ReasonEgressObserved})
 }
 
 func TestParseAccessLogLine_httpAndUpstreamFailure(t *testing.T) {

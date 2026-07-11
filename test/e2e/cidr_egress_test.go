@@ -103,6 +103,39 @@ var _ = Describe("Live CIDR egress policy at Envoy", Label(labelNetworking), fun
 		waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
 	})
 
+	// #126: a non-canonical numeric spelling a resolver would expand into a denied range
+	// (leading-zero octet) must be refused fail-closed, so it can't evade the deny-list.
+	It("refuses a non-canonical numeric authority that would evade a denied CIDR (enforced)", func(ctx SpecContext) {
+		requireEgressEnforcingCNI(ctx)
+		const evasion = "010.0.0.1:9999" // → 10.0.0.1, inside 10.0.0.0/8, via a leading zero
+		ns := newTestNamespace("scrutineer-e2e-cidr-noncanon")
+		createRuntimeProfileWithEnvoy(ctx, ns, "envoy-egress")
+		createCIDRPolicy(ctx, ns, "cidr-deny-nc", scrutineerv1alpha1.PolicyModeEnforced,
+			scrutineerv1alpha1.PolicyRules{DeniedCIDRs: rfc1918})
+
+		session := newAgentSession(ns, "cidr-noncanon",
+			withRuntimeProfileRef("envoy-egress"),
+			withPolicyRef("AgentPolicy", "cidr-deny-nc"),
+			withEnvoyIPConnectProbe(evasion),
+		)
+		key := createAgentSession(ctx, session)
+		expectJobForSession(ctx, ns, session)
+		waitForPhase(ctx, key, []scrutineerv1alpha1.AgentSessionPhase{scrutineerv1alpha1.PhaseRunning}, 90*time.Second, 2*time.Second)
+
+		By("an observed DENY decision with the non-canonical reason for the evasion authority")
+		expectObservedCIDRDecision(ctx, key, evasion, scrutineerv1alpha1.PolicyDecisionDeny, envoy.ReasonNonCanonicalIP)
+
+		By("Envoy having refused it (403 in the access log)")
+		Eventually(func(g Gomega) {
+			logs := envoyAccessLog(ctx, envoyKey(ns, session.Name))
+			g.Expect(logs).To(ContainSubstring(evasion))
+			g.Expect(logs).To(ContainSubstring("403"), "non-canonical evasion should be 403-refused by RBAC; log:\n%s", logs)
+		}, 120*time.Second, 3*time.Second).Should(Succeed())
+
+		requestCancellation(ctx, key)
+		waitForTerminalPhase(ctx, key, scrutineerv1alpha1.PhaseCancelled)
+	})
+
 	// The union semantic worth locking: an allow-list made only of CIDRs can never match
 	// a hostname authority, so hostname dials are default-denied at the chokepoint.
 	It("default-denies hostname dials under a CIDR-only allow-list (enforced)", func(ctx SpecContext) {

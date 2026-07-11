@@ -143,14 +143,14 @@ spec:
                       non-canonical forms) — keep the two in sync.
 
                       When the Envoy egress chokepoint is enabled, these entries are enforced AT THE
-                      PROXY as authority matching (#125): they police CANONICAL IPv4-LITERAL DIALS ONLY —
-                      a CONNECT or Host authority that is a canonical dotted-quad. A hostname that merely
-                      *resolves* to an address in (or outside) these ranges is matched by the domain
-                      fields, never by CIDRs; resolved-address enforcement is a separate future design.
-                      The robust control is an ALLOW-list (default-deny); a DENY-list matches canonical
-                      spellings best-effort (a leading-zero form can still resolve). On the legacy
-                      non-Envoy path these entries render a coarse NetworkPolicy instead (enforced mode
-                      only).
+                      PROXY as authority matching (#125): they police IPv4-LITERAL DIALS — a CONNECT or
+                      Host authority that is a numeric address. Canonical dotted-quads match the ranges;
+                      non-canonical numeric spellings a resolver would expand into a range (leading-zero
+                      octets, inet_aton short forms) are refused fail-closed so they can't evade a
+                      deny-list (#126). A *hostname* that resolves to an address in these ranges is NOT
+                      matched here (govern hostnames with the domain fields; resolved-address enforcement
+                      is a separate future design). On the legacy non-Envoy path these entries render a
+                      coarse NetworkPolicy instead (enforced mode only).
                     items:
                       maxLength: 18
                       pattern: ^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$
@@ -679,14 +679,14 @@ spec:
                       non-canonical forms) — keep the two in sync.
 
                       When the Envoy egress chokepoint is enabled, these entries are enforced AT THE
-                      PROXY as authority matching (#125): they police CANONICAL IPv4-LITERAL DIALS ONLY —
-                      a CONNECT or Host authority that is a canonical dotted-quad. A hostname that merely
-                      *resolves* to an address in (or outside) these ranges is matched by the domain
-                      fields, never by CIDRs; resolved-address enforcement is a separate future design.
-                      The robust control is an ALLOW-list (default-deny); a DENY-list matches canonical
-                      spellings best-effort (a leading-zero form can still resolve). On the legacy
-                      non-Envoy path these entries render a coarse NetworkPolicy instead (enforced mode
-                      only).
+                      PROXY as authority matching (#125): they police IPv4-LITERAL DIALS — a CONNECT or
+                      Host authority that is a numeric address. Canonical dotted-quads match the ranges;
+                      non-canonical numeric spellings a resolver would expand into a range (leading-zero
+                      octets, inet_aton short forms) are refused fail-closed so they can't evade a
+                      deny-list (#126). A *hostname* that resolves to an address in these ranges is NOT
+                      matched here (govern hostnames with the domain fields; resolved-address enforcement
+                      is a separate future design). On the legacy non-Envoy path these entries render a
+                      coarse NetworkPolicy instead (enforced mode only).
                     items:
                       maxLength: 18
                       pattern: ^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$

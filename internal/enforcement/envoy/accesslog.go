@@ -82,6 +82,7 @@ const (
 	ReasonEgressObserved      = "EgressObserved"
 	ReasonDeniedDomains       = "DeniedDomains"
 	ReasonDeniedCIDRs         = "DeniedCIDRs"
+	ReasonNonCanonicalIP      = "NonCanonicalIP"
 	ReasonNotInAllowedDomains = "NotInAllowedDomains"
 	ReasonNotInAllowedCIDRs   = "NotInAllowedCIDRs"
 	ReasonNotInAllowlists     = "NotInAllowlists"
@@ -105,13 +106,18 @@ type EgressPolicy struct {
 // Deny wins over allow-list, matching the RBAC filter order; when any allow-list exists
 // the authority must match the domain allow-list OR the CIDR allow-list (the same union
 // the single ALLOW filter enforces). CIDR entries match only IPv4-literal authorities
-// (#125) — under a CIDR-only allow-list, hostname dials are therefore denied.
+// (#125) — under a CIDR-only allow-list, hostname dials are therefore denied. When CIDR
+// policy is present, a non-canonical numeric authority is refused before the allow-union
+// (#126), mirroring the extra DENY-filter permission.
 func (p EgressPolicy) classify(authority string) (scrutineerv1alpha1.PolicyDecisionAction, string) {
 	if enforcement.MatchDomain(p.DeniedDomains, authority) {
 		return p.deniedAction(), ReasonDeniedDomains
 	}
 	if enforcement.MatchIPCIDR(p.DeniedCIDRs, authority) {
 		return p.deniedAction(), ReasonDeniedCIDRs
+	}
+	if p.hasCIDRPolicy() && enforcement.IsNonCanonicalNumericAuthority(authority) {
+		return p.deniedAction(), ReasonNonCanonicalIP
 	}
 	hasDomainAllow, hasCIDRAllow := len(p.AllowedDomains) > 0, len(p.AllowedCIDRs) > 0
 	if (hasDomainAllow || hasCIDRAllow) &&
@@ -134,6 +140,12 @@ func (p EgressPolicy) deniedAction() scrutineerv1alpha1.PolicyDecisionAction {
 		return scrutineerv1alpha1.PolicyDecisionDeny
 	}
 	return scrutineerv1alpha1.PolicyDecisionDryRun
+}
+
+// hasCIDRPolicy reports whether the effective policy expresses IP-level intent (allow or
+// deny CIDRs), which activates the non-canonical-numeric refusal (#126).
+func (p EgressPolicy) hasCIDRPolicy() bool {
+	return len(p.DeniedCIDRs) > 0 || len(p.AllowedCIDRs) > 0
 }
 
 // Decision converts an observed access-log entry into a runtime network decision,

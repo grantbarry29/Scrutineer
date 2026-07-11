@@ -16,10 +16,14 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
 - Classifies each observed authority against the effective egress policy from the
   `AGENT_POLICY_*` env: FQDN rules via the shared `enforcement.MatchDomain` (#32), and
   IPv4/CIDR rules — matched only when the authority is an IPv4 literal — via
-  `enforcement.MatchIPCIDR` (#125). Deny order is deniedDomains → deniedCIDRs, then the
-  allow-union (allowed by the domain list OR the CIDR list; default-deny when any
-  allow-list exists). Decisions carry allow / deny (enforced) / dry-run (audit) +
-  reason — the same policy the Envoy RBAC enforces, so evidence and enforcement agree.
+  `enforcement.MatchIPCIDR` (#125). Deny order is deniedDomains → deniedCIDRs →
+  non-canonical-numeric refusal, then the allow-union (allowed by the domain list OR the
+  CIDR list; default-deny when any allow-list exists). When CIDR policy is present, an
+  all-numeric authority that isn't a canonical dotted-quad (leading-zero octet, inet_aton
+  short form) is refused with reason `NonCanonicalIP` (#126) so a resolver-expanded
+  spelling can't evade the CIDR rules. Decisions carry allow / deny (enforced) / dry-run
+  (audit) + reason — the same policy the Envoy RBAC enforces, so evidence and enforcement
+  agree.
 - Delivery is **at-least-once**: offsets are in-memory, so a restart re-reads the file;
   the controller's status merge dedups (times are pinned from Envoy's `%START_TIME%`).
   Reads are chunk-bounded (256KiB) and gated on delivery (#97): a backlog — restart

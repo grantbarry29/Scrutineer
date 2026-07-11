@@ -114,3 +114,50 @@ func TestCIDREnforcementEvidenceMatchConsistency(t *testing.T) {
 		}
 	}
 }
+
+// TestNonCanonicalNumericConsistency is the #126 invariant guard: the constant RBAC deny
+// regex (nonCanonicalNumericAuthorityRegex, enforcement) and enforcement.
+// IsNonCanonicalNumericAuthority (evidence classification) must agree on the same
+// authority — otherwise a numeric-spelling evasion could be blocked without a deny record,
+// or classified deny while it flowed. Exercised over a corpus of evasions, canonical
+// forms, hostnames, and malformed/fail-closed edge cases.
+func TestNonCanonicalNumericConsistency(t *testing.T) {
+	var rxs []*regexp.Regexp
+	for _, re := range nonCanonicalNumericAuthorityRegexes() {
+		rx, err := regexp.Compile(`\A(?:` + re + `)\z`)
+		if err != nil {
+			t.Fatalf("nonCanonicalNumericAuthorityRegexes() %q compile error: %v", re, err)
+		}
+		rxs = append(rxs, rx)
+	}
+	matchesAny := func(h string) bool {
+		for _, rx := range rxs {
+			if rx.MatchString(h) {
+				return true
+			}
+		}
+		return false
+	}
+	hosts := []string{
+		// evasions (must match both)
+		"010.0.0.1", "10.00.0.1", "10.0.0.010", "010.010.010.010",
+		"10.1", "10.0.1", "167772161", "1.2.3.4.5", "1.2.3.4.5.6",
+		"010.0.0.1:8080", "10.1:443", "10.1.",
+		// canonical / hostnames / fail-closed edges (must match neither)
+		"10.0.0.1", "10.0.0.1:443", "10.0.0.1.", "255.255.255.255", "0.0.0.0",
+		"10.0.0.0", "192.168.1.1",
+		"10.0.0.256", "10.0.0.999", "300.1.1.1", // over-255: fail closed
+		"10..0.1", "1..2", "...", ".1.2.3.4", // empty parts
+		"db.internal", "db.internal:5432", "10.0.0.1.evil.com", "a.b.c.d",
+		"0x0a.0.0.1", // hex: has letters
+		"",
+	}
+	for _, host := range hosts {
+		// The regexes see the raw authority; the predicate normalizes (strips port/dot).
+		viaRegex := matchesAny(host)
+		viaPred := enforcement.IsNonCanonicalNumericAuthority(host)
+		if viaRegex != viaPred {
+			t.Errorf("divergence for host=%q: regex=%v predicate=%v", host, viaRegex, viaPred)
+		}
+	}
+}

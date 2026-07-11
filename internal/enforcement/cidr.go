@@ -119,6 +119,47 @@ func ValidateCIDRPattern(pattern string) error {
 	return nil
 }
 
+// IsNonCanonicalNumericAuthority reports whether host is an all-numeric dotted authority
+// that is NOT a canonical IPv4 dotted-quad — the class a permissive resolver (c-ares /
+// inet_aton) may still expand into an address our canonical CIDR matching cannot see:
+// leading-zero octets ("010.0.0.1" → 10.0.0.1) and short forms ("10.1"/"10.0.1" →
+// 10.0.0.1). Such an authority is refused fail-closed at the proxy when CIDR policy is
+// active (#126), so it cannot evade a deniedCIDRs deny-list.
+//
+// It returns false for hostnames (any character outside [0-9.]), for canonical
+// dotted-quads (handled by the normal CIDR match), and for malformed numeric forms with
+// an empty part or an over-255 / hex / single-integer-with-no-dots-that-parses octet —
+// those fail closed at the resolver, and excluding them keeps this predicate exactly
+// equal to the generated RBAC regex (envoy.nonCanonicalNumericAuthorityRegex), which is
+// the invariant the consistency test guards. The one exception: a dotless all-digit
+// authority (e.g. "167772161") is a 1-part inet_aton form and IS flagged.
+func IsNonCanonicalNumericAuthority(host string) bool {
+	h := normalizeHost(host)
+	if h == "" {
+		return false
+	}
+	for i := 0; i < len(h); i++ {
+		if (h[i] < '0' || h[i] > '9') && h[i] != '.' {
+			return false // a non-numeric character → a hostname, not a numeric form
+		}
+	}
+	parts := strings.Split(h, ".")
+	for _, p := range parts {
+		if p == "" {
+			return false // empty part: malformed, rejected by the resolver (fail-closed)
+		}
+	}
+	if len(parts) != 4 {
+		return true // 1, 2, 3, or 5+ parts: a non-canonical short/long form
+	}
+	for _, p := range parts {
+		if len(p) > 1 && p[0] == '0' {
+			return true // leading-zero octet
+		}
+	}
+	return false // canonical-shaped 4-quad (in-range matching, or >255 → fails closed)
+}
+
 // ValidateCIDRRules validates every CIDR pattern in rules, attributing a failure to its
 // field and index so the surfaced error points at the exact offending value.
 func ValidateCIDRRules(rules scrutineerv1alpha1.PolicyRules) error {

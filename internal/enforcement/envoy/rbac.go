@@ -76,6 +76,13 @@ func (c BootstrapConfig) hasEgressPolicy() bool {
 		len(c.DeniedCIDRs) > 0 || len(c.AllowedCIDRs) > 0)
 }
 
+// hasCIDRPolicy reports whether the session expresses IP-level intent (allow or deny
+// CIDRs). When it does, non-canonical numeric authorities are refused (#126) so they
+// cannot evade the CIDR rules via a resolver-expanded spelling.
+func (c BootstrapConfig) hasCIDRPolicy() bool {
+	return len(c.DeniedCIDRs) > 0 || len(c.AllowedCIDRs) > 0
+}
+
 // authorityRegex renders an RE2 pattern (for Envoy safe_regex, which full-matches) that
 // matches a request :authority against the FQDN patterns alone, mirroring
 // enforcement.MatchDomain. See egressAuthorityRegex for the tolerances.
@@ -130,6 +137,32 @@ func authorityMatchRegexes(domains, cidrs []string) []string {
 		out = append(out, wrapAuthority([]string{alt}))
 	}
 	return out
+}
+
+// nonCanonicalNumericAuthorityRegexes matches all-numeric dotted authorities that are NOT
+// canonical IPv4 dotted-quads — the forms a permissive resolver expands into an address the
+// canonical CIDR match cannot see: inet_aton short forms (1/2/3 parts), 5+ parts, and
+// 4-quads with a leading-zero octet (#126). It deliberately does NOT match canonical
+// quads (handled by the CIDR permissions), >255-octet quads, or empty-part forms (both
+// fail closed at the resolver) — keeping it exactly equal to
+// enforcement.IsNonCanonicalNumericAuthority (consistency test).
+//
+// Returned as TWO regexes (OR-combined as separate RBAC permissions, like the per-CIDR
+// split) because unioning all the alternatives into one safe_regex exceeds Envoy's RE2
+// max_program_size and crashloops the proxy.
+func nonCanonicalNumericAuthorityRegexes() []string {
+	return []string{
+		wrapAuthority([]string{
+			`[0-9]+(\.[0-9]+){0,2}`, // 1, 2, or 3 parts (short forms; 1-part = integer)
+			`[0-9]+(\.[0-9]+){4,}`,  // 5+ parts
+		}),
+		wrapAuthority([]string{
+			`0[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+`, // 4 parts, leading-zero octet 1
+			`[0-9]+\.0[0-9]+\.[0-9]+\.[0-9]+`, // octet 2
+			`[0-9]+\.[0-9]+\.0[0-9]+\.[0-9]+`, // octet 3
+			`[0-9]+\.[0-9]+\.[0-9]+\.0[0-9]+`, // octet 4
+		}),
+	}
 }
 
 // domainAlternations renders one RE2 alternative per FQDN pattern: a quoted literal for
@@ -273,8 +306,15 @@ func rbacHTTPFilters(cfg BootstrapConfig) string {
 		return ""
 	}
 	var b strings.Builder
-	if res := authorityMatchRegexes(cfg.DeniedDomains, cfg.DeniedCIDRs); len(res) > 0 {
-		b.WriteString(rbacFilter("scrutineer-egress-deny", "DENY", "scrutineer-denied", res))
+	deny := authorityMatchRegexes(cfg.DeniedDomains, cfg.DeniedCIDRs)
+	if cfg.hasCIDRPolicy() {
+		// Refuse resolver-expandable numeric spellings so they cannot slip past the CIDR
+		// rules (#126). Placed in the DENY filter: it wins over the allow-union, so even a
+		// non-canonical form of an allow-listed address is refused (use the canonical form).
+		deny = append(deny, nonCanonicalNumericAuthorityRegexes()...)
+	}
+	if len(deny) > 0 {
+		b.WriteString(rbacFilter("scrutineer-egress-deny", "DENY", "scrutineer-denied", deny))
 	}
 	if res := authorityMatchRegexes(cfg.AllowedDomains, cfg.AllowedCIDRs); len(res) > 0 {
 		b.WriteString(rbacFilter("scrutineer-egress-allow", "ALLOW", "scrutineer-allowed", res))
