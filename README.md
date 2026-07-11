@@ -41,7 +41,8 @@ workflow produces):
 make quickstart
 ```
 
-This creates a dedicated `scrutineer-quickstart` cluster, loads the controller and
+The first run takes about **5 minutes** (it builds the first-party images from your
+checkout); repeat runs are much faster. It creates a dedicated `scrutineer-quickstart` cluster, loads the controller and
 egress-proxy images into it, installs the CRDs, deploys the controller, and prints the
 **routing-lock verification verdict** — Scrutineer empirically proves the cluster's CNI
 enforces NetworkPolicy before it will run enforced sessions (*verified-or-refused*; see
@@ -49,7 +50,8 @@ enforces NetworkPolicy before it will run enforced sessions (*verified-or-refuse
 comes back `Refused` on your kind version, retry with
 `make quickstart-down && make quickstart QUICKSTART_CNI=calico`.
 
-Then run the guided demo of the untamperable egress path — a denied request rejected
+Then run the guided demo of the untamperable egress path (the cluster needs
+**internet egress** — the demo probes fetch `example.com`) — a denied request rejected
 live at the per-session chokepoint, a bypass attempt killed by the routing lock, and
 `observed` evidence the agent could not have forged, contrasted against `audit-only`
 mode ([walkthrough](docs/demo.md)):

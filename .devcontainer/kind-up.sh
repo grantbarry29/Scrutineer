@@ -115,8 +115,11 @@ ensure_kindnet() {
 
 ensure_calico() {
   # The netpol cluster runs with disableDefaultCNI, so the node stays NotReady until
-  # Calico is installed. Calico enforces egress NetworkPolicy (kindnet does not), which
-  # is what the Slice B (#61) enforcement e2e needs.
+  # Calico is installed. Calico is the production-representative NetworkPolicy engine
+  # the Slice B (#61) enforcement e2e cross-checks against — NOT the only CNI that
+  # enforces egress policy (current kindnet does too; see kind-config-netpol.yaml and
+  # the kindnet quickstart smoke passing verified-or-refused). The lock gate verifies
+  # enforcement empirically rather than trusting either CNI's reputation (#90).
   if kubectl get ds -n kube-system calico-node >/dev/null 2>&1; then
     log "calico-node DaemonSet already present."
   else

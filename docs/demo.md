@@ -39,7 +39,11 @@ in `mode`, and two `AgentSession`s running the **same plain-busybox agent**
 gets its own out-of-pod Envoy proxy pod, its own ServiceAccount identities, a
 default-deny routing lock on the agent pod, and an egress backstop on the proxy pod.
 
-The agent probes three paths and prints what *it* experienced:
+The agent probes three paths and prints what *it* experienced. The probes use plain
+`http://` deliberately: at L7 the allow/deny decision is visible in both the response
+and the evidence. HTTPS traffic is CONNECT-tunneled through the same chokepoint and is
+filtered by authority only (§3 states that boundary) — a demo over HTTPS would show
+*that* filtering, but not the per-request visibility this table illustrates:
 
 | probe | `demo-enforced` | `demo-audit` |
 |---|---|---|

@@ -283,6 +283,7 @@ QUICKSTART_CNI ?= kindnet
 
 .PHONY: quickstart
 quickstart: ## One command: kind cluster + Scrutineer controller, lock-gate verdict printed.
+	@echo ">> quickstart: first run takes ~5 minutes (builds the images from this checkout); repeats are faster."
 ifeq ($(QUICKSTART_CNI),calico)
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) KIND_CONFIG=$(KIND_CONFIG_NETPOL) KIND_CNI=calico .devcontainer/kind-up.sh
 else
@@ -422,10 +423,14 @@ demo: demo-context-guard ## Guided egress-governance demo against the quickstart
 	echo ">> both sessions Succeeded."
 	@echo ""
 	@echo "===== the agent's own view (enforced): allowed proxied, denial rejected, bypass dead ====="
-	@$(DEMO_KUBECTL) logs job/scrutineer-session-demo-enforced --tail=-1 2>/dev/null | grep 'DEMO_' || true
+	@out=$$($(DEMO_KUBECTL) logs job/scrutineer-session-demo-enforced --tail=-1 2>/dev/null | grep 'DEMO_' || true); \
+	  if [ -n "$$out" ]; then echo "$$out"; \
+	  else echo ">> (no agent logs: the Job's pod was already collected — re-run 'make demo', or use Scrutineer's view below)"; fi
 	@echo ""
 	@echo "===== the agent's own view (audit-only): nothing blocked at L7, bypass still dead ====="
-	@$(DEMO_KUBECTL) logs job/scrutineer-session-demo-audit --tail=-1 2>/dev/null | grep 'DEMO_' || true
+	@out=$$($(DEMO_KUBECTL) logs job/scrutineer-session-demo-audit --tail=-1 2>/dev/null | grep 'DEMO_' || true); \
+	  if [ -n "$$out" ]; then echo "$$out"; \
+	  else echo ">> (no agent logs: the Job's pod was already collected — re-run 'make demo', or use Scrutineer's view below)"; fi
 	@echo ""
 	@echo "===== Scrutineer's view: observed runtime evidence in status.policyDecisions ====="
 	@# Evidence lands via the out-of-pod egress-reporter; give a lagging batch a moment.
