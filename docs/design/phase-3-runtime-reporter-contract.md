@@ -134,6 +134,8 @@ The `decisions[]` / `violations[]` element shapes map **1:1** onto the existing 
 
 **Usage aggregation (Phase 4):** novel runtime `decisions[]` with `type: network` increment `status.usage.networkRequests`; `type: tool` increment `toolCalls`. Explicit `usage` deltas add token (or counter) fields. Re-delivered decision reports do not double-count bundled usage deltas when all decisions are duplicates.
 
+**Usage accuracy contract (#102):** the decision-derived counters are **approximate** activity indicators. Novelty is judged against the capped `status.policyDecisions` window (64 entries), so at-least-once re-delivery after a data-plane restart over-counts decisions already evicted from that window, and same-second identical requests to one target collapse into a single count (dedup-key granularity, deliberate for apiserver-precision timestamps). Exact accounting belongs to the decision records / audit stream; making the counters exact would require a durable per-backend ingest watermark, which is deliberately not built.
+
 ### 4.4 Responses
 
 | Status | Meaning | Sidecar behavior |

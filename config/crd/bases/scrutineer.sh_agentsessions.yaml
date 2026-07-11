@@ -1073,8 +1073,9 @@ spec:
                   Not populated in the MVP; reserved for Phase 4 observability backends.
                 properties:
                   fileOperations:
-                    description: FileOperations is the total number of file access
-                      operations observed at runtime.
+                    description: |-
+                      FileOperations is the approximate number of file access operations observed at
+                      runtime (see the SessionUsage accuracy contract).
                     format: int64
                     type: integer
                   inputTokens:
@@ -1082,8 +1083,9 @@ spec:
                     format: int64
                     type: integer
                   networkRequests:
-                    description: NetworkRequests is the total number of network requests
-                      made.
+                    description: |-
+                      NetworkRequests is the approximate number of network requests observed (see the
+                      SessionUsage accuracy contract).
                     format: int64
                     type: integer
                   outputTokens:
@@ -1092,8 +1094,9 @@ spec:
                     format: int64
                     type: integer
                   toolCalls:
-                    description: ToolCalls is the total number of tool invocations
-                      made.
+                    description: |-
+                      ToolCalls is the approximate number of tool invocations observed (see the
+                      SessionUsage accuracy contract).
                     format: int64
                     type: integer
                 type: object

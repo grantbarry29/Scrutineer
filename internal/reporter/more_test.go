@@ -22,8 +22,10 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -122,6 +124,50 @@ func TestHandler_rateLimited(t *testing.T) {
 	}
 	if rec.Header().Get("Retry-After") == "" {
 		t.Fatal("missing Retry-After header")
+	}
+}
+
+// #101: exhausted optimistic-concurrency retries must surface as the contract's 409
+// (conflict, client-retriable), not 500 — the old substring match never matched the
+// real apiserver conflict text, so contention masqueraded as internal errors.
+func TestHandler_exhaustedConflictReturns409(t *testing.T) {
+	ts := metav1.NewTime(time.Unix(500, 0))
+	session := &scrutineerv1alpha1.AgentSession{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
+
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = scrutineerv1alpha1.AddToScheme(scheme)
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&scrutineerv1alpha1.AgentSession{}).
+		WithObjects(session).
+		WithInterceptorFuncs(interceptor.Funcs{
+			// Every status update conflicts — the real apiserror, through the merge's
+			// internal retry loop until it exhausts.
+			SubResourceUpdate: func(context.Context, client.Client, string, client.Object, ...client.SubResourceUpdateOption) error {
+				return apierrors.NewConflict(
+					schema.GroupResource{Group: "scrutineer.sh", Resource: "agentsessions"}, "s",
+					errors.New("the object has been modified; please apply your changes to the latest version and try again"))
+			},
+		}).
+		Build()
+
+	h := &Handler{
+		Writer:   cl.Status(),
+		Reader:   cl,
+		Verifier: stubVerifier{identity: CallerIdentity{Namespace: "ns", PodName: "p"}},
+		Now:      func() time.Time { return ts.Time },
+	}
+	rec := postReport(t, h, ReportRequest{
+		Session: SessionRef{Namespace: "ns", Name: "s"},
+		Backend: "egress-proxy",
+		Decisions: []scrutineerv1alpha1.PolicyDecision{{
+			Time: ts, Phase: scrutineerv1alpha1.PolicyDecisionPhaseRuntime, Type: "network",
+			Action: scrutineerv1alpha1.PolicyDecisionDeny, Reason: "DeniedDomain", Target: "a",
+		}},
+	}, "Bearer ok")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (contract §4.4: conflict is retriable)", rec.Code)
 	}
 }
 

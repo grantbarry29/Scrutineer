@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -194,7 +193,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, ErrNotFound, http.StatusNotFound, "AgentSession not found")
 			return
 		}
-		if strings.Contains(err.Error(), "exhausted retries") || strings.Contains(err.Error(), "conflict") {
+		// The merge wraps its exhausted lastErr with %w, so the apiserver's typed
+		// conflict survives the chain — string-matching its text never did (#101).
+		if apierrors.IsConflict(err) {
 			result = "conflict"
 			writeError(w, ErrConflict, http.StatusConflict, "status update conflict")
 			return

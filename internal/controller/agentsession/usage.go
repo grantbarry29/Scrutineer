@@ -21,6 +21,14 @@ import (
 // Explicit usage deltas are applied when the report is usage-only or when at least
 // one decision in the payload was novel, so re-delivered decision reports do not
 // double-count token deltas bundled with duplicate decisions.
+//
+// The decision-derived counters are APPROXIMATE by documented contract (#102, see
+// SessionUsage in the API types and reporter contract §4.3): novelty is judged
+// against the capped decision window, so re-delivery of already-evicted decisions
+// (data-plane restart re-reading its log) over-counts, and same-second identical
+// requests collapse under the dedup key. Exact counting would need a durable
+// per-backend ingest watermark — deliberately not built; the decision/audit stream
+// is the exact-accounting surface.
 func ApplyUsageFromReport(session *scrutineerv1alpha1.AgentSession, usageDelta *scrutineerv1alpha1.SessionUsage, novelDecisions []scrutineerv1alpha1.PolicyDecision, decisionsInReport int) {
 	if session == nil {
 		return

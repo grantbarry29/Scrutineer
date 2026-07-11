@@ -258,6 +258,14 @@ type SessionResult struct {
 
 // SessionUsage captures resource/usage metrics for an AgentSession.
 // Populated from runtime reports: network/tool decisions increment counters; optional usage deltas carry token totals.
+//
+// Accuracy contract (#102): the decision-derived counters (networkRequests, toolCalls,
+// fileOperations) are APPROXIMATE activity indicators, not exact accounting. Novelty is
+// judged against the capped status.policyDecisions window, so at-least-once re-delivery
+// after a data-plane restart can over-count entries already evicted from that window,
+// and same-second identical requests to one target collapse into a single count. Use
+// the decision records / audit stream for exact accounting. Token counters come from
+// explicit client deltas and share their sender's accuracy.
 type SessionUsage struct {
 	// InputTokens is the total number of input tokens consumed.
 	// +optional
@@ -265,13 +273,16 @@ type SessionUsage struct {
 	// OutputTokens is the total number of output tokens produced.
 	// +optional
 	OutputTokens int64 `json:"outputTokens,omitempty"`
-	// ToolCalls is the total number of tool invocations made.
+	// ToolCalls is the approximate number of tool invocations observed (see the
+	// SessionUsage accuracy contract).
 	// +optional
 	ToolCalls int64 `json:"toolCalls,omitempty"`
-	// NetworkRequests is the total number of network requests made.
+	// NetworkRequests is the approximate number of network requests observed (see the
+	// SessionUsage accuracy contract).
 	// +optional
 	NetworkRequests int64 `json:"networkRequests,omitempty"`
-	// FileOperations is the total number of file access operations observed at runtime.
+	// FileOperations is the approximate number of file access operations observed at
+	// runtime (see the SessionUsage accuracy contract).
 	// +optional
 	FileOperations int64 `json:"fileOperations,omitempty"`
 }

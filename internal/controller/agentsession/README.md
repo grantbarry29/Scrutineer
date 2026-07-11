@@ -121,7 +121,8 @@ against an unchanged cluster makes no API mutations.
   through), `conditions` (`Validated`, `PolicyResolved`, `RuntimeProfileResolved`,
   `PolicyPropagated`, `RuntimeCreated`, `Completed`, `Ready`, `EgressLockVerified`,
   `EgressProxyHealthy`), `result`, and reporter-populated
-  `policyDecisions`/`violations`/`usage`.
+  `policyDecisions`/`violations`/`usage` (`usage`'s decision-derived counters are
+  approximate by documented contract — see `SessionUsage` in the API types, #102).
 - RBAC is generated from the `+kubebuilder:rbac` markers in `reconciler.go` via
   `make manifests` (into `config/rbac/`). The manager role is least-privilege —
   each verb maps to an actual client call (audited 2026-06-27):

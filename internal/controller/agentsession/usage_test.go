@@ -45,6 +45,53 @@ func TestApplyRuntimePolicyReport_incrementsNetworkUsageFromNovelDecision(t *tes
 	}
 }
 
+// #102: usage counters are APPROXIMATE by documented contract (SessionUsage API doc,
+// reporter contract §4.3): novelty is judged against the capped decision window
+// (enforcement.MaxPolicyDecisions), so at-least-once re-delivery of decisions already
+// evicted from that window — e.g. an egress-reporter restart re-reading its whole
+// access log — counts them again. This test pins the documented behavior: if counting
+// is ever made exact (durable ingest watermark), update the API docs and §4.3 in the
+// same change as this test.
+func TestUsage_redeliveryAfterCapEvictionOvercountsByContract(t *testing.T) {
+	session := &scrutineerv1alpha1.AgentSession{}
+	decisionAt := func(i int) scrutineerv1alpha1.PolicyDecision {
+		return scrutineerv1alpha1.PolicyDecision{
+			Time:   metav1.NewTime(time.Unix(1_700_000_000+int64(i), 0)),
+			Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
+			Type:   "network",
+			Action: scrutineerv1alpha1.PolicyDecisionAllow,
+			Target: "api.example",
+		}
+	}
+
+	total := enforcement.MaxPolicyDecisions + 10
+	for i := 0; i < total; i++ {
+		ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
+			Decisions: []scrutineerv1alpha1.PolicyDecision{decisionAt(i)},
+		})
+	}
+	if got := session.Status.Usage.NetworkRequests; got != int64(total) {
+		t.Fatalf("networkRequests = %d, want %d", got, total)
+	}
+
+	// Re-deliver a decision still inside the capped window: deduped, not re-counted.
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{decisionAt(total - 1)},
+	})
+	if got := session.Status.Usage.NetworkRequests; got != int64(total) {
+		t.Fatalf("networkRequests after in-window re-delivery = %d, want %d", got, total)
+	}
+
+	// Re-deliver the oldest decision, long since evicted from the 64-entry window:
+	// it looks novel again and inflates the counter — the documented approximation.
+	ApplyRuntimePolicyReport(context.Background(), session, enforcement.RuntimeReport{
+		Decisions: []scrutineerv1alpha1.PolicyDecision{decisionAt(0)},
+	})
+	if got := session.Status.Usage.NetworkRequests; got != int64(total)+1 {
+		t.Fatalf("networkRequests after evicted re-delivery = %d, want %d (documented over-count)", got, int64(total)+1)
+	}
+}
+
 func TestApplyRuntimePolicyReport_incrementsToolUsageFromNovelDecision(t *testing.T) {
 	ts := metav1.NewTime(time.Unix(1_700_000_001, 0))
 	session := &scrutineerv1alpha1.AgentSession{}
