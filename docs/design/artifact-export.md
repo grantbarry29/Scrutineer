@@ -69,6 +69,7 @@ Filed in the order they should land (API shape → reconciler behavior → lifte
 2. **#118 — `internal/export`: exporter interface + S3 backend + manager config + reconciler wiring**: export replaces in-cluster storage for successfully exported artifacts; fallback + warning event on failure; URIs/digests in status → `make test` (S3 stub via httptest; client library decided here — lean `minio-go` for dependency weight, `aws-sdk-go-v2` acceptable if IRSA ergonomics demand it).
 3. **#119 — streaming collection + lifted export cap + truncation marking**: exec/logs stream straight to the uploader (no full in-memory buffer), full log re-requested without `LimitBytes`, operator-configured cap (default ~100MiB), truncation recorded on the ref, mid-stream source failure aborts the upload (no object, fall back) → `make test` with a >512KiB artifact.
 4. **#120 — e2e: MinIO-backed export in kind**: MinIO deployed in the e2e cluster, manager configured against it, a real session's exported object fetched and its digest checked against `status.artifacts` → `make test-e2e`.
+5. **#122 — quickstart demo**: MinIO as its own pod + Service in the quickstart cluster, exporter configured, a demo session's exported artifact fetched and digest-verified by hand — the guide shows the commonly-used configuration working, not just its flags → `make quickstart && make demo`.
 
 Related coverage gap found during this investigation (independent of #2): the MVP collection paths themselves have no path-level tests — #121.
 
