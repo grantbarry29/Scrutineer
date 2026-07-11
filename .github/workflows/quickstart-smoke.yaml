@@ -58,6 +58,11 @@ jobs:
       - name: Demo (enforced vs audit-only egress governance)
         run: make demo
 
+      # Post-mortem before the cluster (and its logs/events) vanish with the runner (#110).
+      - name: Dump cluster diagnostics
+        if: failure()
+        run: hack/ci-dump-diagnostics.sh
+
       - name: Tear down
         if: always()
         run: |

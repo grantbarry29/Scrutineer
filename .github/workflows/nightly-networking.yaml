@@ -55,6 +55,11 @@ jobs:
       - name: Run networking e2e suite
         run: make test-e2e-net
 
+      # Post-mortem before the cluster (and its logs/events) vanish with the runner (#110).
+      - name: Dump cluster diagnostics
+        if: failure()
+        run: hack/ci-dump-diagnostics.sh
+
   dual-stack:
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -85,3 +90,8 @@ jobs:
 
       - name: Run networking e2e suite
         run: make test-e2e-net
+
+      # Post-mortem before the cluster (and its logs/events) vanish with the runner (#110).
+      - name: Dump cluster diagnostics
+        if: failure()
+        run: hack/ci-dump-diagnostics.sh

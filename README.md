@@ -658,7 +658,10 @@ workflows — **E2E** (standard + kindnet networking enforcement suite) and
 changes (#86). Nightly (+ manual dispatch): **Nightly Networking** cross-checks the
 enforcement suite on Calico and a dual-stack cluster (#93). All cluster jobs build
 the first-party images from the checkout under test — never registry pulls, which
-can silently predate the checkout's behavior (#109).
+can silently predate the checkout's behavior (#109). On failure, every cluster job
+dumps post-mortem diagnostics (controller logs, pods, events, AgentSession
+describes, proxy/agent pod logs) into the job log before the cluster vanishes with
+the runner (`hack/ci-dump-diagnostics.sh`, #110).
 
 ## Developing with the dev container (recommended for contributors)
 

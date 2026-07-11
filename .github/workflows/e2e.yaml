@@ -52,6 +52,11 @@ jobs:
       - name: Run e2e tests
         run: make test-e2e
 
+      # Post-mortem before the cluster (and its logs/events) vanish with the runner (#110).
+      - name: Dump cluster diagnostics
+        if: failure()
+        run: hack/ci-dump-diagnostics.sh
+
   # Networking enforcement suite (#91): routing lock, Envoy RBAC, observed evidence,
   # lock-gate differential — the product's core guarantee, per-push on the kindnet
   # flavor (runner-hosted kindnetd enforces egress NetworkPolicy; proven by the
@@ -88,3 +93,8 @@ jobs:
 
       - name: Run networking e2e suite
         run: make test-e2e-net
+
+      # Post-mortem before the cluster (and its logs/events) vanish with the runner (#110).
+      - name: Dump cluster diagnostics
+        if: failure()
+        run: hack/ci-dump-diagnostics.sh
