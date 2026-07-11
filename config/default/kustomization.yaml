@@ -5,6 +5,9 @@ namePrefix: ""
 commonLabels:
   app.kubernetes.io/name: scrutineer
 
+# Base install: CRDs + RBAC + manager only. Webhook and cert-manager overlays are opt-in,
+# kept out of the default to avoid a hard cert-manager dependency. A production Helm chart /
+# improved kustomize overlays (values-driven install, webhook + cert-manager toggles) → #5.
 resources:
 - ../crd
 - ../rbac
