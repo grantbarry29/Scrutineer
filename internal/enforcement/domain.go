@@ -12,6 +12,7 @@ package enforcement
 
 import (
 	"fmt"
+	"net/netip"
 	"strings"
 	"unicode"
 
@@ -80,6 +81,12 @@ func ValidateDomainPattern(pattern string) error {
 	}
 	if strings.ContainsRune(rest, '*') {
 		return fmt.Errorf("domain pattern %q: wildcard \"*\" is only supported as a single leading \"*.\"", p)
+	}
+	// One home per concept (#125): an IPv4 literal is a CIDR rule, not a domain rule —
+	// the two match differently (containment vs labels), so accepting it here would
+	// split one address across two grammars.
+	if a, err := netip.ParseAddr(rest); err == nil && a.Is4() {
+		return fmt.Errorf("domain pattern %q is an IPv4 address; IP and CIDR egress rules belong in allowedCIDRs/deniedCIDRs", p)
 	}
 	for _, label := range strings.Split(rest, ".") {
 		if label == "" {

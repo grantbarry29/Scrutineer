@@ -141,3 +141,39 @@ func TestLoadPolicyLayers_rejectsHostileDomainPatterns(t *testing.T) {
 		}
 	}
 }
+
+// #125: a referenced AgentPolicy carrying an invalid CIDR pattern must fail the load
+// (→ session Denied with InvalidPolicy) before the pattern ever reaches the Envoy
+// bootstrap YAML or the CSV env, exactly like hostile domain patterns (#103).
+func TestLoadPolicyLayers_rejectsInvalidCIDRPatterns(t *testing.T) {
+	s := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(s)
+	_ = scrutineerv1alpha1.AddToScheme(s)
+
+	ap := &scrutineerv1alpha1.AgentPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "bad-cidr", Namespace: "ns"},
+		Spec: scrutineerv1alpha1.AgentPolicySpec{
+			Mode: scrutineerv1alpha1.PolicyModeEnforced,
+			PolicyRules: scrutineerv1alpha1.PolicyRules{
+				AllowedCIDRs: []string{"10.0.0.0/8", "10.1.2.3/8"},
+			},
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(ap).Build()
+
+	session := &scrutineerv1alpha1.AgentSession{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "sess"},
+		Spec: scrutineerv1alpha1.AgentSessionSpec{
+			PolicyRefs: []scrutineerv1alpha1.PolicyRef{{Name: "bad-cidr"}},
+		},
+	}
+	_, err := LoadPolicyLayers(context.Background(), cl, session)
+	if err == nil {
+		t.Fatal("expected invalid CIDR pattern in referenced AgentPolicy to fail the load")
+	}
+	for _, want := range []string{`AgentPolicy "bad-cidr"`, "allowedCIDRs[1]", "10.1.2.3/8"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q must contain %q", err.Error(), want)
+		}
+	}
+}

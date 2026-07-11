@@ -28,23 +28,27 @@ const (
 	EnvPolicyMode           = "AGENT_POLICY_MODE"
 	EnvPolicyAllowedDomains = "AGENT_POLICY_ALLOWED_DOMAINS"
 	EnvPolicyDeniedDomains  = "AGENT_POLICY_DENIED_DOMAINS"
+	EnvPolicyAllowedCIDRs   = "AGENT_POLICY_ALLOWED_CIDRS"
+	EnvPolicyDeniedCIDRs    = "AGENT_POLICY_DENIED_CIDRS"
 )
 
-// PolicyFromEnv loads the effective FQDN policy the egress-reporter classifies observed
-// authorities against (#32).
+// PolicyFromEnv loads the effective egress policy the egress-reporter classifies
+// observed authorities against (#32 FQDN, #125 CIDR).
 func PolicyFromEnv() EgressPolicy {
 	return EgressPolicy{
 		Enforce:        os.Getenv(EnvPolicyMode) == string(scrutineerv1alpha1.PolicyModeEnforced),
 		AllowedDomains: containerenv.SplitCSV(os.Getenv(EnvPolicyAllowedDomains)),
 		DeniedDomains:  containerenv.SplitCSV(os.Getenv(EnvPolicyDeniedDomains)),
+		AllowedCIDRs:   containerenv.SplitCSV(os.Getenv(EnvPolicyAllowedCIDRs)),
+		DeniedCIDRs:    containerenv.SplitCSV(os.Getenv(EnvPolicyDeniedCIDRs)),
 	}
 }
 
-// policyEnv renders the FQDN-policy env vars for the egress-reporter container from a
+// policyEnv renders the egress-policy env vars for the egress-reporter container from a
 // BootstrapConfig (the same source that drives the Envoy RBAC), so enforcement and
 // evidence classification always see the same policy.
 //
-// Precondition (#103): patterns passed the shared enforcement.ValidateDomainPattern at
+// Precondition (#103/#125): patterns passed the shared enforcement validators at
 // reconcile time. The comma join round-trips through containerenv.SplitCSV — an
 // unvalidated pattern containing a comma would silently split into two different
 // patterns on the evidence side only, making evidence disagree with enforcement.
@@ -57,5 +61,7 @@ func policyEnv(cfg BootstrapConfig) []corev1.EnvVar {
 		{Name: EnvPolicyMode, Value: mode},
 		{Name: EnvPolicyAllowedDomains, Value: strings.Join(cfg.AllowedDomains, ",")},
 		{Name: EnvPolicyDeniedDomains, Value: strings.Join(cfg.DeniedDomains, ",")},
+		{Name: EnvPolicyAllowedCIDRs, Value: strings.Join(cfg.AllowedCIDRs, ",")},
+		{Name: EnvPolicyDeniedCIDRs, Value: strings.Join(cfg.DeniedCIDRs, ",")},
 	}
 }

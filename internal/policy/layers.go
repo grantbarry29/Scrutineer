@@ -59,10 +59,14 @@ func loadAgentPolicy(ctx context.Context, c client.Reader, namespace, name strin
 		}
 		return Layer{}, fmt.Errorf("spec.policyRefs: get AgentPolicy %q: %w", name, err)
 	}
-	// Referenced FQDN patterns get the same reconcile-time validation as inline ones
-	// (agentsession validateSpec): a hostile character must deny the session with a
-	// clear message, never reach the Envoy bootstrap YAML or the CSV env (#103).
+	// Referenced FQDN and CIDR patterns get the same reconcile-time validation as
+	// inline ones (agentsession validateSpec): a hostile character must deny the
+	// session with a clear message, never reach the Envoy bootstrap YAML or the CSV
+	// env (#103, #125).
 	if err := enforcement.ValidateDomainRules(ap.Spec.PolicyRules); err != nil {
+		return Layer{}, fmt.Errorf("AgentPolicy %q: %w", name, err)
+	}
+	if err := enforcement.ValidateCIDRRules(ap.Spec.PolicyRules); err != nil {
 		return Layer{}, fmt.Errorf("AgentPolicy %q: %w", name, err)
 	}
 	return Layer{

@@ -173,11 +173,27 @@ we never claim more than these boundaries support. (Design:
 - **The agent pod is unprivileged** (`drop ALL`, `seccomp: RuntimeDefault`, no
   `CAP_NET_ADMIN`) and **the node/CNI is not compromised** — node-level escape is a
   higher threat tier, explicitly out of scope.
-- **Coverage is HTTP/S + client-`CONNECT`-tunneled TCP.** Proxy-unaware or raw non-HTTP
-  tools **fail closed** (no leak; they need proxy config or the future transparent
-  node interceptor, [#64](https://github.com/grantbarry29/scrutineer/issues/64)). FQDN
-  matching is **host-level** (SNI/`:authority`) — HTTPS is CONNECT-tunnelled, so there is
-  no path/method matching.
+- **Coverage is HTTP/S + client-`CONNECT`-tunneled TCP.** Standard tooling honors the
+  injected proxy env; non-HTTP TCP (databases, SSH, custom TCP) is reachable by tunnelling
+  it over `CONNECT` to the same proxy — same FQDN policy, same routing lock, `observed`
+  evidence ([how-to](docs/egress-non-http.md)). Only proxy/`CONNECT`-**oblivious** tools
+  (honor no proxy config, can't be wrapped) **fail closed** (no leak; they wait for the
+  transparent node interceptor, [#64](https://github.com/grantbarry29/scrutineer/issues/64)).
+  FQDN matching is **host-level** (SNI/`:authority`) — HTTPS and tunnelled TCP are both
+  CONNECT-opaque, so there is no path/method or payload matching.
+- **IP/CIDR policy covers canonical IP-literal dials only.** `allowedCIDRs`/`deniedCIDRs`
+  are enforced at the same proxy chokepoint
+  ([#125](https://github.com/grantbarry29/scrutineer/issues/125)) by matching the request
+  authority when it is a canonical IPv4 literal (e.g. `CONNECT 10.2.3.4:5432`). A hostname
+  that *resolves into* a range is **not** matched — govern hostnames with the domain
+  fields; resolved-address enforcement is a separate future design. The **robust** control
+  is an **allow-list** (default-deny — any authority that isn't a recognized in-range
+  literal is denied); a **deny-list** matches canonical spellings best-effort (a
+  leading-zero form like `010.2.3.4` can still resolve), so lean on allow-lists, and note
+  that cloud metadata is denied by resolved IP at the kernel backstop regardless of
+  spelling. IPv6 egress is denied by construction
+  ([#66](https://github.com/grantbarry29/scrutineer/issues/66) posture); under any
+  allow-list a request must match the domain allow-list **or** the CIDR allow-list.
 - **`observed` means "independent of the agent," not "tamper-proof."** It is only as
   strong as the assumptions above.
 
@@ -954,9 +970,12 @@ blueprints) remain future work.
   the default-deny routing lock (kindnet + Calico), identity-authenticated `observed`
   egress evidence, and **FQDN allow/deny enforced at the proxy**
   ([#32](https://github.com/grantbarry29/scrutineer/issues/32)) are in place; agents can't
-  bypass egress or forge its record (under the documented assumptions). Next in this area:
-  a transparent node interceptor ([#64](https://github.com/grantbarry29/scrutineer/issues/64))
-  for non-HTTP protocols.
+  bypass egress or forge its record (under the documented assumptions). Non-HTTP TCP is
+  reachable today by tunnelling over `CONNECT` ([how-to](docs/egress-non-http.md)); next in
+  this area is a transparent node interceptor
+  ([#64](https://github.com/grantbarry29/scrutineer/issues/64)) for the residue client
+  cooperation can't cover — proxy-oblivious raw L4, an unforgeable node-observed
+  destination, and bypass-*attempt* evidence.
 - **Phase 6 — orchestrator adapters.** The backend-neutral `runtimeBackend`
   interface, `status.runtimeRef`, and a second in-tree backend (`kubernetes-pod`)
   have shipped, proving Scrutineer is orchestrator-agnostic. Next is the external

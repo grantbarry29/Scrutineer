@@ -55,11 +55,15 @@ func validateSpec(session *scrutineerv1alpha1.AgentSession) error {
 	if err := validateRuntimeProfileRef(spec.RuntimeProfileRef); err != nil {
 		return err
 	}
-	// Inline FQDN patterns feed the Envoy bootstrap YAML, the AGENT_POLICY_* CSV env,
-	// and MatchDomain — a hostile character must become a clear Denied here, not a
-	// crashlooping proxy or an evidence/enforcement divergence (#103). Referenced
-	// AgentPolicy rules get the same check at load time (internal/policy/layers.go).
+	// Inline FQDN and CIDR patterns feed the Envoy bootstrap YAML, the AGENT_POLICY_*
+	// CSV env, and the shared matchers — a hostile character must become a clear Denied
+	// here, not a crashlooping proxy or an evidence/enforcement divergence (#103, #125).
+	// Referenced AgentPolicy rules get the same checks at load time
+	// (internal/policy/layers.go).
 	if err := enforcement.ValidateDomainRules(spec.Policy.PolicyRules); err != nil {
+		return fmt.Errorf("spec.policy: %w", err)
+	}
+	if err := enforcement.ValidateCIDRRules(spec.Policy.PolicyRules); err != nil {
 		return fmt.Errorf("spec.policy: %w", err)
 	}
 

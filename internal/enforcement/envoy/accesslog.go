@@ -76,32 +76,55 @@ func ParseAccessLogLine(line []byte) (AccessLogEntry, error) {
 }
 
 // Evidence reason codes for egress decisions, shared by evidence classification and
-// status filtering.
+// status filtering. The three not-allowed reasons name the allow-lists that were
+// actually consulted, so a record is honest about why the union rejected the authority.
 const (
 	ReasonEgressObserved      = "EgressObserved"
 	ReasonDeniedDomains       = "DeniedDomains"
+	ReasonDeniedCIDRs         = "DeniedCIDRs"
 	ReasonNotInAllowedDomains = "NotInAllowedDomains"
+	ReasonNotInAllowedCIDRs   = "NotInAllowedCIDRs"
+	ReasonNotInAllowlists     = "NotInAllowlists"
 )
 
-// EgressPolicy is the effective FQDN policy the egress-reporter classifies observed
-// authorities against. It mirrors the Envoy RBAC (same enforcement.MatchDomain semantics),
-// so evidence and enforcement always agree. Enforce reflects enforced mode: a would-be
+// EgressPolicy is the effective egress policy the egress-reporter classifies observed
+// authorities against. It mirrors the Envoy RBAC (same enforcement.MatchDomain /
+// enforcement.MatchIPCIDR semantics, same deny-before-allow order, same allow-union), so
+// evidence and enforcement always agree. Enforce reflects enforced mode: a would-be
 // denial is recorded as Deny when enforcing (Envoy also blocked it) or DryRun in audit
 // mode (Envoy let it through). An empty policy classifies everything as allow.
 type EgressPolicy struct {
 	Enforce        bool
 	AllowedDomains []string
 	DeniedDomains  []string
+	AllowedCIDRs   []string
+	DeniedCIDRs    []string
 }
 
 // classify returns the action + reason for an observed authority under this policy.
-// Deny wins over allow-list, matching the RBAC filter order.
+// Deny wins over allow-list, matching the RBAC filter order; when any allow-list exists
+// the authority must match the domain allow-list OR the CIDR allow-list (the same union
+// the single ALLOW filter enforces). CIDR entries match only IPv4-literal authorities
+// (#125) — under a CIDR-only allow-list, hostname dials are therefore denied.
 func (p EgressPolicy) classify(authority string) (scrutineerv1alpha1.PolicyDecisionAction, string) {
 	if enforcement.MatchDomain(p.DeniedDomains, authority) {
 		return p.deniedAction(), ReasonDeniedDomains
 	}
-	if len(p.AllowedDomains) > 0 && !enforcement.MatchDomain(p.AllowedDomains, authority) {
-		return p.deniedAction(), ReasonNotInAllowedDomains
+	if enforcement.MatchIPCIDR(p.DeniedCIDRs, authority) {
+		return p.deniedAction(), ReasonDeniedCIDRs
+	}
+	hasDomainAllow, hasCIDRAllow := len(p.AllowedDomains) > 0, len(p.AllowedCIDRs) > 0
+	if (hasDomainAllow || hasCIDRAllow) &&
+		!enforcement.MatchDomain(p.AllowedDomains, authority) &&
+		!enforcement.MatchIPCIDR(p.AllowedCIDRs, authority) {
+		switch {
+		case hasDomainAllow && hasCIDRAllow:
+			return p.deniedAction(), ReasonNotInAllowlists
+		case hasCIDRAllow:
+			return p.deniedAction(), ReasonNotInAllowedCIDRs
+		default:
+			return p.deniedAction(), ReasonNotInAllowedDomains
+		}
 	}
 	return scrutineerv1alpha1.PolicyDecisionAllow, ReasonEgressObserved
 }

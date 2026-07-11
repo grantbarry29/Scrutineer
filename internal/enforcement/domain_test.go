@@ -111,6 +111,29 @@ func TestValidateDomainPattern(t *testing.T) {
 	}
 }
 
+// #125, one home per concept: an IPv4 literal in a domain field is rejected with a
+// pointer at the CIDR fields — otherwise the same address would be a domain rule in one
+// field and a CIDR rule in another, with subtly different matching (pre-launch clean
+// break; precedent #65/#75).
+func TestValidateDomainPattern_rejectsIPv4Literals(t *testing.T) {
+	for _, p := range []string{"203.0.113.5", "10.0.0.0", "*.10.2.3.4"} {
+		err := ValidateDomainPattern(p)
+		if err == nil {
+			t.Errorf("ValidateDomainPattern(%q) = nil, want an error pointing at the CIDR fields", p)
+			continue
+		}
+		if !strings.Contains(err.Error(), "CIDR") {
+			t.Errorf("ValidateDomainPattern(%q) = %q, want it to mention the CIDR fields", p, err.Error())
+		}
+	}
+	// Hostnames that merely embed an IP stay valid domains.
+	for _, p := range []string{"1.2.3.4.example.com", "10-0-0-1.k8s.example"} {
+		if err := ValidateDomainPattern(p); err != nil {
+			t.Errorf("ValidateDomainPattern(%q) = %v, want nil", p, err)
+		}
+	}
+}
+
 // ValidateDomainRules attributes the failing entry by field and index so the session's
 // Denied message points at the exact value.
 func TestValidateDomainRules(t *testing.T) {

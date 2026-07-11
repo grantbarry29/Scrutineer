@@ -141,12 +141,32 @@ type PolicyRules struct {
 	// +kubebuilder:validation:items:Pattern=`^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`
 	DeniedDomains []string `json:"deniedDomains,omitempty"`
 
-	// AllowedCIDRs is an IP/CIDR allowlist for outbound network access.
+	// AllowedCIDRs is an IPv4/CIDR allowlist for outbound network access. Entries are a
+	// canonical dotted-quad ("203.0.113.5", an exact address) or a masked IPv4 CIDR
+	// ("10.0.0.0/8"); IPv6 is not supported (the egress path is IPv4-only, #66). The CRD
+	// pattern is the apply-time line of defense; the stricter shared validator is
+	// enforcement.ValidateCIDRPattern (reconcile-time, also rejects unmasked and
+	// non-canonical forms) — keep the two in sync.
+	//
+	// When the Envoy egress chokepoint is enabled, these entries are enforced AT THE
+	// PROXY as authority matching (#125): they police CANONICAL IPv4-LITERAL DIALS ONLY —
+	// a CONNECT or Host authority that is a canonical dotted-quad. A hostname that merely
+	// *resolves* to an address in (or outside) these ranges is matched by the domain
+	// fields, never by CIDRs; resolved-address enforcement is a separate future design.
+	// The robust control is an ALLOW-list (default-deny); a DENY-list matches canonical
+	// spellings best-effort (a leading-zero form can still resolve). On the legacy
+	// non-Envoy path these entries render a coarse NetworkPolicy instead (enforced mode
+	// only).
 	// +optional
+	// +kubebuilder:validation:items:MaxLength=18
+	// +kubebuilder:validation:items:Pattern=`^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$`
 	AllowedCIDRs []string `json:"allowedCIDRs,omitempty"`
 
-	// DeniedCIDRs is an IP/CIDR denylist for outbound network access.
+	// DeniedCIDRs is an IPv4/CIDR denylist for outbound network access. Same entry
+	// contract, enforcement point, and IP-literal-only limitation as AllowedCIDRs.
 	// +optional
+	// +kubebuilder:validation:items:MaxLength=18
+	// +kubebuilder:validation:items:Pattern=`^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$`
 	DeniedCIDRs []string `json:"deniedCIDRs,omitempty"`
 
 	// RequireHumanApproval lists action types that require human approval before execution.

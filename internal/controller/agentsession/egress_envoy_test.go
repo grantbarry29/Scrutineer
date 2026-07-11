@@ -372,6 +372,32 @@ var _ = Describe("Per-session Envoy egress proxy", func() {
 	})
 })
 
+// #125: the Envoy bootstrap must carry the session's effective CIDR policy alongside the
+// FQDN policy, or allowedCIDRs/deniedCIDRs would stay silently inert at the chokepoint.
+var _ = Describe("egressBootstrapConfig", func() {
+	It("passes the effective CIDR lists into the bootstrap", func() {
+		session := &scrutineerv1alpha1.AgentSession{
+			Status: scrutineerv1alpha1.AgentSessionStatus{
+				EffectivePolicy: &scrutineerv1alpha1.EffectivePolicyStatus{
+					Mode: scrutineerv1alpha1.PolicyModeEnforced,
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
+						AllowedDomains: []string{"good.example"},
+						DeniedDomains:  []string{"evil.example"},
+						AllowedCIDRs:   []string{"203.0.113.0/24"},
+						DeniedCIDRs:    []string{"10.0.0.0/8"},
+					},
+				},
+			},
+		}
+		cfg := egressBootstrapConfig(session)
+		Expect(cfg.Enforce).To(BeTrue())
+		Expect(cfg.AllowedCIDRs).To(Equal([]string{"203.0.113.0/24"}))
+		Expect(cfg.DeniedCIDRs).To(Equal([]string{"10.0.0.0/8"}))
+		Expect(cfg.AllowedDomains).To(Equal([]string{"good.example"}))
+		Expect(cfg.DeniedDomains).To(Equal([]string{"evil.example"}))
+	})
+})
+
 // gone reports NotFound, or (in envtest, where GC does not run) an object already marked
 // for deletion.
 func gone(err error, obj metav1.Object) bool {

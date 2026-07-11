@@ -13,10 +13,13 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
   shared emptyDir written by the Envoy bootstrap) every 2s, parses JSON lines
   (`envoy.ParseAccessLogLine`), and POSTs batches (≤128) of `type: network` runtime
   decisions to `POST /v1/report`.
-- Classifies each observed authority against the effective FQDN policy (`AGENT_POLICY_*`
-  env, shared `enforcement.MatchDomain`), so decisions carry allow / deny (enforced) /
-  dry-run (audit) + reason — the same policy the Envoy RBAC enforces, so evidence and
-  enforcement agree (#32).
+- Classifies each observed authority against the effective egress policy from the
+  `AGENT_POLICY_*` env: FQDN rules via the shared `enforcement.MatchDomain` (#32), and
+  IPv4/CIDR rules — matched only when the authority is an IPv4 literal — via
+  `enforcement.MatchIPCIDR` (#125). Deny order is deniedDomains → deniedCIDRs, then the
+  allow-union (allowed by the domain list OR the CIDR list; default-deny when any
+  allow-list exists). Decisions carry allow / deny (enforced) / dry-run (audit) +
+  reason — the same policy the Envoy RBAC enforces, so evidence and enforcement agree.
 - Delivery is **at-least-once**: offsets are in-memory, so a restart re-reads the file;
   the controller's status merge dedups (times are pinned from Envoy's `%START_TIME%`).
   Reads are chunk-bounded (256KiB) and gated on delivery (#97): a backlog — restart
@@ -68,6 +71,7 @@ agent's trust domain and is stamped **`observed`** by the reporter (Slice C,
 | `SCRUTINEER_ROTATE_AFTER_BYTES` | Optional access-log rotation threshold (#98); defaults to 64Mi (`envoy.DefaultRotateAfterBytes`); set per-pod by the controller from the manager env `SCRUTINEER_EGRESS_ROTATE_AFTER_BYTES` |
 | `AGENT_POLICY_MODE` | `enforced` ⇒ denials classified `deny`; otherwise `dry-run` |
 | `AGENT_POLICY_ALLOWED_DOMAINS` / `AGENT_POLICY_DENIED_DOMAINS` | CSV FQDN policy (exact or `*.` wildcard) classified per observed authority |
+| `AGENT_POLICY_ALLOWED_CIDRS` / `AGENT_POLICY_DENIED_CIDRS` | CSV IPv4/CIDR policy (#125), matched only against IPv4-literal authorities |
 
 ## Operability
 

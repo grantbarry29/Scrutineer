@@ -144,6 +144,71 @@ func TestDecision_classifiesAgainstPolicy(t *testing.T) {
 	}
 }
 
+// #125: CIDR rules classify IPv4-literal authorities with the same order the RBAC filter
+// chain enforces — deniedDomains, then deniedCIDRs, then the allow-union (a request is
+// allowed when its authority matches the domain allow-list OR the CIDR allow-list;
+// default-deny when any allow-list exists). The not-allowed reason names the lists that
+// were actually consulted.
+func TestDecision_classifiesCIDRs(t *testing.T) {
+	entry := func(authority string) AccessLogEntry {
+		return AccessLogEntry{Method: "CONNECT", Authority: authority, ResponseCode: 200, StartTime: "2026-07-01T05:00:00.000Z"}
+	}
+	type want struct {
+		action scrutineerv1alpha1.PolicyDecisionAction
+		reason string
+	}
+	check := func(name string, p EgressPolicy, authority string, w want) {
+		t.Helper()
+		d := entry(authority).Decision(p)
+		if d.Action != w.action || d.Reason != w.reason {
+			t.Errorf("%s: %q got action=%s reason=%s, want %s/%s", name, authority, d.Action, d.Reason, w.action, w.reason)
+		}
+	}
+
+	deny := scrutineerv1alpha1.PolicyDecisionDeny
+	allow := scrutineerv1alpha1.PolicyDecisionAllow
+	dryRun := scrutineerv1alpha1.PolicyDecisionDryRun
+
+	// Enforced deny-list of CIDRs: an in-range IP literal is denied; others flow.
+	denied := EgressPolicy{Enforce: true, DeniedCIDRs: []string{"10.0.0.0/8"}}
+	check("cidr deny", denied, "10.2.3.4:5432", want{deny, ReasonDeniedCIDRs})
+	check("cidr deny no port", denied, "10.2.3.4", want{deny, ReasonDeniedCIDRs})
+	check("outside cidr flows", denied, "11.0.0.1:443", want{allow, ReasonEgressObserved})
+	check("hostname unaffected by cidr deny", denied, "good.example:443", want{allow, ReasonEgressObserved})
+
+	// Audit mode: the would-be CIDR denial is recorded as dry-run, like FQDN.
+	audit := EgressPolicy{Enforce: false, DeniedCIDRs: []string{"10.0.0.0/8"}}
+	check("cidr dry-run", audit, "10.2.3.4:5432", want{dryRun, ReasonDeniedCIDRs})
+
+	// Deny order: deniedDomains fires before deniedCIDRs; deniedCIDRs beats the allow-union.
+	ordered := EgressPolicy{
+		Enforce:       true,
+		DeniedDomains: []string{"bad.example"},
+		DeniedCIDRs:   []string{"10.0.0.0/8"},
+		AllowedCIDRs:  []string{"10.0.0.0/8"},
+	}
+	check("domain deny first", ordered, "bad.example:443", want{deny, ReasonDeniedDomains})
+	check("cidr deny beats cidr allow", ordered, "10.1.1.1:443", want{deny, ReasonDeniedCIDRs})
+
+	// Union allow: hostname allowed by domains and IP allowed by CIDRs coexist; anything
+	// in neither list is denied with the union reason.
+	union := EgressPolicy{Enforce: true, AllowedDomains: []string{"good.example"}, AllowedCIDRs: []string{"203.0.113.0/24"}}
+	check("union domain allow", union, "good.example:443", want{allow, ReasonEgressObserved})
+	check("union cidr allow", union, "203.0.113.9:5432", want{allow, ReasonEgressObserved})
+	check("union default-deny hostname", union, "other.example:443", want{deny, ReasonNotInAllowlists})
+	check("union default-deny ip", union, "198.51.100.1:443", want{deny, ReasonNotInAllowlists})
+
+	// CIDR-only allow-list: hostname dials are default-denied (they can never match a
+	// CIDR), with a reason naming the only allow-list that exists.
+	cidrOnly := EgressPolicy{Enforce: true, AllowedCIDRs: []string{"203.0.113.0/24"}}
+	check("cidr-only allow ip", cidrOnly, "203.0.113.9:5432", want{allow, ReasonEgressObserved})
+	check("cidr-only denies hostnames", cidrOnly, "good.example:443", want{deny, ReasonNotInAllowedCIDRs})
+
+	// Domain-only allow-list keeps its existing reason (no behavior change without CIDRs).
+	domainOnly := EgressPolicy{Enforce: true, AllowedDomains: []string{"good.example"}}
+	check("domain-only reason unchanged", domainOnly, "other.example:443", want{deny, ReasonNotInAllowedDomains})
+}
+
 func TestParseAccessLogLine_httpAndUpstreamFailure(t *testing.T) {
 	// Plain-HTTP forward proxying with an upstream connection failure: still observed
 	// egress *intent* — recorded with the response detail in the message.

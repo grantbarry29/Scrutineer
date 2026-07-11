@@ -87,9 +87,10 @@ func (b explicitProxyEgressBackend) desiredObjects(session *scrutineerv1alpha1.A
 	}
 }
 
-// egressBootstrapConfig derives the Envoy bootstrap FQDN policy from the session's
-// effective policy in status. Enforcement is on only in enforced mode; audit/dry-run leave
-// Envoy forwarding freely (the egress-reporter records would-be-denials as dry-run, #32).
+// egressBootstrapConfig derives the Envoy bootstrap egress policy (FQDN #32, CIDR #125)
+// from the session's effective policy in status. Enforcement is on only in enforced
+// mode; audit/dry-run leave Envoy forwarding freely (the egress-reporter records
+// would-be-denials as dry-run).
 func egressBootstrapConfig(session *scrutineerv1alpha1.AgentSession) envoy.BootstrapConfig {
 	cfg := envoy.BootstrapConfig{}
 	ep := session.Status.EffectivePolicy
@@ -99,6 +100,8 @@ func egressBootstrapConfig(session *scrutineerv1alpha1.AgentSession) envoy.Boots
 	cfg.Enforce = ep.Mode == scrutineerv1alpha1.PolicyModeEnforced
 	cfg.AllowedDomains = ep.PolicyRules.AllowedDomains
 	cfg.DeniedDomains = ep.PolicyRules.DeniedDomains
+	cfg.AllowedCIDRs = ep.PolicyRules.AllowedCIDRs
+	cfg.DeniedCIDRs = ep.PolicyRules.DeniedCIDRs
 	return cfg
 }
 

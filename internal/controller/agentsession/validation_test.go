@@ -156,6 +156,66 @@ var _ = Describe("validateSpec", func() {
 		)))
 	})
 
+	// #125: CIDR patterns feed the same carriers as domain patterns (Envoy bootstrap
+	// YAML regex, CSV env, MatchIPCIDR) — non-canonical or IPv6 entries must become a
+	// clear Denied here, and an IPv4 literal in a domain field must point at the CIDR
+	// fields (one home per concept).
+	It("rejects non-canonical inline CIDR patterns", func() {
+		session := &scrutineerv1alpha1.AgentSession{
+			Spec: scrutineerv1alpha1.AgentSessionSpec{
+				Task:    scrutineerv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   scrutineerv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime: scrutineerv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				Policy: scrutineerv1alpha1.InlinePolicySpec{
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
+						DeniedCIDRs: []string{"10.0.0.0/8", "fd00::/8"},
+					},
+				},
+			},
+		}
+		Expect(validateSpec(session)).To(MatchError(SatisfyAll(
+			ContainSubstring("spec.policy"),
+			ContainSubstring("deniedCIDRs[1]"),
+			ContainSubstring("fd00::/8"),
+		)))
+	})
+
+	It("rejects an IPv4 literal in the domain fields, pointing at the CIDR fields", func() {
+		session := &scrutineerv1alpha1.AgentSession{
+			Spec: scrutineerv1alpha1.AgentSessionSpec{
+				Task:    scrutineerv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   scrutineerv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime: scrutineerv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				Policy: scrutineerv1alpha1.InlinePolicySpec{
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
+						DeniedDomains: []string{"203.0.113.5"},
+					},
+				},
+			},
+		}
+		Expect(validateSpec(session)).To(MatchError(SatisfyAll(
+			ContainSubstring("deniedDomains[0]"),
+			ContainSubstring("CIDR"),
+		)))
+	})
+
+	It("accepts valid inline CIDR patterns", func() {
+		session := &scrutineerv1alpha1.AgentSession{
+			Spec: scrutineerv1alpha1.AgentSessionSpec{
+				Task:    scrutineerv1alpha1.SessionTaskSpec{Prompt: "hi"},
+				Model:   scrutineerv1alpha1.ModelSpec{Provider: "openai", Name: "gpt-4"},
+				Runtime: scrutineerv1alpha1.RuntimeSpec{Image: "busybox:latest"},
+				Policy: scrutineerv1alpha1.InlinePolicySpec{
+					PolicyRules: scrutineerv1alpha1.PolicyRules{
+						AllowedCIDRs: []string{"203.0.113.5", "10.0.0.0/8"},
+						DeniedCIDRs:  []string{"169.254.0.0/16"},
+					},
+				},
+			},
+		}
+		Expect(validateSpec(session)).To(Succeed())
+	})
+
 	It("accepts valid inline domain patterns", func() {
 		session := &scrutineerv1alpha1.AgentSession{
 			Spec: scrutineerv1alpha1.AgentSessionSpec{
