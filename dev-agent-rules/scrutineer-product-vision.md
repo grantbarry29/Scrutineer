@@ -42,14 +42,6 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 - Audit and evidence are first-class outputs. Scrutineer should explain who authorized a run, what identity acted, what policy matched, what was allowed or denied, what changed, and what runtime evidence was observed.
 - Observed evidence should carry its **assurance level**: distinguish self-reported (cooperative sidecar/agent) evidence from independently-observed (kernel, gateway, or out-of-pod) evidence so audit consumers know how much to trust each record.
 
-## Operational UI Vision
-
-- Scrutineer should eventually include a first-class operational UI for visibility, governance, auditability, runtime observability, approvals, and debugging autonomous AI systems.
-- The UI must not become a chatbot UI, ChatGPT clone, conversational frontend, or consumer AI product. It should feel closer to Kubernetes dashboards, Datadog, Grafana, Argo UI, Lens, security operations dashboards, and runtime observability platforms.
-- The UI should answer operational questions: what agents are running, what an agent is doing now, which tools/domains/files/credentials it used, which actions were blocked, why policy violations happened, what needs approval, which sessions failed, and what token/tool/network usage occurred.
-- Long-term views should include session timelines, live policy and network activity, tool governance, scoped approvals, runtime topology, audit and forensics, replayable sessions, traces, violations, usage, and historical analytics.
-- Backend APIs and controllers should be designed for future UI consumption: emit structured timestamped events, maintain normalized session state, store policy decisions and violations cleanly, keep status and conditions consistent, and model observability as a product surface.
-
 ## Design Guidance
 
 - Do not rebuild schedulers, workflow engines, container runtimes, or generic agent frameworks.
@@ -59,6 +51,7 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 - Preserve extension points for orchestrator adapters, enforcement backends, policy engines, tool-execution chokepoints, identity providers, audit sinks, and observability exporters.
 - Scrutineer should feel closer to Kubernetes, Envoy, Cilium, Istio, Vault, Boundary, and Tailscale than chatbot frameworks, prompt wrappers, or consumer AI tooling.
 - Scrutineer is evolving toward a runtime governance platform, observability platform for AI agents, secure execution control plane, and Datadog/Splunk-like product for autonomous AI systems.
+- An operational UI is a **deferred nice-to-have feature epic** (#11), not core product — see `docs/design/operational-ui.md` when (and only when) UI work is picked up; until then, keep backend events/status/observability surfaces clean enough to feed it later.
 
 ## AI Development Guidance
 

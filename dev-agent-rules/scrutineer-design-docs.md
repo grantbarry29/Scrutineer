@@ -34,6 +34,7 @@ Scrutineer keeps canonical architecture/design docs in [`docs/design/`](../docs/
 | UI timeline projection over `status.events[]` (`internal/observability`) | [`docs/design/session-timeline.md`](../docs/design/session-timeline.md) |
 | Human approval gates / `ApprovalPolicy` / `ApprovalRequest` / `requireHumanApproval` enforcement (incl. the dormant per-tool runtime-approval surface) | [`docs/design/approval-workflows.md`](../docs/design/approval-workflows.md) |
 | Observability export (Prometheus / OTel traces / OTLP audit logs) | [`docs/design/observability-export.md`](../docs/design/observability-export.md) |
+| Operational UI (deferred epic #11 — dashboard scope, anti-chatbot guardrails) | [`docs/design/operational-ui.md`](../docs/design/operational-ui.md) |
 | Orchestrator decoupling / `RuntimeBackend` interface / orchestrator adapters (Tekton/Argo/Temporal) | [`docs/design/orchestrator-interface.md`](../docs/design/orchestrator-interface.md) |
 
 The folder index is [`docs/design/index.md`](../docs/design/index.md). For task state and roadmap use **GitHub Issues** (see `dev-agent-rules/task-management.md`); for durable technical context use these design docs / component READMEs / code comments; for how to implement use `dev-agent-rules/scrutineer-workflow.md`.

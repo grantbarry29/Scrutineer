@@ -34,11 +34,12 @@ without reading its `superseded_by` target. Authoring conventions:
 
 * [Orchestrator Backend Interface](orchestrator-interface.md) - The `runtimeBackend` interface and registry; proven by the kubernetes-job and kubernetes-pod backends.
 
-# Deferred chokepoint designs (drafts)
+# Deferred designs (drafts)
 
 * [Tools-Pod Chokepoint](tools-pod-chokepoint.md) - Out-of-pod tool governance: per-session tools pod, credential mediation, approval holds (epic #76).
 * [LLM-Gateway Chokepoint](llm-gateway-chokepoint.md) - Credential-locked gateway turning advisory `spec.model` into enforced, observed governance (epic #77).
 * [Arena Workspace](arena-workspace.md) - Out-of-pod file governance: network-POSIX per-session workspace pod (FUSE/9p analysis).
+* [Operational UI Vision](operational-ui.md) - The deferred nice-to-have UI epic (#11): governance/observability dashboard guardrails and the backend surfaces it will consume.
 
 # Investigations
 

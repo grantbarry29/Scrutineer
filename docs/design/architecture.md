@@ -349,7 +349,7 @@ Roadmap state lives in GitHub Issues / epics — see <https://github.com/grantba
 
 **Ahead:**
 
-- **Operational UI (epic #11):** governance/observability dashboard, not a chatbot.
+- **Operational UI (epic #11, deferred nice-to-have):** governance/observability dashboard, not a chatbot — see [`operational-ui.md`](operational-ui.md).
 - **Enterprise platform (epic #13):** per-session identity, CredentialProfile, multi-tenancy, HA, sandboxes.
 
 > When in doubt about where a piece of work belongs, map it to the four-state policy model (§1.2) and the control/data-plane split (§1.1), then place it under the epic whose scope it matches without violating an invariant in §9.

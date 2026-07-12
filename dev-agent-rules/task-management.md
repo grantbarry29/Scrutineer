@@ -40,15 +40,15 @@ Useful queries:
 ## Work precedence (choosing the next issue)
 
 When picking the next thing to do (and when offering next-task options), prefer the **lowest-numbered
-bucket that still has an open card**. Ship value cheaply → make it visible → deepen trust → enterprise
-→ breadth last:
+bucket that still has an open card**. Ship value cheaply → tighten confidence → deepen trust →
+enterprise → breadth → nice-to-haves last:
 
 1. **Smaller functional gaps** — cheap, adopter-facing wins.
 2. **Test-only loose ends** — tighten confidence.
-3. **Operational UI** — surface the governance value; API-first read-only MVP first (epic #11).
-4. **Runtime evidence integrity** — cooperative → adversarial trust (core thesis).
-5. **Enterprise platform** — multi-tenant identity/credentials/HA/sandboxes (epic #13).
-6. **External orchestrator adapters** — pure breadth; abstraction already proven (epic #10).
+3. **Runtime evidence integrity** — cooperative → adversarial trust (core thesis).
+4. **Enterprise platform** — multi-tenant identity/credentials/HA/sandboxes (epic #13).
+5. **External orchestrator adapters** — pure breadth; abstraction already proven (epic #10).
+6. **Operational UI** — deferred nice-to-have (epic #11); API-first read-only MVP first when picked up (`docs/design/operational-ui.md`).
 
 Within a bucket, order by `priority/*`. This ordering lives here (not in any markdown queue); revisit it
 with the user when priorities shift.
