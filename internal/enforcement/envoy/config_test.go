@@ -181,6 +181,16 @@ func TestAuthorityRegex(t *testing.T) {
 			match:    []string{"api.example.com", "a.b.example.com", "api.example.com:8443"},
 			notMatch: []string{"example.com", "example.com.evil.com"},
 		},
+		{
+			// #123: the CONNECT-tunnel escape hatch reaches non-HTTP TCP services
+			// (databases, SSH, custom TCP) on arbitrary ports. A CONNECT authority is
+			// always host:port, so the FQDN RBAC must police these by host,
+			// port-insensitively — an allow-listed host matches on its service port,
+			// while an unlisted host on the same port must not slip through.
+			patterns: []string{"db.internal"},
+			match:    []string{"db.internal", "db.internal:5432", "db.internal:22"},
+			notMatch: []string{"evil.internal:5432", "notdb.internal:5432", "db.internal.evil.com:5432"},
+		},
 		{patterns: nil, wantEmpty: true},
 		{patterns: []string{"", "   "}, wantEmpty: true},
 	}
