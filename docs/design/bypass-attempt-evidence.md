@@ -1,6 +1,14 @@
+---
+type: Design Note
+title: Bypass-Attempt Evidence for the Egress Lock
+description: "Why bypass attempts against the routing lock leave no evidence today; interim options compared. Decision: defer wholly to the #64 node interceptor; approved contingency shape recorded."
+status: decided
+tracking_issue: 72
+read_when: "Bypass-attempt evidence, routing-lock observability, #64 contingencies."
+---
+
 # Bypass-Attempt Evidence for the Egress Lock
 
-**Status:** design note / **decided — defer wholly to #64** (no interim implementation scheduled; approved contingency shape recorded below)
 **Scope:** how a bypass *attempt* — a locked agent trying to connect around the Envoy chokepoint — could become `observed` evidence before the #64 node interceptor exists; compare the interim options and decide.
 **Non-goals:** implementation; any hard CNI dependency in the baseline install; any in-pod/cooperative signal (doctrine forbids it); weakening the lock to make attempts visible.
 **Tracking:** [#72](https://github.com/grantbarry29/scrutineer/issues/72) (this note) · [#64](https://github.com/grantbarry29/scrutineer/issues/64) (mechanism of record) · gap row in [`untamperable-enforcement.md`](untamperable-enforcement.md) §6.

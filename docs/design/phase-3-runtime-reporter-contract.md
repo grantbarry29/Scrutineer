@@ -1,6 +1,14 @@
+---
+type: Design Doc
+title: Runtime Reporter Contract
+description: "How a data-plane component reports runtime evidence into AgentSession status (policyDecisions/violations): wire contract, identity, assurance stamping. The live caller is the egress-reporter in the per-session egress-proxy pod."
+status: implemented
+read_when: "Implementing or altering the runtime reporter, or anything that writes runtime evidence into status."
+---
+
 # Phase 3b Slice 1 — Runtime Reporter Contract (Design)
 
-> **Status:** Implemented (`internal/reporter/`, `agentsession.PatchRuntimePolicyReport`, `--reporter-bind-address`). Since #71 the live caller is the **egress-reporter** in the per-session out-of-pod egress-proxy pod; historical sections written for the removed cooperative sidecars still describe the wire contract accurately.
+> **Note:** Implemented (`internal/reporter/`, `agentsession.PatchRuntimePolicyReport`, `--reporter-bind-address`). Since #71 the live caller is the **egress-reporter** in the per-session out-of-pod egress-proxy pod; historical sections written for the removed cooperative sidecars still describe the wire contract accurately.
 > **Audience:** the engineer/agent implementing a data-plane reporter component.
 > **Read first:** [`architecture.md`](architecture.md) · [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) · [`untamperable-enforcement.md`](untamperable-enforcement.md)
 

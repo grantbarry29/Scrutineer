@@ -17,6 +17,9 @@ vendored deps, fixtures, or build output.
 ## Rules
 
 - **Exists:** if such a component lacks a README, create one (use the template below).
+- **OKF frontmatter:** every component README starts with the OKF frontmatter block
+  (`type: Component README`, `title`, `description`, `status`, `read_when`) — see the
+  template; `make lint-docs` enforces it.
 - **Same-change updates:** whenever a change alters a component's responsibilities,
   boundaries, architecture, dependencies, interfaces (flags/env/ports/APIs/CRDs/
   schemas), configuration, generated artifacts, runtime/operational behavior, or

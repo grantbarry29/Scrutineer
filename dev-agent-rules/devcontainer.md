@@ -6,6 +6,7 @@ status: live
 read_when: "Always — before any build, test, or codegen."
 always_load: true
 ---
+
 # Devcontainer Is The Only Supported Toolchain
 
 **All build/test/codegen for this repo runs inside the provided devcontainer — never

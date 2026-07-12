@@ -1,6 +1,14 @@
+---
+type: Design Doc
+title: Phase 5 — Human Approval Workflows
+description: "Scoped, auditable human approval gates: ApprovalPolicy/ApprovalRequest CRDs, the controller gate/resume state machine, requireHumanApproval enforcement; also records the dormant per-tool runtime-approval surface."
+status: implemented
+read_when: "Approval gates — ApprovalPolicy/ApprovalRequest, gate/resume state machine, requireHumanApproval."
+---
+
 # Phase 5 — Human Approval Workflows
 
-> **Status:** Design (Phase 5 · slice 1). No code yet. Defines the CRD shapes, controller gate/resume state machine, and invariants for scoped, auditable approvals. Implementation lands in later slices (tracked in [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)).
+> **Note:** Defines the CRD shapes, controller gate/resume state machine, and invariants for scoped, auditable approvals. The design has since shipped (`api/v1alpha1/approvalpolicy_types.go` / `approvalrequest_types.go`, `internal/controller/agentsession/approval*.go`); remaining refinements are tracked in [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues).
 
 ## Purpose
 

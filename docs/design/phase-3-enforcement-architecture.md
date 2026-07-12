@@ -1,3 +1,11 @@
+---
+type: Design Doc
+title: Phase 3 Enforcement Architecture
+description: "Data-plane enforcement architecture: the internal/enforcement contract, NetworkPolicy baseline, runtime-evidence loop, and the out-of-pod Envoy egress path. The cooperative in-pod slices were removed (#71); their sections remain as condensed historical stubs."
+status: implemented
+read_when: "Data-plane enforcement, the internal/enforcement contract, Phase 3 slices."
+---
+
 # Phase 3 Enforcement Architecture
 
 > **Note:** the cooperative in-pod enforcement slices this phase shipped (5–8 below) were **removed** ([`untamperable-enforcement.md`](untamperable-enforcement.md), #71); their sections are kept as condensed historical stubs. What survives of Phase 3 is the enforcement contract (`internal/enforcement`), the NetworkPolicy baseline, the runtime-evidence loop, and the out-of-pod Envoy egress path.

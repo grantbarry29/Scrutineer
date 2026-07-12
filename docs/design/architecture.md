@@ -1,3 +1,11 @@
+---
+type: Design Doc
+title: Scrutineer Architecture & Design
+description: "Whole-project architecture: control/data-plane split, CRD model, lifecycle, reconciliation, policy/evidence model, code map, invariants."
+status: live
+read_when: "Start here — orientation before any non-trivial work."
+---
+
 # Scrutineer Architecture & Design
 
 > **Canonical architecture reference for Scrutineer.** Read this before implementing anything non-trivial.

@@ -1,3 +1,11 @@
+---
+type: Template
+title: Component README Template
+description: "Reusable skeleton for component READMEs — copy, fill, delete inapplicable sections. Starts with the required OKF frontmatter block."
+status: live
+read_when: "Creating or restructuring a component README."
+---
+
 # <Component name>
 
 > Reusable template for a Scrutineer component README. Copy this into the component's
@@ -6,6 +14,19 @@
 > not a line-by-line code summary. Infer only from code, build files, manifests,
 > config, tests, and `docs/design/`. Never invent: mark anything unverified as
 > `TODO: verify`. Delete this quote block in the real README.
+
+Every component README **begins with this OKF frontmatter block** (required by
+`dev-agent-rules/component-docs.md`; enforced by `make lint-docs`):
+
+```yaml
+---
+type: Component README
+title: <component name>
+description: <one line — what this component is and where it sits>
+status: live
+read_when: "Working in <component path>/."
+---
+```
 
 One or two sentences: what this component is and why it exists.
 

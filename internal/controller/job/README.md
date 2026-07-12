@@ -1,3 +1,11 @@
+---
+type: Component README
+title: job builder
+description: "Builds and compares runtime objects for AgentSessions; BuildPodTemplateSpec is the single source of the agent pod shape consumed by both runtime backends."
+status: live
+read_when: "Working in internal/controller/job/."
+---
+
 # internal/controller/job
 
 Builds and compares the runtime objects for `AgentSession`s. `BuildPodTemplateSpec` is

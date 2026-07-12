@@ -1,3 +1,11 @@
+---
+type: Playbook
+title: GitHub Project Board Setup
+description: "One-time setup of the GitHub Projects v2 board over Scrutineer issues (project #1), including PAT scope gotchas."
+status: live
+read_when: "Re-creating or reconfiguring the task board."
+---
+
 # GitHub Project board — setup
 
 Task **state** for Scrutineer lives in GitHub Issues (see

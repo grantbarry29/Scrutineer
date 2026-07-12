@@ -1,6 +1,14 @@
+---
+type: Design Doc
+title: Evidence Integrity — Per-Session Egress Chokepoint
+description: "Moving egress evidence from cooperative to adversarial-grade: per-session out-of-pod Envoy, explicit-proxy routing, caller-class observed stamping. Shipped via #8/#32/#62; the cooperative tier it hardened against was removed entirely (#71)."
+status: implemented
+tracking_issue: 8
+read_when: "Egress trust boundaries, observed-assurance evidence, enforcement placement."
+---
+
 # Evidence Integrity — Per-Session Egress Chokepoint (Envoy)
 
-**Status:** shipped (#8/#32/#62: per-session Envoy chokepoint, FQDN RBAC, caller-class `observed` stamping); the cooperative tier this doc hardened against was removed entirely ([`untamperable-enforcement.md`](untamperable-enforcement.md), #71)
 **Scope:** the remaining hardening of runtime-evidence integrity — moving egress governance from *cooperative* to *adversarial-grade* (`observed`) by routing all agent egress through a per-session **Envoy** proxy that lives outside the agent's trust domain and cannot be bypassed. **Interim routing mechanism: explicit proxy** (portable, zero cluster dependency). **Transparent interception is a separate future epic** ([#64](https://github.com/grantbarry29/scrutineer/issues/64)).
 **Non-goals:** transparent redirect / node data-plane now (future epic #64); a hard Cilium/CNI dependency as the baseline (optional backend only); full eBPF/syscall/file observation; node-compromise defense (see Assumptions); rich FQDN policy content (that is [#32](https://github.com/grantbarry29/scrutineer/issues/32), realized *at* this Envoy).
 **Tracking:** [#8](https://github.com/grantbarry29/scrutineer/issues/8) (slices 1–3 shipped; this doc covers the remaining "independent `observed` source" hardening).

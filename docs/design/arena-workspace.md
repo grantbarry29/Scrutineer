@@ -1,6 +1,13 @@
+---
+type: Design Doc
+title: Arena Workspace
+description: "Out-of-pod successor to file governance: the governed workspace lives in a separate per-session pod served over a network-POSIX protocol (FUSE/9p analysis), so every file operation crosses a mediated, policy-checked boundary."
+status: draft
+read_when: "Future file governance — network-POSIX arena workspace."
+---
+
 # Arena Workspace — Untamperable File Governance via a Network-POSIX Workspace
 
-**Status:** draft / deferred (design TODO from the scope narrowing; not scheduled)
 **Scope:** the out-of-pod successor to the cooperative in-pod file tier removed in #71: the agent's governed workspace ("arena" — repos, files, artifacts) lives in a separate per-session pod and is served over a per-operation network protocol, so every file operation crosses a boundary the agent cannot alter — mediated, policy-checked, and `observed`.
 **Non-goals:** governing the agent container's own rootfs or scratch space (ungoverned by design — a local tmpfs keeps hot paths fast); syscall-level interception (#29 sandboxes).
 **Tracking:** to be filed when scheduled; absorbs #33 (transparent/FUSE file interception). The earlier path-rule schema (`allowedPaths`/`deniedPaths`) was removed in the #75 clean break; it and the cooperative-tier design it came from live in git history (pre-#75 `api/v1alpha1/`, pre-#74 `docs/design/`).

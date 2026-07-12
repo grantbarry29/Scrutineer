@@ -6,6 +6,7 @@ status: live
 read_when: "Always — before writing feature code."
 always_load: true
 ---
+
 # Test-Driven Development — E2E Environment First
 
 **When building a feature, secure the test environment before the code, and let tests

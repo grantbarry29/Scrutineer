@@ -1,6 +1,14 @@
+---
+type: Design Note
+title: Access-Log Rotation vs. Tamper Evidence
+description: "Why the egress access log rotates, the only-ingested-bytes-are-removed invariant that preserves tamper evidence against flooding, and the rename→reopen→drain→delete protocol with its failure semantics."
+status: implemented
+tracking_issue: 98
+read_when: "Egress access-log rotation, the tailer, tamper evidence."
+---
+
 # Access-Log Rotation vs. Tamper Evidence
 
-**Status:** decided and implemented (#98).
 **Scope:** why the egress access log rotates, why rotation is gated on ingest, and the
 failure semantics of the rotation protocol in `internal/enforcement/envoy/tailer.go`.
 

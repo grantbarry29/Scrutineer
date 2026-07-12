@@ -1,6 +1,14 @@
+---
+type: Investigation
+title: Long-Running & App-Driven Agent Runtimes
+description: "Open investigation — not an agreed direction: whether Scrutineer should govern long-running, app-driven agents vs. the one-shot Job/Pod model. Questions and options only; answer the gating question in #94 before any design work."
+status: investigation
+tracking_issue: 94
+read_when: "Considering long-running / service-style agent governance."
+---
+
 # Long-Running & App-Driven Agent Runtimes — Investigation
 
-**Status:** open investigation — **not designed, not scheduled.** This doc frames a question raised by the runtime model; it is not an agreed direction and does not commit Scrutineer to supporting long-running agents.
 **Scope:** whether (and how) Scrutineer should govern **long-running, app-driven agents** — agents that run as a service and receive work continuously (queue, webhook, API) rather than executing one declared task and exiting.
 **Non-goals:** proposing a design. This is questions and options only.
 **Tracking:** #94 (investigation tracker — answer its gating question before any design work).

@@ -1,3 +1,11 @@
+---
+type: Component README
+title: agentsession controller
+description: "Core control-plane controller: reconciles AgentSession CRs into a governed runtime workload and tracks observed governance status; compiled into the manager binary."
+status: live
+read_when: "Working in internal/controller/agentsession/."
+---
+
 # agentsession controller
 
 The core Scrutineer control-plane controller. Reconciles `AgentSession` custom resources into a

@@ -1,3 +1,11 @@
+---
+type: Component README
+title: egress-reporter
+description: "Tails the per-session Envoy JSON access log and submits each entry as observed egress evidence to the controller-owned reporter; runs beside Envoy in the egress-proxy pod, outside the agent's trust domain."
+status: live
+read_when: "Working in cmd/egress-reporter/."
+---
+
 # egress-reporter
 
 Tails the per-session Envoy egress proxy's JSON access log and submits each entry as

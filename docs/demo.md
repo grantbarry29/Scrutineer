@@ -1,3 +1,11 @@
+---
+type: Guide
+title: Egress Governance Demo
+description: "Guided two-session demo (make demo): a denied request rejected live at the per-session Envoy chokepoint, a bypass attempt killed by the routing lock, all recorded as observed evidence."
+status: live
+read_when: "Running or modifying the demo."
+---
+
 # Demo — Untamperable Egress Governance in Two Sessions
 
 What this shows, in one run: an agent whose **only** network path is a per-session Envoy

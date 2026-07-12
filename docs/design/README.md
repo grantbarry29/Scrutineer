@@ -1,3 +1,11 @@
+---
+type: Index
+title: Scrutineer Design Docs — Index
+description: "Index of the design-doc bundle (converted to a reserved index.md later in the #127 migration)."
+status: live
+read_when: "Finding the right design doc."
+---
+
 # Scrutineer Design Docs
 
 Canonical design documentation for Scrutineer. These docs describe **architecture and intent** — they are the reference an implementer (human or AI agent) should read before non-trivial work. They are **not** loaded into agent context automatically; consult the relevant doc during planning (see [`dev-agent-rules/scrutineer-design-docs.md`](../../dev-agent-rules/scrutineer-design-docs.md)).
@@ -29,6 +37,6 @@ For *task state, queue, and roadmap*, see [GitHub Issues / Projects](https://git
 ## Conventions
 
 - **Diagrams** use [Mermaid](https://mermaid.js.org/) fenced code blocks so they render on GitHub and in editors without external assets.
-- Each design doc states its **status** (design / implemented), **scope**, and **non-goals**, and links to its tracking GitHub Issue.
-- Keep docs in sync: when a slice ships, update its status line here and update the tracking GitHub Issue.
+- Each design doc carries **OKF frontmatter** (`type`, `title`, `description`, `status`, `read_when`, optional `tracking_issue`/`superseded_by`); **scope** and **non-goals** stay in the body. `make lint-docs` enforces the frontmatter contract.
+- Keep docs in sync: when a slice ships, update the doc's frontmatter `status` and the tracking GitHub Issue.
 - Design docs describe intent; if code and a design doc disagree, treat it as a bug in one of them and reconcile (do not silently diverge).

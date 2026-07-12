@@ -1,3 +1,11 @@
+---
+type: Component README
+title: reporter
+description: "Runtime-evidence and approval HTTP service: ingests data-plane evidence (self-reported and observed) and serves the per-tool approval channel."
+status: live
+read_when: "Working in internal/reporter/."
+---
+
 # reporter
 
 Scrutineer's runtime-evidence and approval HTTP service. Ingests evidence from data-plane

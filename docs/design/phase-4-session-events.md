@@ -1,6 +1,14 @@
+---
+type: Design Doc
+title: Structured Session Events API
+description: "status.events[] — the durable, ordered, capped runtime timeline stream: schema, ingestion via POST /v1/report, preservation across reconciler status patches."
+status: implemented
+read_when: "status.events[], timeline ingestion, reporter event payloads."
+---
+
 # Structured Session Events API
 
-> **Status:** Implemented (Phase 3b evidence loop #3). Populated via `POST /v1/report` `events[]` and preserved across reconciler status patches.
+> **Note:** Populated via `POST /v1/report` `events[]` and preserved across reconciler status patches.
 
 ## Purpose
 

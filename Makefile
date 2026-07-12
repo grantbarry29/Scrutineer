@@ -479,3 +479,7 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST)
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19
+
+.PHONY: lint-docs
+lint-docs: ## Validate OKF frontmatter across docs/, dev-agent-rules/, and component READMEs (#127).
+	go run ./hack/okf-lint

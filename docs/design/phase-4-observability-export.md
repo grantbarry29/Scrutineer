@@ -1,6 +1,14 @@
+---
+type: Design Doc
+title: Observability Export
+description: "Canonical catalog of exported telemetry: Prometheus metric names and labels, OTel span names and attributes, OTLP audit record types, enable flags, and the trace-propagation contract. Update it whenever an exported signal changes."
+status: implemented
+read_when: "Exported telemetry — metrics, traces, audit logs, flags, propagation."
+---
+
 # Observability Export (Prometheus / OTel Traces / OTLP Audit Logs)
 
-> **Status:** Implemented (Phase 4). This doc is the canonical catalog of Scrutineer's exported telemetry — metric names + labels, span names + attributes, audit record types + attributes, enable flags, and the trace-propagation contract. Update it whenever an exported signal changes.
+> **Note:** This doc is the canonical catalog of Scrutineer's exported telemetry — metric names + labels, span names + attributes, audit record types + attributes, enable flags, and the trace-propagation contract. Update it whenever an exported signal changes.
 
 ## Purpose
 

@@ -1,3 +1,11 @@
+---
+type: Guide
+title: Non-HTTP Egress via CONNECT
+description: "Operator guide: reaching non-HTTP TCP services (databases, SSH, brokers) through the per-session Envoy egress proxy with CONNECT tunnels."
+status: live
+read_when: "Agents needing non-HTTP TCP egress through the proxy."
+---
+
 # Reaching non-HTTP services through the egress proxy (CONNECT tunnel)
 
 **Audience:** operators/agent authors whose agent needs to reach a **non-HTTP** TCP service

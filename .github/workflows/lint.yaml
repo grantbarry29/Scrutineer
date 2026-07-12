@@ -26,3 +26,6 @@ jobs:
 
       - name: Vet
         run: make vet
+
+      - name: OKF docs lint
+        run: make lint-docs

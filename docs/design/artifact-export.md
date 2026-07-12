@@ -1,6 +1,15 @@
+---
+type: Design Doc
+title: Artifact Export
+description: "Pluggable object-store export for collected session outputs — S3 backend, digests in status.artifacts, fallback semantics, retention posture; sliced into #117–#120 + demo #122."
+status: approved
+tracking_issue: 2
+verified_against_code: "2026-07-10"
+read_when: "Artifact export, status.artifacts, the S3/object-store backend."
+---
+
 # Artifact Export — Durable Object-Store Retention for Session Outputs
 
-**Status:** design — approved direction, not yet implemented; re-verified against code 2026-07-10 and sliced into child issues. Tracking: #2 (epic).
 **Scope:** a pluggable export backend that uploads collected session outputs (logs, workspace bundles) to durable object storage (S3 and S3-compatible: MinIO, R2, GCS interop), recording `s3://…` URIs — plus content digests — in `status.artifacts`. Extends the in-cluster collection MVP (`internal/controller/agentsession/outputs.go`); does not replace it.
 **Non-goals:** log *streaming* / observability pipelines (that is OTLP export, [`phase-4-observability-export.md`](phase-4-observability-export.md)); exporting evidence/status/audit records (the OTLP audit sink owns that today — but see *Relation to evidence export* below: the exporter plumbing is deliberately reusable for a future evidence slice); artifact scanning or DLP; controller-managed bucket lifecycle, retention, or deletion (bucket policy owns retention); workspace *governance* (that is the arena track, [`arena-workspace.md`](arena-workspace.md)).
 

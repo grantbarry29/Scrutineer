@@ -1,6 +1,14 @@
+---
+type: Design Doc
+title: LLM-Gateway Chokepoint
+description: "Out-of-pod, credential-locked gateway for the agent's model calls — turns advisory spec.model into enforced, observed governance (provider/model allowlist, token/cost caps, prompt evidence). Sibling of the tools-pod chokepoint under the same doctrine."
+status: draft
+tracking_issue: 77
+read_when: "Model-call governance — provider/model allowlist, token/cost caps, prompt evidence."
+---
+
 # LLM-Gateway Chokepoint — Untamperable Model-Call Governance
 
-**Status:** draft / deferred — strong feature direction, not scheduled. Sibling to [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md): same chokepoint doctrine ([`untamperable-enforcement.md`](untamperable-enforcement.md)), different governed action — the model call itself.
 **Scope:** an out-of-pod, credential-locked gateway for the agent's LLM API calls that turns the currently-advisory `spec.model` surface into enforced, `observed` governance — provider/model allowlisting, token/cost limits, and prompt/response evidence — at a point the agent cannot bypass or forge.
 **Non-goals:** not an inference layer, model router, load balancer, cache, or dev-convenience proxy (LiteLLM / Portkey / Cloudflare AI Gateway territory) — the angle is *governance*, not routing/ops. Not prompt engineering. Local / in-process inference is out of scope (agent/arena track, [`arena-workspace.md`](arena-workspace.md)). Node-level transparency (#64) unchanged.
 **Tracking:** epic #77 (deliberately unscheduled; Phase 0 = elevating this draft to a full design answering the open questions below). Absorbs the *enforcement* half of the `spec.model` / `AGENT_MODEL_*` surface (today propagation-only, `internal/controller/job`). Shares credential mediation with #25 (CredentialProfile). Reuses the per-session Envoy-pod chokepoint template (#8) and the reporter identity/assurance machinery.

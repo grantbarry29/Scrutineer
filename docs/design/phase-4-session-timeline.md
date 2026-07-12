@@ -1,6 +1,14 @@
+---
+type: Design Doc
+title: Session Timeline Projection Model
+description: "Normalizes status.events[] into stable, UI-ready timeline entries (internal/observability) — sorting, severity, titles, and filter semantics for future UI/API consumers."
+status: implemented
+read_when: "UI timeline projection over status.events[]."
+---
+
 # Session Timeline Projection Model
 
-> **Status:** Implemented (Phase 4 slice B). Pure projection over `status.events[]` for future UI and API consumers.
+> **Note:** Pure projection over `status.events[]` for future UI and API consumers.
 
 ## Purpose
 

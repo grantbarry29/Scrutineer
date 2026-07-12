@@ -1,6 +1,14 @@
+---
+type: Design Doc
+title: Phase 6 — Orchestrator Backend Interface
+description: "The runtimeBackend interface and registry keyed by spec.runtime.orchestrator; the reconciler owns all status/condition/event mapping. Proven by two in-tree backends (kubernetes-job, kubernetes-pod). Next: the external adapter design (Tekton first)."
+status: implemented
+read_when: "Decoupling from Kubernetes Jobs — RuntimeBackend, orchestrator selection, adding adapters."
+---
+
 # Phase 6 — Orchestrator Backend Interface
 
-> **Status:** Slices 1–8 **shipped (2026-06-27)**. The AgentSession reconciler calls runtimes only through a `runtimeBackend` interface selected from a registry keyed by `spec.runtime.orchestrator` (`internal/controller/agentsession/runtime_backend.go`); backends return a normalized `observation` and the **reconciler** owns all status/condition/event/result mapping (`applyObservation`/`applyRuntimePhase`). The abstraction is now proven by **two** in-tree backends: `kubernetes-job` (default) and `kubernetes-pod` (a bare Pod, the reference adapter). Shipped generalizations: a shared pod-template builder (`job.BuildPodTemplateSpec`, slice 3), a backend-neutral `status.runtimeRef` (slice 4, resolves open question #1), the `kubernetes-pod` backend with lifecycle/drift correctness + GC parity (slices 5–7), and a live kind e2e (slice 8).
+> Slices 1–8 **shipped (2026-06-27)**. The AgentSession reconciler calls runtimes only through a `runtimeBackend` interface selected from a registry keyed by `spec.runtime.orchestrator` (`internal/controller/agentsession/runtime_backend.go`); backends return a normalized `observation` and the **reconciler** owns all status/condition/event/result mapping (`applyObservation`/`applyRuntimePhase`). The abstraction is now proven by **two** in-tree backends: `kubernetes-job` (default) and `kubernetes-pod` (a bare Pod, the reference adapter). Shipped generalizations: a shared pod-template builder (`job.BuildPodTemplateSpec`, slice 3), a backend-neutral `status.runtimeRef` (slice 4, resolves open question #1), the `kubernetes-pod` backend with lifecycle/drift correctness + GC parity (slices 5–7), and a live kind e2e (slice 8).
 >
 > **Next (slices 9–10):** docs/status alignment (slice 9, this update) and the **external** adapter design (slice 10, Tekton first) on top of the now-proven interface.
 

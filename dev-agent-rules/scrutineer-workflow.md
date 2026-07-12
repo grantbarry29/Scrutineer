@@ -6,6 +6,7 @@ status: live
 read_when: "Implementing any task — contract, Issue Body Template, End-of-Task Handoff."
 always_load: false
 ---
+
 # Scrutineer Agent Workflow
 
 > Rules and templates for **agent-assisted implementation** on Scrutineer.

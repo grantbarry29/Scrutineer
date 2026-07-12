@@ -1,3 +1,11 @@
+---
+type: Reference
+title: Demo Manifests
+description: "Self-contained manifests for the guided egress-governance demo, applied together by make demo."
+status: live
+read_when: "Modifying the demo manifests."
+---
+
 # Demo manifests
 
 Self-contained manifests for the guided egress-governance demo — apply them together
