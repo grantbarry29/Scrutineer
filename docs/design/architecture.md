@@ -330,16 +330,26 @@ Detailed designs: [`enforcement-architecture.md`](enforcement-architecture.md) (
 
 ## 10. Roadmap orientation
 
-Phases (tracked as GitHub Issues / epics — see <https://github.com/grantbarry29/scrutineer/issues>):
+Roadmap state lives in GitHub Issues / epics — see <https://github.com/grantbarry29/scrutineer/issues>. Orientation:
 
-- **0–2 (done):** MVP foundation, MVP hardening, reusable policy model + RuntimeProfile.
-- **3 (done, reshaped by the scope narrowing):** enforcement contracts + NetworkPolicy baseline survive; the cooperative in-pod slices were removed (#71).
-- **3b (done):** runtime evidence loop — reporter endpoint, `status.events[]`, and the egress-reporter as the live `observed` producer.
-- **Adversarial-grade-only enforcement (#69):** adversarial-grade-only doctrine, verified-or-refused lock gate (#70), cooperative-tier removal (#71); remaining hardening + deferred tools/arena chokepoints tracked under the epic.
-- **4:** observability & audit (usage metrics, timeline model, Prometheus, OTel, audit sink, log/artifact collection) — consumes the evidence loop.
-- **5:** scoped human approval workflows.
-- **6 (in progress):** orchestrator-agnostic runtime backends. `runtimeBackend` interface + `status.runtimeRef` shipped; two in-tree backends (`kubernetes-job`, `kubernetes-pod`) done. Next: external adapter design (Tekton/Argo/Temporal) + SessionTemplate.
-- **7:** operational UI (governance/observability dashboard, not a chatbot).
-- **8:** enterprise platform (per-session identity, CredentialProfile, multi-tenancy, HA, sandboxes).
+**Shipped:**
 
-> When in doubt about where a piece of work belongs, map it to the four-state policy model (§1.2) and the control/data-plane split (§1.1), then place it in the earliest phase that does not violate an invariant in §9.
+- MVP foundation and hardening; reusable policy model + RuntimeProfile.
+- Enforcement contracts + the NetworkPolicy baseline; the cooperative in-pod slices were removed (#71).
+- The runtime evidence loop — reporter endpoint, `status.events[]`, and the egress-reporter as the live `observed` producer.
+- Observability & audit export (usage metrics, timeline model, Prometheus, OTel, audit sink, log/artifact collection) — consumes the evidence loop.
+- Scoped human approval workflows (ApprovalPolicy / ApprovalRequest + the gate/resume state machine).
+- Orchestrator-agnostic runtime backends: the `runtimeBackend` interface + `status.runtimeRef`, with two in-tree backends (`kubernetes-job`, `kubernetes-pod`).
+
+**Open / in progress:**
+
+- **Adversarial-grade-only enforcement (epic #69):** the doctrine, verified-or-refused lock gate (#70), and cooperative-tier removal (#71) shipped; remaining hardening + the deferred tools/arena chokepoints are tracked under the epic.
+- **External orchestrator adapters (epic #10):** adapter design (Tekton/Argo/Temporal) + SessionTemplate.
+- **Artifact export (#117–#120):** pluggable object-store export for collected session outputs.
+
+**Ahead:**
+
+- **Operational UI (epic #11):** governance/observability dashboard, not a chatbot.
+- **Enterprise platform (epic #13):** per-session identity, CredentialProfile, multi-tenancy, HA, sandboxes.
+
+> When in doubt about where a piece of work belongs, map it to the four-state policy model (§1.2) and the control/data-plane split (§1.1), then place it under the epic whose scope it matches without violating an invariant in §9.
