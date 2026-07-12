@@ -1,3 +1,11 @@
+---
+type: Agent Rule
+title: Component Docs
+description: "Require concise, current per-component README docs. Every independently built/deployed/operated component (binary, controller, service, sidecar, worker, CLI) keeps a local README; create/update it in the same change as the code."
+status: live
+read_when: "Always — every component keeps a local README updated in the same change."
+always_load: true
+---
 
 # Component Documentation
 

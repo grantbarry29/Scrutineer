@@ -1,10 +1,8 @@
 # CLAUDE.md
 
 Claude Code's entry point for this repo. **All rule content lives once in
-[`dev-agent-rules/`](dev-agent-rules/)** — this file and the
-[`.cursor/rules/*.mdc`](.cursor/rules/) files are just thin maps that point into it
-(Cursor uses the `.mdc` frontmatter for glob auto-attach; Claude uses the table
-below). Edit rules in `dev-agent-rules/`, never in the pointers.
+[`dev-agent-rules/`](dev-agent-rules/)** — this file is a thin map that points into
+it. Edit rules in `dev-agent-rules/`, never here.
 
 **Scrutineer** is a Kubernetes-native governance and runtime control plane for autonomous
 AI agents — not an orchestrator, workflow engine, or agent framework. A Kubebuilder
@@ -31,12 +29,12 @@ These are the always-on rules — read them before doing work in this repo:
 | Distributed-systems / networking code (`internal/**`, `cmd/**`) | [`distributed-systems-networking.md`](dev-agent-rules/distributed-systems-networking.md) |
 | Binaries / sidecars (`cmd/**`, `internal/enforcement/**`, `Dockerfile*`) | [`component-binaries.md`](dev-agent-rules/component-binaries.md) |
 | Any non-trivial change in `api/`, `internal/{controller,enforcement,policy,reporter}` — find the matching design doc | [`scrutineer-design-docs.md`](dev-agent-rules/scrutineer-design-docs.md) → routes into [`docs/design/`](docs/design/) |
-| **How** to implement (contract, Issue Body Template, end-of-task handoff) | [`scrutineer-cursor-workflow.md`](dev-agent-rules/scrutineer-cursor-workflow.md) |
+| **How** to implement (contract, Issue Body Template, end-of-task handoff) | [`scrutineer-workflow.md`](dev-agent-rules/scrutineer-workflow.md) |
 
 ## After making code changes — self-review against the rules
 
-Unlike Cursor, these rules are **not** auto-attached for Claude by file glob, so a
-relevant one can stay out of context if the task didn't obviously look like its area.
+These rules are **not** auto-attached by file glob, so a relevant one can stay out
+of context if the task didn't obviously look like its area.
 Before declaring a code change done, **re-derive which rules apply from the files you
 actually touched** and audit the diff against them — even if you didn't read them up
 front:

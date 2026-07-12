@@ -1,3 +1,12 @@
+---
+type: Agent Rule
+title: CRD / API Design
+description: "Strict CRD/API design standards — declarative spec, rich status, validation, immutability, versioning, safe defaults."
+status: live
+read_when: "CRD / API types work (api/**, config/crd/**, config/samples/**)."
+applies_to: ["api/**/*.go", "config/crd/**/*.yaml", "config/samples/**/*.yaml"]
+always_load: false
+---
 
 # CRD and API Design Rules
 

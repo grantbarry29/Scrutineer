@@ -1,3 +1,12 @@
+---
+type: Agent Rule
+title: Component Binaries
+description: "Build/deploy conventions for Scrutineer's independently built binaries (manager + egress-reporter) and what their component READMEs must cover."
+status: live
+read_when: "Binaries / sidecars work (cmd/**, internal/enforcement/**, Dockerfile*)."
+applies_to: ["cmd/**", "internal/enforcement/**", "Dockerfile*"]
+always_load: false
+---
 
 # Component Binaries (cmd/** + sidecars)
 

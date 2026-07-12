@@ -22,14 +22,12 @@ on:
       - "dev-agent-rules/**"
       - "**.md"
       - "LICENSE"
-      - ".cursor/**"
   pull_request:
     paths-ignore:
       - "docs/**"
       - "dev-agent-rules/**"
       - "**.md"
       - "LICENSE"
-      - ".cursor/**"
 
 permissions:
   contents: read

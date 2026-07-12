@@ -1,3 +1,11 @@
+---
+type: Agent Rule
+title: Task Management
+description: "Source of truth for task state is GitHub Issues/Projects; repo markdown is source of truth for durable technical context. How agents pick up, work, create, update, and close out tasks — and keep the board in sync."
+status: live
+read_when: "Always — claim one issue before editing; file discovered work as issues in the same session."
+always_load: true
+---
 
 # Task Management
 
@@ -5,10 +13,10 @@
 in progress, blocked, review, done — plus ownership, priority, dependencies, and
 blockers. **Repository markdown is the source of truth for durable technical context** —
 design notes, architecture decisions, and agent guidance
-(`docs/design/`, `dev-agent-rules/`, component `README.md`s, `dev-agent-rules/scrutineer-cursor-workflow.md`).
+(`docs/design/`, `dev-agent-rules/`, component `README.md`s, `dev-agent-rules/scrutineer-workflow.md`).
 
 > The board is the **only** task tracker — there is no markdown queue/status file (the old
-> `.cursor/scrutineer-project-status.md` was removed; do not recreate it). **The board must always reflect
+> markdown status/queue file was removed; do not recreate it). **The board must always reflect
 > reality.** Discover work → file an issue. Start work → move it to in-progress. Make progress →
 > comment. Get blocked → mark blocked. Finish → update + close. Never let the board go stale, and never
 > track task state in chat or markdown.
@@ -91,7 +99,7 @@ When you discover any out-of-scope work, bug, gap, doc debt, test hole, or "we s
 
 1. **Search first** (`search_issues`) — don't duplicate an existing issue. If it exists, reference it.
 2. **Create it** (`issue_write` `create`) using the canonical **Issue Body Template** in
-   `scrutineer-cursor-workflow.md` (Summary, Context, Acceptance criteria, Non-goals, Implementation notes,
+   `scrutineer-workflow.md` (Summary, Context, Acceptance criteria, Non-goals, Implementation notes,
    Dependencies/blockers, Verification).
 3. **Label it fully** — exactly one `status/*` (usually `backlog`, or `needs-triage` + `agent-needs-human`
    if unclear), one `type/*` (**`type/bug` for bugs**), a `priority/*`, and at least one `area/*`. Add
@@ -136,9 +144,9 @@ When you discover any out-of-scope work, bug, gap, doc debt, test hole, or "we s
 
 ## Implementation contract (summary)
 
-Full detail: [`dev-agent-rules/scrutineer-cursor-workflow.md`](scrutineer-cursor-workflow.md).
+Full detail: [`dev-agent-rules/scrutineer-workflow.md`](scrutineer-workflow.md).
 
-1. Read `scrutineer-product-vision.md`, this file, and `scrutineer-cursor-workflow.md` when implementing; pull
+1. Read `scrutineer-product-vision.md`, this file, and `scrutineer-workflow.md` when implementing; pull
    durable technical context from `docs/design/` / component READMEs / code comments.
 2. Pick **one** GitHub Issue (`status/ready` + `agent-ready`, by *Work precedence* + priority) — or ask
    the user. Claim it (→ `status/in-progress`, `agent-in-progress`) before editing code.
@@ -148,7 +156,7 @@ Full detail: [`dev-agent-rules/scrutineer-cursor-workflow.md`](scrutineer-cursor
 6. End the user-facing summary with **### Out-of-scope future work noticed**.
 7. **No lost work:** every out-of-scope item becomes a **GitHub Issue** (`agent-discovered`, linked
    from the current issue) in the same session — not chat-only.
-8. **End-of-Task Handoff Protocol** (see `scrutineer-cursor-workflow.md`): sync the board (done + close) →
+8. **End-of-Task Handoff Protocol** (see `scrutineer-workflow.md`): sync the board (done + close) →
    commit (don't push unless asked) → offer 2–4 selectable next-task options with a recommendation.
 
 Unless explicitly selected by the user, do **not** add new CRDs, webhooks, sidecars, policy engines,
@@ -158,7 +166,7 @@ multi-cluster support, a new orchestrator adapter, or a replacement for Kubernet
 ## Relationship to other rules
 
 - `scrutineer-product-vision.md` — product direction and MVP boundaries.
-- `scrutineer-cursor-workflow.md` — implementation contract (full), scope rules, Issue Body Template, and the
+- `scrutineer-workflow.md` — implementation contract (full), scope rules, Issue Body Template, and the
   End-of-Task Handoff Protocol. Authoritative for **how** to implement; task state lives on the board.
 - `docs/design/`, component `README.md`s, code comments — durable technical context.
 

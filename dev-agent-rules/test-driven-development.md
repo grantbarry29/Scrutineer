@@ -1,3 +1,11 @@
+---
+type: Agent Rule
+title: Test-Driven Development
+description: "Build features test-first and environment-first. Before writing feature code, ensure the matching test level (unit/envtest/e2e) is runnable; write the failing test, build, run in the devcontainer, iterate. Correctness that only a running artifact can prove (Envoy config, redirect path, deployed overlay) must have an e2e test; do not claim such work done on unit tests alone."
+status: live
+read_when: "Always — before writing feature code."
+always_load: true
+---
 # Test-Driven Development — E2E Environment First
 
 **When building a feature, secure the test environment before the code, and let tests

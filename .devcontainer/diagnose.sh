@@ -2,7 +2,7 @@
 #
 # .devcontainer/diagnose.sh — runtime diagnostics for the Scrutineer dev container.
 #
-# Run this from a second integrated terminal in Cursor *inside* the running
+# Run this from a second integrated terminal in VS Code *inside* the running
 # devcontainer when the postCreateCommand is hanging. It probes the inner
 # dockerd from multiple angles and appends NDJSON evidence to the agreed
 # debug log file so the assistant can attribute the hang.
@@ -10,7 +10,7 @@
 # Safe to run repeatedly. Read-only; never restarts dockerd or kills anything.
 set -u
 
-LOG_PATH="/workspaces/Scrutineer/.cursor/debug-a89927.log"
+LOG_PATH="/workspaces/Scrutineer/.devcontainer/debug-a89927.log"
 SESSION_ID="a89927"
 RUN_ID="diagnose"
 

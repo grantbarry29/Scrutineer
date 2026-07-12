@@ -1,3 +1,11 @@
+---
+type: Agent Rule
+title: Devcontainer
+description: "All build/test/codegen runs inside the provided devcontainer (pinned Go 1.23 + tools), never on the host. Host runs of make/codegen/envtest silently break the toolchain and produce false \"bugs\"."
+status: live
+read_when: "Always — before any build, test, or codegen."
+always_load: true
+---
 # Devcontainer Is The Only Supported Toolchain
 
 **All build/test/codegen for this repo runs inside the provided devcontainer — never

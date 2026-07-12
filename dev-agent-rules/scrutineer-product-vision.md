@@ -1,3 +1,11 @@
+---
+type: Agent Rule
+title: Scrutineer Product Vision
+description: "Scrutineer product vision and architecture principles."
+status: live
+read_when: "Always — product direction, threat model, and scope boundaries."
+always_load: true
+---
 
 # Scrutineer Product Vision
 
@@ -52,14 +60,14 @@ The MVP should establish the API shape, lifecycle model, policy model, extensibl
 - Scrutineer should feel closer to Kubernetes, Envoy, Cilium, Istio, Vault, Boundary, and Tailscale than chatbot frameworks, prompt wrappers, or consumer AI tooling.
 - Scrutineer is evolving toward a runtime governance platform, observability platform for AI agents, secure execution control plane, and Datadog/Splunk-like product for autonomous AI systems.
 
-## Cursor / AI Development Guidance
+## AI Development Guidance
 
 This file describes **product direction**, not permission to implement the full roadmap in one pass.
 
-- Work on **one narrow task or vertical slice** at a time. Task state lives in **GitHub Issues** (see `dev-agent-rules/task-management.md`); read `docs/design/` (+ component READMEs/code comments) for durable technical context and `dev-agent-rules/scrutineer-cursor-workflow.md` for implementation rules.
-- Follow the **Cursor Implementation Contract** in `dev-agent-rules/task-management.md` and `dev-agent-rules/scrutineer-cursor-workflow.md` before coding.
-- Follow **Out-of-Scope Future Work Handling** in `dev-agent-rules/scrutineer-cursor-workflow.md`: do not silently implement adjacent future work; **every** out-of-scope item must become a **GitHub Issue** (label `agent-discovered`) in the **same session** — chat-only notes are not tracking.
-- End implementation summaries with **### Out-of-scope future work noticed**; each bullet must cite the tracking issue or confirm the issue was created (see project-status rules).
+- Work on **one narrow task or vertical slice** at a time. Task state lives in **GitHub Issues** (see `dev-agent-rules/task-management.md`); read `docs/design/` (+ component READMEs/code comments) for durable technical context and `dev-agent-rules/scrutineer-workflow.md` for implementation rules.
+- Follow the **Implementation Contract** in `dev-agent-rules/task-management.md` and `dev-agent-rules/scrutineer-workflow.md` before coding.
+- Follow **Out-of-Scope Future Work Handling** in `dev-agent-rules/scrutineer-workflow.md`: do not silently implement adjacent future work; **every** out-of-scope item must become a **GitHub Issue** (label `agent-discovered`) in the **same session** — chat-only notes are not tracking.
+- End implementation summaries with **### Out-of-scope future work noticed**; each bullet must cite the tracking issue or confirm the issue was created (see `scrutineer-workflow.md`).
 - **Do not** implement multiple roadmap phases in a single change. Do not bundle unrelated capabilities.
 - **Do not** add new CRDs, sidecars, webhooks, dashboards, policy engines, Envoy, Cilium, eBPF, gVisor/Kata, or tool-execution chokepoints unless the user explicitly requests them.
 - Preserve **control-plane / data-plane separation**: controllers declare and propagate governance; enforcement belongs in future data-plane components.

@@ -1,3 +1,12 @@
+---
+type: Agent Rule
+title: Kubernetes Controller
+description: "Strict Kubernetes controller/reconciler standards — idempotency, finalizers, status, retries, RBAC, tests."
+status: live
+read_when: "Controller / reconciler code (internal/controller/**, cmd/**)."
+applies_to: ["internal/controller/**/*.go", "cmd/**/*.go"]
+always_load: false
+---
 
 # Kubernetes Controller Rules
 

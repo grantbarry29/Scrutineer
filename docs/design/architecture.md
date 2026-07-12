@@ -1,7 +1,7 @@
 # Scrutineer Architecture & Design
 
 > **Canonical architecture reference for Scrutineer.** Read this before implementing anything non-trivial.
-> **Companion docs:** product vision (`.cursor/rules/scrutineer-product-vision.mdc`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)), workflow rules (`.cursor/scrutineer-cursor-workflow.md`), and the phase-specific design docs in this folder.
+> **Companion docs:** product vision (`dev-agent-rules/scrutineer-product-vision.md`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)), workflow rules (`dev-agent-rules/scrutineer-workflow.md`), and the phase-specific design docs in this folder.
 >
 > **Enforcement doctrine (#69–#71):** enforcement is **adversarial-grade only**. The cooperative in-pod sidecar tier was removed; the sole enforcement plane is the per-session out-of-pod Envoy egress proxy + default-deny routing lock, empirically verified by the lock gate (#70) before enforced sessions run. Doctrine and rationale: [`untamperable-enforcement.md`](untamperable-enforcement.md).
 

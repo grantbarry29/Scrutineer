@@ -1,7 +1,7 @@
 # GitHub Project board — setup
 
 Task **state** for Scrutineer lives in GitHub Issues (see
-[`.cursor/rules/task-management.mdc`](../.cursor/rules/task-management.mdc)). A GitHub
+[`dev-agent-rules/task-management.md`](../dev-agent-rules/task-management.md)). A GitHub
 **Project (v2)** board gives a kanban view over those issues.
 
 **Current state:** the user-owned project **[Scrutineer](https://github.com/users/grantbarry29/projects/1)**

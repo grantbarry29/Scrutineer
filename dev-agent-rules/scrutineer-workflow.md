@@ -1,6 +1,14 @@
-# Scrutineer Cursor Workflow
+---
+type: Agent Rule
+title: Scrutineer Agent Workflow
+description: "Implementation contract, scope rules, task sizing, the Issue Body Template, and the End-of-Task Handoff Protocol for agent work on Scrutineer."
+status: live
+read_when: "Implementing any task — contract, Issue Body Template, End-of-Task Handoff."
+always_load: false
+---
+# Scrutineer Agent Workflow
 
-> Rules and templates for **Cursor-assisted implementation** on Scrutineer.
+> Rules and templates for **agent-assisted implementation** on Scrutineer.
 > **Task state lives in GitHub Issues / Projects** — see [`dev-agent-rules/task-management.md`](task-management.md).
 > Durable technical context lives in [`docs/design/`](../docs/design/), component `README.md`s, and code comments. There is no markdown task tracker.
 
@@ -13,16 +21,16 @@ Companion always-on rules: [`dev-agent-rules/task-management.md`](task-managemen
 | File | Audience | Contents |
 |------|----------|----------|
 | **GitHub Issues / Projects** | Humans + agents | **Live task state** — backlog/ready/in-progress/blocked/review/done, ownership, priority, blockers |
-| **`rules/task-management.md`** | Agents | Label model + start/during/done issue protocol |
-| **`docs/design/` + component READMEs + code comments** | Humans + agents | Durable technical context — canonical architecture & per-phase design, semantics, invariants, trust posture (read during planning; see `rules/scrutineer-design-docs.md`) |
-| **`scrutineer-cursor-workflow.md`** (this file) | Primarily agents | Implementation contract, scope rules, task templates |
-| **`rules/scrutineer-product-vision.md`** | Agents | Product vision, MVP boundaries, long-term direction |
+| **`task-management.md`** | Agents | Label model + start/during/done issue protocol |
+| **`docs/design/` + component READMEs + code comments** | Humans + agents | Durable technical context — canonical architecture & per-phase design, semantics, invariants, trust posture (read during planning; see `scrutineer-design-docs.md`) |
+| **`scrutineer-workflow.md`** (this file) | Primarily agents | Implementation contract, scope rules, task templates |
+| **`scrutineer-product-vision.md`** | Agents | Product vision, MVP boundaries, long-term direction |
 
 ---
 
-## Cursor Implementation Contract
+## Implementation Contract
 
-When asked to implement a Scrutineer task, Cursor must:
+When asked to implement a Scrutineer task, the agent must:
 
 1. Read `scrutineer-product-vision.md`, `task-management.md`, and this file when implementing. Pull **durable technical context** from the relevant [`docs/design/`](../docs/design/) doc, component READMEs, and code comments.
 2. Identify the **exact selected task** — a **GitHub Issue** (`status/ready` + `agent-ready`, per `task-management.md`) or the user prompt. If unclear, ask or propose a short list. Do not pick multiple roadmap phases automatically. Claim the issue (assign / `agent-in-progress`) before editing code.
@@ -46,7 +54,7 @@ Whenever you finish a task (work is complete, verification passed), do all four 
 1. **Sync the board first.** Update the GitHub Issue per `task-management.md` → *Before marking an issue complete*: comment the summary/files/tests, set `status/done`, and **close** it (`state_reason: completed`). Make sure any work discovered this session is already filed as its own issue. The board must reflect reality before you move on.
 2. **Commit it.** Create a git commit with a short but aptly descriptive message summarizing the change (imperative mood, focused on the "what/why"). Only commit when the work is complete and verified (tests pass or the user accepted incomplete work); follow the git safety rules. **Do not push** unless the user explicitly asks.
 3. **Offer next-task options.** Directly present the user with **2–4** candidate next tasks, drawn from open **GitHub Issues** (`status/ready` + `agent-ready`, ordered by `task-management.md` → *Work precedence* + `priority/*`). **Include a clear recommendation** (mark it and say why in one line).
-4. **Make them selectable.** Put those options in the Cursor selectable option box (the `AskQuestion` tool / option card), not just inline prose, so the user can pick one in one click. Put the recommended option first and label it `(Recommended)`.
+4. **Make them selectable.** Put those options in the harness's selectable option card (e.g. the `AskUserQuestion` tool), not just inline prose, so the user can pick one in one click. Put the recommended option first and label it `(Recommended)`.
 
 Keep it to 2–4 options. If there is genuinely only one sensible next step, still offer it plus an "other / you decide" choice. This protocol does not replace the **### Out-of-scope future work noticed** summary requirement — do both.
 

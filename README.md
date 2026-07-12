@@ -208,7 +208,7 @@ the proxy.
 
 ```
 .
-├── .devcontainer/                # one-shot Cursor/VS Code dev env (kind + CRDs)
+├── .devcontainer/                # one-shot VS Code dev env (kind + CRDs)
 ├── api/v1alpha1/                 # CRD types + deepcopy (6 kinds)
 ├── cmd/
 │   ├── main.go                   # manager: controller + reporter + lock-probe + optional webhook
@@ -682,7 +682,7 @@ the runner (`hack/ci-dump-diagnostics.sh`, #110).
 ## Developing with the dev container (recommended for contributors)
 
 The repo ships with a `.devcontainer/` that gives you a fully wired Scrutineer dev
-environment with **zero host setup beyond Docker + Cursor/VS Code**.
+environment with **zero host setup beyond Docker + VS Code**.
 
 What you get when you open the folder in a Dev Container:
 
@@ -696,7 +696,7 @@ What you get when you open the folder in a Dev Container:
 
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on
    your host (or any Docker-compatible runtime).
-2. Open this folder in Cursor / VS Code.
+2. Open this folder in VS Code.
 3. When prompted, choose **"Reopen in Container"**, or run the
    `Dev Containers: Reopen in Container` command.
 

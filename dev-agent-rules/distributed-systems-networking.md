@@ -1,3 +1,12 @@
+---
+type: Agent Rule
+title: Distributed Systems & Networking
+description: "Strict distributed-systems and networking standards — partial failure, timeouts, idempotency, fail-closed policy, deterministic rules."
+status: live
+read_when: "Distributed-systems / networking code (internal/**, cmd/**)."
+applies_to: ["internal/**/*.go", "cmd/**/*.go"]
+always_load: false
+---
 
 # Distributed Systems and Networking Rules
 
