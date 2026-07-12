@@ -1,7 +1,7 @@
 ---
 type: Agent Rule
 title: Scrutineer Design Docs — When To Read
-description: "Index and usage guidance for Scrutineer design docs in docs/design/. Consult the relevant design doc during planning and before non-trivial implementation (architecture, CRDs, policy, enforcement, reporter, observability). Do not paste whole docs into context — read the specific one that matches the task."
+description: "Routes non-trivial work to the matching design doc in docs/design/ — read the specific doc during planning, do not paste whole docs into context."
 status: live
 read_when: "Any non-trivial change in api/ or internal/{controller,enforcement,policy,reporter} — route to the matching design doc."
 applies_to: ["api/v1alpha1/**", "internal/controller/**", "internal/enforcement/**", "internal/policy/**", "internal/reporter/**"]
@@ -61,5 +61,6 @@ operated* (extract)?
 ## Authoring conventions
 
 - Every design doc carries **OKF frontmatter** (`type`, `title`, `description`, `status`, `read_when`, optional `tracking_issue`/`superseded_by`); **scope** and **non-goals** stay in the body. `make lint-docs` enforces the contract.
+- **Index bullets are synced, not hand-written** (#128): each `index.md` bullet's title and description render from the target's frontmatter (`title`, `description`, plus `applies_to` as an "Applies to:" suffix). Edit the frontmatter, then run `make gen-index` to resync — `make lint-docs` fails on out-of-sync bullets and dangling bullet targets. Section headings, ordering, and prose in indexes stay hand-authored.
 - **Diagrams** use [Mermaid](https://mermaid.js.org/) fenced code blocks so they render on GitHub and in editors without external assets.
 - Keep docs in sync: when a slice ships, update the doc's frontmatter `status` and the tracking GitHub Issue. Design docs describe intent; if code and a design doc disagree, treat it as a bug in one of them and reconcile (do not silently diverge).

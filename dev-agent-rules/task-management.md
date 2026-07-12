@@ -1,7 +1,7 @@
 ---
 type: Agent Rule
 title: Task Management
-description: "Source of truth for task state is GitHub Issues/Projects; repo markdown is source of truth for durable technical context. How agents pick up, work, create, update, and close out tasks — and keep the board in sync."
+description: "GitHub Issues/Projects are the sole source of task state; repo markdown holds durable technical context. How to pick up, file, work, and close tasks — and keep the board live."
 status: live
 read_when: "Always — claim one issue before editing; file discovered work as issues in the same session."
 always_load: true

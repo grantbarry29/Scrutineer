@@ -8,25 +8,25 @@ markdown: frontmatter declares each doc's `type`, `status`, `description`, and
 
 # Start here
 
-* [Scrutineer Architecture & Design](docs/design/architecture.md) - Whole-project architecture and the invariants every change must preserve.
+* [Scrutineer Architecture & Design](docs/design/architecture.md) - Whole-project architecture: control/data-plane split, CRD model, lifecycle, reconciliation, policy/evidence model, code map, invariants.
 * [Agent rules](dev-agent-rules/index.md) - Always-on and path-scoped engineering rules (`applies_to` globs).
 * [Docs bundle](docs/index.md) - Design docs, guides, playbooks, templates.
 
 # Reference
 
-* [The AgentSession CRD](docs/reference/agentsession-crd.md) - User-facing CRD reference: spec, status, env contract.
-* [AgentSession Controller Reference](docs/reference/controller-reference.md) - Full controller behavior catalog.
-* [Egress Enforcement — Guarantees & Assumptions](docs/reference/egress-guarantees.md) - Enforcement strength and its assumptions.
-* [Development Environment & Local Runs](docs/reference/dev-environment.md) - Devcontainer, pinned tools, samples walkthrough.
-* [CI Tiers](docs/reference/ci.md) - Workflow matrix and path scoping.
+* [The AgentSession CRD](docs/reference/agentsession-crd.md) - User-facing CRD reference: spec fields, cancellation, reference scoping, RuntimeProfile and AgentPolicy semantics, an inline sample, status fields, and the injected environment variables.
+* [AgentSession Controller Reference](docs/reference/controller-reference.md) - The full controller behavior catalog: reconcile triggers and flow, validation, task/policy/profile resolution, Job lifecycle, phase mapping, conditions, Kubernetes events, inspection commands, and the shipped-capability quick reference.
+* [Egress Enforcement — Guarantees & Assumptions](docs/reference/egress-guarantees.md) - Exactly what the envoy enforcement backend guarantees (proxy-only egress, untamperable chokepoint, FQDN + CIDR policy, independent observed evidence) and the assumptions those guarantees rest on.
+* [Development Environment & Local Runs](docs/reference/dev-environment.md) - The devcontainer (recommended), dev-cluster Makefile targets, pinned tool versions, the step-by-step host-side MVP walkthrough with samples, in-cluster controller deployment, and the sample-verified acceptance checklist.
+* [CI Tiers](docs/reference/ci.md) - Which workflows run when: Lint/Test always, cluster-heavy E2E + Quickstart Smoke skip docs-only pushes, Nightly Networking cross-checks Calico/dual-stack; all cluster jobs build first-party images from the checkout and dump diagnostics on failure.
 
 # Component READMEs
 
-* [agentsession controller](internal/controller/agentsession/README.md) - Core control-plane controller reconciling AgentSession CRs.
-* [job builder](internal/controller/job/README.md) - Single source of the agent pod shape for both runtime backends.
-* [reporter](internal/reporter/README.md) - Runtime-evidence and approval HTTP service.
-* [egress-reporter](cmd/egress-reporter/README.md) - Observed-evidence producer beside Envoy in the egress-proxy pod.
-* [Demo manifests](config/samples/demo/README.md) - Self-contained manifests for `make demo`.
+* [agentsession controller](internal/controller/agentsession/README.md) - Core control-plane controller: reconciles AgentSession CRs into a governed runtime workload and tracks observed governance status; compiled into the manager binary.
+* [job builder](internal/controller/job/README.md) - Builds and compares runtime objects for AgentSessions; BuildPodTemplateSpec is the single source of the agent pod shape consumed by both runtime backends.
+* [reporter](internal/reporter/README.md) - Runtime-evidence and approval HTTP service: ingests data-plane evidence (self-reported and observed) and serves the per-tool approval channel.
+* [egress-reporter](cmd/egress-reporter/README.md) - Tails the per-session Envoy JSON access log and submits each entry as observed egress evidence to the controller-owned reporter; runs beside Envoy in the egress-proxy pod, outside the agent's trust domain.
+* [Demo Manifests](config/samples/demo/README.md) - Self-contained manifests for the guided egress-governance demo, applied together by make demo.
 
 # Task state
 

@@ -1,7 +1,7 @@
 ---
 type: Agent Rule
 title: Scrutineer Product Vision
-description: "Scrutineer product vision and architecture principles."
+description: "Product direction, threat model, enforcement doctrine, and scope boundaries — a governance control plane, not an orchestrator or agent framework."
 status: live
 read_when: "Always — product direction, threat model, and scope boundaries."
 always_load: true

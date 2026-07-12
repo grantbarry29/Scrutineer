@@ -481,5 +481,9 @@ $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19
 
 .PHONY: lint-docs
-lint-docs: ## Validate OKF frontmatter across docs/, dev-agent-rules/, and component READMEs (#127).
+lint-docs: ## Validate OKF frontmatter and index-bullet sync across docs/, dev-agent-rules/, and component READMEs (#127, #128).
 	go run ./hack/okf-lint
+
+.PHONY: gen-index
+gen-index: ## Resync index.md bullet titles/descriptions from target frontmatter (#128).
+	go run ./hack/okf-lint -write-index

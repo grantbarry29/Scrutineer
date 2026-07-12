@@ -8,39 +8,39 @@ without reading its `superseded_by` target. Authoring conventions:
 
 # Orientation
 
-* [Scrutineer Architecture & Design](architecture.md) - Whole-project architecture: control/data-plane split, CRD model, lifecycle, reconciliation, policy/evidence model, code map, invariants. Start here.
-* [Untamperable Enforcement](untamperable-enforcement.md) - The enforcement doctrine: adversarial-grade-only, the verified-or-refused lock gate, removal of the cooperative in-pod tier. Read before any enforcement work.
+* [Scrutineer Architecture & Design](architecture.md) - Whole-project architecture: control/data-plane split, CRD model, lifecycle, reconciliation, policy/evidence model, code map, invariants.
+* [Untamperable Enforcement](untamperable-enforcement.md) - The enforcement doctrine: adversarial-grade-only, the verified-or-refused lock gate, removal of the cooperative in-pod tier, and deferral of tool/file governance to out-of-pod chokepoints.
 
 # Enforcement & evidence
 
-* [Enforcement Architecture](enforcement-architecture.md) - The `internal/enforcement` contract, NetworkPolicy baseline, runtime-evidence loop, and the out-of-pod Envoy egress path.
-* [Runtime Reporter Contract](runtime-reporter-contract.md) - How a data-plane component reports runtime evidence into AgentSession status: wire contract, identity, assurance stamping.
-* [Evidence Integrity — Per-Session Egress Chokepoint](evidence-integrity.md) - Moving egress evidence from cooperative to adversarial-grade via the per-session out-of-pod Envoy.
-* [Bypass-Attempt Evidence for the Egress Lock](bypass-attempt-evidence.md) - Why bypass attempts leave no evidence today; decided: defer wholly to the #64 node interceptor.
-* [Access-Log Rotation vs. Tamper Evidence](access-log-rotation.md) - The only-ingested-bytes-are-removed invariant and the rename→reopen→drain→delete protocol.
+* [Enforcement Architecture](enforcement-architecture.md) - Data-plane enforcement architecture: the internal/enforcement contract, NetworkPolicy baseline, runtime-evidence loop, and the out-of-pod Envoy egress path. The cooperative in-pod slices were removed (#71); their sections remain as condensed historical stubs.
+* [Runtime Reporter Contract](runtime-reporter-contract.md) - How a data-plane component reports runtime evidence into AgentSession status (policyDecisions/violations): wire contract, identity, assurance stamping. The live caller is the egress-reporter in the per-session egress-proxy pod.
+* [Evidence Integrity — Per-Session Egress Chokepoint](evidence-integrity.md) - Moving egress evidence from cooperative to adversarial-grade: per-session out-of-pod Envoy, explicit-proxy routing, caller-class observed stamping. Shipped via #8/#32/#62; the cooperative tier it hardened against was removed entirely (#71).
+* [Bypass-Attempt Evidence for the Egress Lock](bypass-attempt-evidence.md) - Why bypass attempts against the routing lock leave no evidence today; interim options compared. Decision: defer wholly to the #64 node interceptor; approved contingency shape recorded.
+* [Access-Log Rotation vs. Tamper Evidence](access-log-rotation.md) - Why the egress access log rotates, the only-ingested-bytes-are-removed invariant that preserves tamper evidence against flooding, and the rename→reopen→drain→delete protocol with its failure semantics.
 
 # Observability & session evidence
 
-* [Structured Session Events API](session-events.md) - `status.events[]`: the durable, ordered, capped runtime timeline stream.
-* [Session Timeline Projection Model](session-timeline.md) - Normalizes `status.events[]` into stable, UI-ready timeline entries.
-* [Observability Export](observability-export.md) - Canonical catalog of exported telemetry: Prometheus metrics, OTel spans, OTLP audit records, flags.
+* [Structured Session Events API](session-events.md) - status.events[] — the durable, ordered, capped runtime timeline stream: schema, ingestion via POST /v1/report, preservation across reconciler status patches.
+* [Session Timeline Projection Model](session-timeline.md) - Normalizes status.events[] into stable, UI-ready timeline entries (internal/observability) — sorting, severity, titles, and filter semantics for future UI/API consumers.
+* [Observability Export](observability-export.md) - Canonical catalog of exported telemetry: Prometheus metric names and labels, OTel span names and attributes, OTLP audit record types, enable flags, and the trace-propagation contract. Update it whenever an exported signal changes.
 
 # Governance surfaces
 
-* [Human Approval Workflows](approval-workflows.md) - Scoped, auditable approval gates: ApprovalPolicy/ApprovalRequest CRDs and the gate/resume state machine.
-* [Artifact Export](artifact-export.md) - Pluggable object-store export for collected session outputs; sliced into #117–#120 + demo #122.
+* [Human Approval Workflows](approval-workflows.md) - Scoped, auditable human approval gates: ApprovalPolicy/ApprovalRequest CRDs, the controller gate/resume state machine, requireHumanApproval enforcement; also records the dormant per-tool runtime-approval surface.
+* [Artifact Export](artifact-export.md) - Pluggable object-store export for collected session outputs — S3 backend, digests in status.artifacts, fallback semantics, retention posture; sliced into #117–#120 + demo #122.
 
 # Runtime backends
 
-* [Orchestrator Backend Interface](orchestrator-interface.md) - The `runtimeBackend` interface and registry; proven by the kubernetes-job and kubernetes-pod backends.
+* [Orchestrator Backend Interface](orchestrator-interface.md) - The runtimeBackend interface and registry keyed by spec.runtime.orchestrator; the reconciler owns all status/condition/event mapping. Proven by two in-tree backends (kubernetes-job, kubernetes-pod). Next: the external adapter design (Tekton first).
 
 # Deferred designs (drafts)
 
-* [Tools-Pod Chokepoint](tools-pod-chokepoint.md) - Out-of-pod tool governance: per-session tools pod, credential mediation, approval holds (epic #76).
-* [LLM-Gateway Chokepoint](llm-gateway-chokepoint.md) - Credential-locked gateway turning advisory `spec.model` into enforced, observed governance (epic #77).
-* [Arena Workspace](arena-workspace.md) - Out-of-pod file governance: network-POSIX per-session workspace pod (FUSE/9p analysis).
-* [Operational UI Vision](operational-ui.md) - The deferred nice-to-have UI epic (#11): governance/observability dashboard guardrails and the backend surfaces it will consume.
+* [Tools-Pod Chokepoint](tools-pod-chokepoint.md) - Out-of-pod successor to the removed cooperative tool tier: a per-session tools pod executes tool calls reached only through the session Envoy and holds the credentials the agent never sees — tool policy, argument rules, and approval holds, observed and mandatory.
+* [LLM-Gateway Chokepoint](llm-gateway-chokepoint.md) - Out-of-pod, credential-locked gateway for the agent's model calls — turns advisory spec.model into enforced, observed governance (provider/model allowlist, token/cost caps, prompt evidence). Sibling of the tools-pod chokepoint under the same doctrine.
+* [Arena Workspace](arena-workspace.md) - Out-of-pod successor to file governance: the governed workspace lives in a separate per-session pod served over a network-POSIX protocol (FUSE/9p analysis), so every file operation crosses a mediated, policy-checked boundary.
+* [Operational UI Vision](operational-ui.md) - Vision for the deferred operational-UI epic (#11): a governance/observability dashboard — never a chatbot — the operational questions it must answer, and the backend surfaces it will consume. A nice-to-have feature epic, not core product.
 
 # Investigations
 
-* [Long-Running & App-Driven Agent Runtimes](long-running-agents.md) - Open question: should Scrutineer govern service-style agents? Not an agreed direction (#94).
+* [Long-Running & App-Driven Agent Runtimes](long-running-agents.md) - Open investigation — not an agreed direction: whether Scrutineer should govern long-running, app-driven agents vs. the one-shot Job/Pod model. Questions and options only; answer the gating question in #94 before any design work.
