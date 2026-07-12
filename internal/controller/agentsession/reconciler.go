@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -57,6 +58,12 @@ type AgentSessionReconciler struct {
 	// in cmd/main.go always sets it for the controller role.
 	LockVerifier LockVerdictSource
 	clientset    kubernetes.Interface
+	// collectLogsFn / execFn are test seams for the output-collection I/O that a fake or
+	// envtest client cannot serve (pods/log streaming and pods/exec both need a real
+	// kubelet). Nil ⇒ the production implementations (readPodLogs, execInAgentContainer);
+	// unit tests set them to serve canned bytes or errors. See outputs.go.
+	collectLogsFn func(ctx context.Context, clientset kubernetes.Interface, namespace, podName, container string, limit int64) ([]byte, error)
+	execFn        func(ctx context.Context, clientset kubernetes.Interface, namespace, podName string, cmd []string, stdout, stderr io.Writer) error
 	// backends maps spec.runtime.orchestrator → runtime backend. Lazily built from the
 	// reconciler's client/scheme/recorder so direct (non-manager) test construction works.
 	backends backendRegistry

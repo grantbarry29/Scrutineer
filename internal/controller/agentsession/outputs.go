@@ -41,6 +41,17 @@ const (
 	maxCollectedArtifactBytes = 512 * 1024
 )
 
+// collectOutputsBestEffort runs terminal output collection, degrading any failure to a
+// warning event. Collection never fails the reconcile or blocks the terminal transition:
+// a failed collection means the artifact is at worst absent (a capped fallback remains the
+// #2 export-path story), never a stuck session. This is the single call site's contract,
+// named so it can be exercised directly.
+func (r *AgentSessionReconciler) collectOutputsBestEffort(ctx context.Context, session *scrutineerv1alpha1.AgentSession) {
+	if err := r.collectSessionOutputs(ctx, session); err != nil {
+		r.recordWarning(session, EventReasonOutputsCollectionFailed, err.Error())
+	}
+}
+
 // collectSessionOutputs retains pod logs and workspace files when spec.outputs requests it.
 // Collection runs once per artifact name; results are stored in owned ConfigMaps/Secrets
 // and referenced from status.artifacts.
@@ -97,10 +108,11 @@ func (r *AgentSessionReconciler) collectSessionOutputs(ctx context.Context, sess
 	return nil
 }
 
-func (r *AgentSessionReconciler) collectAgentLogs(ctx context.Context, clientset kubernetes.Interface, session *scrutineerv1alpha1.AgentSession, podName string) (*scrutineerv1alpha1.ArtifactRef, error) {
-	limit := int64(maxCollectedLogBytes)
-	req := clientset.CoreV1().Pods(session.Namespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container:  scrutineerjob.AgentContainerName,
+// readPodLogs streams up to limit+1 bytes of a container's logs — the +1 lets the caller
+// detect (and mark) truncation at the cap. Production implementation behind collectLogsFn.
+func readPodLogs(ctx context.Context, clientset kubernetes.Interface, namespace, podName, container string, limit int64) ([]byte, error) {
+	req := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container:  container,
 		LimitBytes: &limit,
 	})
 	stream, err := req.Stream(ctx)
@@ -108,8 +120,15 @@ func (r *AgentSessionReconciler) collectAgentLogs(ctx context.Context, clientset
 		return nil, err
 	}
 	defer stream.Close()
+	return io.ReadAll(io.LimitReader(stream, limit+1))
+}
 
-	body, err := io.ReadAll(io.LimitReader(stream, maxCollectedLogBytes+1))
+func (r *AgentSessionReconciler) collectAgentLogs(ctx context.Context, clientset kubernetes.Interface, session *scrutineerv1alpha1.AgentSession, podName string) (*scrutineerv1alpha1.ArtifactRef, error) {
+	read := r.collectLogsFn
+	if read == nil {
+		read = readPodLogs
+	}
+	body, err := read(ctx, clientset, session.Namespace, podName, scrutineerjob.AgentContainerName, maxCollectedLogBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +165,11 @@ func (r *AgentSessionReconciler) collectWorkspaceArtifacts(ctx context.Context, 
 	}
 
 	var stdout, stderr bytes.Buffer
-	err = r.execInAgentContainer(ctx, clientset, session.Namespace, podName, []string{
+	exec := r.execFn
+	if exec == nil {
+		exec = r.execInAgentContainer
+	}
+	err = exec(ctx, clientset, session.Namespace, podName, []string{
 		"sh", "-c", fmt.Sprintf("if [ -d %q ]; then tar -C %q -cz .; fi", path, path),
 	}, &stdout, &stderr)
 	if err != nil {

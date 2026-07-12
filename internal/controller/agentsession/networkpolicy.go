@@ -34,9 +34,7 @@ func (r *AgentSessionReconciler) patchStatusWithEnforcement(ctx context.Context,
 		// reconcileRuntimeApprovals does not run on terminal passes, so clear any
 		// stale "pending approval" entries here as a central guard.
 		session.Status.PendingApprovals = nil
-		if err := r.collectSessionOutputs(ctx, session); err != nil {
-			r.recordWarning(session, EventReasonOutputsCollectionFailed, err.Error())
-		}
+		r.collectOutputsBestEffort(ctx, session)
 	}
 	if err := r.ensureEgressProxy(ctx, session, profile); err != nil {
 		return fmt.Errorf("ensure egress proxy: %w", err)
