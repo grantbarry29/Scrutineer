@@ -66,6 +66,10 @@ func main() {
 			if d.IsDir() || !strings.HasSuffix(path, ".md") {
 				return nil
 			}
+			if filepath.Base(path) == "README.md" {
+				fail(path, "bundle directories index with reserved index.md, not README.md (#127)")
+				return nil
+			}
 			if filepath.Base(path) == "index.md" {
 				lintIndex(path, root, fail)
 				return nil
@@ -164,18 +168,28 @@ func lintConcept(path, bundleRoot string, fail func(string, string, ...any)) {
 
 func lintIndex(path, bundleRoot string, fail func(string, string, ...any)) {
 	doc, has := frontmatter(path, fail)
-	if !has {
-		return // frontmatter-free index is the normal case (OKF §6)
-	}
-	if path != filepath.Join(bundleRoot, "index.md") {
-		fail(path, "non-root index.md must not carry frontmatter (OKF §6)")
-		return
-	}
-	for k := range doc {
-		if !indexRootKeys[k] {
-			fail(path, "bundle-root index.md frontmatter may only declare okf_version/okf_spec_rev (OKF §11); found %q", k)
+	if has {
+		if path != filepath.Join(bundleRoot, "index.md") {
+			fail(path, "non-root index.md must not carry frontmatter (OKF §6)")
+			return
+		}
+		for k := range doc {
+			if !indexRootKeys[k] {
+				fail(path, "bundle-root index.md frontmatter may only declare okf_version/okf_spec_rev (OKF §11); found %q", k)
+			}
 		}
 	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		fail(path, "read: %v", err)
+		return
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "* [") || strings.HasPrefix(line, "- [") {
+			return
+		}
+	}
+	fail(path, "index.md contains no link-list bullets (OKF §6)")
 }
 
 func keys(m map[string]bool) []string {

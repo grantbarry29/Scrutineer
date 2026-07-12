@@ -16,7 +16,7 @@ Scrutineer keeps canonical architecture/design docs in [`docs/design/`](../docs/
 
 1. Before implementing or planning a non-trivial change, identify which design doc(s) cover the area (table below) and **read them** with the file-reading tool.
 2. Follow their stated invariants and non-goals. If code and a design doc disagree, reconcile rather than silently diverge.
-3. After shipping a slice, update the doc's status line and the **GitHub Issue**.
+3. After shipping a slice, update the doc's frontmatter `status` and the **GitHub Issue**.
 4. Do not dump entire design docs into context speculatively — read the one(s) you need.
 
 ## Which doc for which task
@@ -36,4 +36,10 @@ Scrutineer keeps canonical architecture/design docs in [`docs/design/`](../docs/
 | Observability export (Prometheus / OTel traces / OTLP audit logs) | [`docs/design/phase-4-observability-export.md`](../docs/design/phase-4-observability-export.md) |
 | Orchestrator decoupling / `RuntimeBackend` interface / orchestrator adapters (Tekton/Argo/Temporal) | [`docs/design/phase-6-orchestrator-interface.md`](../docs/design/phase-6-orchestrator-interface.md) |
 
-The folder index is [`docs/design/README.md`](../docs/design/README.md). For task state and roadmap use **GitHub Issues** (see `dev-agent-rules/task-management.md`); for durable technical context use these design docs / component READMEs / code comments; for how to implement use `dev-agent-rules/scrutineer-workflow.md`.
+The folder index is [`docs/design/index.md`](../docs/design/index.md). For task state and roadmap use **GitHub Issues** (see `dev-agent-rules/task-management.md`); for durable technical context use these design docs / component READMEs / code comments; for how to implement use `dev-agent-rules/scrutineer-workflow.md`.
+
+## Authoring conventions
+
+- Every design doc carries **OKF frontmatter** (`type`, `title`, `description`, `status`, `read_when`, optional `tracking_issue`/`superseded_by`); **scope** and **non-goals** stay in the body. `make lint-docs` enforces the contract.
+- **Diagrams** use [Mermaid](https://mermaid.js.org/) fenced code blocks so they render on GitHub and in editors without external assets.
+- Keep docs in sync: when a slice ships, update the doc's frontmatter `status` and the tracking GitHub Issue. Design docs describe intent; if code and a design doc disagree, treat it as a bug in one of them and reconcile (do not silently diverge).
