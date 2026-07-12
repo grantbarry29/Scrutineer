@@ -14,6 +14,14 @@ start at the repository [README](../README.md); agents start at the repository-r
 
 * [Design docs](design/index.md) - Canonical architecture and design: doctrine, phases, chokepoints, evidence model.
 
+# Reference
+
+* [The AgentSession CRD](reference/agentsession-crd.md) - Spec fields, cancellation, RuntimeProfile/AgentPolicy semantics, status fields, injected env vars.
+* [AgentSession Controller Reference](reference/controller-reference.md) - Reconcile triggers/flow, validation, conditions, events, phase mapping, capability quick reference.
+* [Egress Enforcement — Guarantees & Assumptions](reference/egress-guarantees.md) - Exactly what the envoy backend guarantees and the assumptions those guarantees rest on.
+* [Development Environment & Local Runs](reference/dev-environment.md) - Devcontainer, dev Makefile targets, pinned tool versions, host-side walkthrough, acceptance checklist.
+* [CI Tiers](reference/ci.md) - Which workflows run when, path scoping, first-party image policy, failure diagnostics.
+
 # Guides
 
 * [Egress Governance Demo](demo.md) - Guided two-session demo (`make demo`): live deny at the chokepoint, bypass attempt killed by the lock, observed evidence.

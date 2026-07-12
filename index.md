@@ -12,6 +12,14 @@ markdown: frontmatter declares each doc's `type`, `status`, `description`, and
 * [Agent rules](dev-agent-rules/index.md) - Always-on and path-scoped engineering rules (`applies_to` globs).
 * [Docs bundle](docs/index.md) - Design docs, guides, playbooks, templates.
 
+# Reference
+
+* [The AgentSession CRD](docs/reference/agentsession-crd.md) - User-facing CRD reference: spec, status, env contract.
+* [AgentSession Controller Reference](docs/reference/controller-reference.md) - Full controller behavior catalog.
+* [Egress Enforcement — Guarantees & Assumptions](docs/reference/egress-guarantees.md) - Enforcement strength and its assumptions.
+* [Development Environment & Local Runs](docs/reference/dev-environment.md) - Devcontainer, pinned tools, samples walkthrough.
+* [CI Tiers](docs/reference/ci.md) - Workflow matrix and path scoping.
+
 # Component READMEs
 
 * [agentsession controller](internal/controller/agentsession/README.md) - Core control-plane controller reconciling AgentSession CRs.

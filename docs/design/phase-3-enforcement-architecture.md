@@ -84,7 +84,7 @@ Open design question: whether runtime reporters patch `AgentSession.status` dire
 
 ### Slice 1: Enforcement Backend Contract — done
 
-Implemented in [`internal/enforcement/`](../internal/enforcement/):
+Implemented in [`internal/enforcement/`](../../internal/enforcement/):
 
 - `SessionContext` — normalized input from `AgentSession.status` + optional `RuntimeProfile`
 - `Backend` — replaceable backend interface (`Kind`, `Capabilities`, `DesiredState`)
