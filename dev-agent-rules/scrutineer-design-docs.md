@@ -38,6 +38,25 @@ Scrutineer keeps canonical architecture/design docs in [`docs/design/`](../docs/
 
 The folder index is [`docs/design/index.md`](../docs/design/index.md). For task state and roadmap use **GitHub Issues** (see `dev-agent-rules/task-management.md`); for durable technical context use these design docs / component READMEs / code comments; for how to implement use `dev-agent-rules/scrutineer-workflow.md`.
 
+## Legacy information policy (#127)
+
+Three kinds of "old" content, three treatments — the litmus test: *does the passage
+explain why the current design is shaped this way* (keep) *or how a dead design
+operated* (extract)?
+
+1. **Wholly superseded docs** stay in place with `status: historical` +
+   `superseded_by:` frontmatter — never deleted (git history is invisible to agents)
+   and never moved to an archive directory (breaks inbound links; the metadata already
+   segregates them).
+2. **Retired mechanics** must not sit inline in a live doc: extract them into the
+   historical doc that owns that era (or git history via a purge commit), leaving a
+   short pointer stub — the slices 5–8 stub in `phase-3-enforcement-architecture.md`
+   is the reference shape. A doc whose `status` is `approved`/`implemented` must
+   contain no stale guidance, or the status field lies.
+3. **Decision rationale** — rejected alternatives, threat analyses, "why not X" — stays
+   inline; it is load-bearing for the current design and stops future agents from
+   re-proposing rejected approaches.
+
 ## Authoring conventions
 
 - Every design doc carries **OKF frontmatter** (`type`, `title`, `description`, `status`, `read_when`, optional `tracking_issue`/`superseded_by`); **scope** and **non-goals** stay in the body. `make lint-docs` enforces the contract.
