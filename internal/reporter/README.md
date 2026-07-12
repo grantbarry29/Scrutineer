@@ -72,8 +72,8 @@ load session → `ValidateAndNormalizeReport` → reportId dedup → `PatchRunti
 - Clients: the egress-reporter (per-session egress-proxy pod) POSTs here; the
   controller reconciles the `ApprovalRequest`s this service creates (the approval
   channel is dormant until the tools-pod chokepoint lands).
-- Design: [`docs/design/phase-3-runtime-reporter-contract.md`](../../docs/design/phase-3-runtime-reporter-contract.md),
-  [`docs/design/phase-5-approval-workflows.md`](../../docs/design/phase-5-approval-workflows.md).
+- Design: [`docs/design/runtime-reporter-contract.md`](../../docs/design/runtime-reporter-contract.md),
+  [`docs/design/approval-workflows.md`](../../docs/design/approval-workflows.md).
 
 ## Interfaces & artifacts
 

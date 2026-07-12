@@ -32,7 +32,7 @@ Each of these is a separately built/deployed component and keeps a README at its
 - The data-plane/evidence contract for sidecars: they are **cooperative** (share the
   agent pod/ServiceAccount), report via the reporter channel, and stamp evidence
   `self-reported` — never overstate as tamper-proof (see
-  [`docs/design/phase-3-enforcement-architecture.md`](../docs/design/phase-3-enforcement-architecture.md)
+  [`docs/design/enforcement-architecture.md`](../docs/design/enforcement-architecture.md)
   and the runtime-reporter contract).
 
 ## Files that must change together (call these out in the README)

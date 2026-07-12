@@ -9,7 +9,7 @@ You may obtain a copy of the License at
 */
 
 // Package reporter implements the controller-owned runtime evidence ingestion endpoint.
-// See docs/design/phase-3-runtime-reporter-contract.md.
+// See docs/design/runtime-reporter-contract.md.
 package reporter
 
 import (

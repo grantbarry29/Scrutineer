@@ -35,7 +35,7 @@ spec:
       openAPIV3Schema:
         description: |-
           ApprovalRequest is a per-decision, controller-owned object a human grants or
-          denies to gate an AgentSession. See docs/design/phase-5-approval-workflows.md.
+          denies to gate an AgentSession. See docs/design/approval-workflows.md.
         properties:
           apiVersion:
             description: |-

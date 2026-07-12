@@ -1,16 +1,16 @@
 ---
 type: Design Doc
-title: Phase 3 Enforcement Architecture
+title: Enforcement Architecture
 description: "Data-plane enforcement architecture: the internal/enforcement contract, NetworkPolicy baseline, runtime-evidence loop, and the out-of-pod Envoy egress path. The cooperative in-pod slices were removed (#71); their sections remain as condensed historical stubs."
 status: implemented
-read_when: "Data-plane enforcement, the internal/enforcement contract, Phase 3 slices."
+read_when: "Data-plane enforcement, the internal/enforcement contract, or the runtime evidence loop."
 ---
 
-# Phase 3 Enforcement Architecture
+# Enforcement Architecture
 
-> **Note:** the cooperative in-pod enforcement slices this phase shipped (5–8 below) were **removed** ([`untamperable-enforcement.md`](untamperable-enforcement.md), #71); their sections are kept as condensed historical stubs. What survives of Phase 3 is the enforcement contract (`internal/enforcement`), the NetworkPolicy baseline, the runtime-evidence loop, and the out-of-pod Envoy egress path.
+> **Note:** the cooperative in-pod enforcement slices this phase shipped (5–8 below) were **removed** ([`untamperable-enforcement.md`](untamperable-enforcement.md), #71); their sections are kept as condensed historical stubs. What survives is the enforcement contract (`internal/enforcement`), the NetworkPolicy baseline, the runtime-evidence loop, and the out-of-pod Envoy egress path.
 
-Scrutineer Phase 3 moves from policy declaration and propagation to data-plane enforcement. The goal is not to turn Scrutineer into an orchestrator or agent framework. The controller should keep declaring desired governance state; enforcement backends should observe, enforce, and report evidence.
+This design moves Scrutineer from policy declaration and propagation to data-plane enforcement. The goal is not to turn Scrutineer into an orchestrator or agent framework. The controller should keep declaring desired governance state; enforcement backends should observe, enforce, and report evidence.
 
 ## Goals
 
@@ -23,14 +23,14 @@ Scrutineer Phase 3 moves from policy declaration and propagation to data-plane e
 ## Non-Goals
 
 - Do not build a workflow engine.
-- Do not implement a full UI, audit warehouse, or SIEM sink in Phase 3.
+- Do not implement a full UI, audit warehouse, or SIEM sink in this scope.
 - Do not implement every enforcement backend at once.
 - Do not require Envoy, Cilium, gVisor, or a tool-execution chokepoint for the first slice.
 - Do not make `AGENT_POLICY_*` env vars the enforcement boundary. They remain propagation hooks.
 
 ## Existing Control-Plane Inputs
 
-Phase 2 already gives enforcement backends these inputs:
+The control plane already gives enforcement backends these inputs:
 
 - `AgentSession.spec.policy` and `spec.policyRefs`
 - `status.effectivePolicy`
@@ -58,7 +58,7 @@ Backends should be replaceable (every backend is out-of-pod):
 
 ## Policy Modes
 
-Phase 3 must define how modes affect runtime decisions:
+Enforcement must define how modes affect runtime decisions:
 
 | Mode | Runtime behavior |
 |------|------------------|
@@ -154,13 +154,13 @@ slice write-ups and their design docs live in git history (deleted in #74). Surv
 descendants: the mode semantics and evidence contract (unchanged) and the successor designs
 ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)).
 
-## Phase 3b — Runtime evidence loop (critical path)
+## Runtime evidence loop (critical path)
 
-Slices 1–8 shipped contracts, design docs, and in-process merge helpers, but **nothing running in-cluster produces or reports runtime evidence**. `status.policyDecisions`, `status.violations`, and `status.usage` are empty at runtime. Phase 3b closes that gap and is a prerequisite for Phase 4 observability — it is the critical path, not optional hardening.
+Slices 1–8 shipped contracts, design docs, and in-process merge helpers, but **nothing running in-cluster produces or reports runtime evidence**. `status.policyDecisions`, `status.violations`, and `status.usage` are empty at runtime. The runtime evidence loop closes that gap and is a prerequisite for observability export — it is the critical path, not optional hardening.
 
 Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)):
 
-1. **Runtime reporter mechanism design** — `docs/design/phase-3-runtime-reporter-contract.md`.
+1. **Runtime reporter mechanism design** — `docs/design/runtime-reporter-contract.md`.
 2. **Runtime reporter loop (impl)** — controller-owned PATCH callback populates status.
 3. **Structured session events API** — durable, ordered `status.events[]` (the reporter's sink).
 4. **First real producers** — shipped as cooperative in-pod images (removed in #71); the surviving producer is the **egress-reporter** in the out-of-pod egress-proxy pod.
@@ -169,12 +169,12 @@ Ordered slices (tracked in [GitHub Issues](https://github.com/grantbarry29/scrut
 
 ## Open Questions
 
-- ~~Should runtime reporters patch `AgentSession.status` directly or write separate evidence CRDs?~~ **Decided:** controller-owned **PATCH callback** — data-plane producers report to a controller endpoint that PATCHes `AgentSession.status`; no new evidence CRD. Keeps status the single source of truth. Detailed contract: [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) (Phase 3b slice 1).
-- ~~Should `RuntimeProfile.spec.sidecars[]` be enough for backend selection, or should Phase 3 introduce an `EnforcementProfile` / `ToolGateway` CRD first?~~ **Decided:** the list on `RuntimeProfile` is enough — its entry `type` selects the backend. Renamed `spec.sidecars[]` → `spec.enforcement[]` in #65 (it now covers out-of-pod backends like the Envoy egress proxy, not just in-pod sidecars); no separate `EnforcementProfile`/`ToolGateway` CRD was introduced.
+- ~~Should runtime reporters patch `AgentSession.status` directly or write separate evidence CRDs?~~ **Decided:** controller-owned **PATCH callback** — data-plane producers report to a controller endpoint that PATCHes `AgentSession.status`; no new evidence CRD. Keeps status the single source of truth. Detailed contract: [`runtime-reporter-contract.md`](runtime-reporter-contract.md).
+- ~~Should `RuntimeProfile.spec.sidecars[]` be enough for backend selection, or should this design introduce an `EnforcementProfile` / `ToolGateway` CRD first?~~ **Decided:** the list on `RuntimeProfile` is enough — its entry `type` selects the backend. Renamed `spec.sidecars[]` → `spec.enforcement[]` in #65 (it now covers out-of-pod backends like the Envoy egress proxy, not just in-pod sidecars); no separate `EnforcementProfile`/`ToolGateway` CRD was introduced.
 - What is the minimal production-safe status cap for runtime decisions and violations?
 - How should active Job drift be handled for enforcement backend changes: deny mutation, set drift condition, or require session restart?
 - How much can NetworkPolicy cover before DNS/proxy enforcement is needed?
 
 ## Recommended Next Work
 
-Phase 3 slices 1–8 are complete. Pick the next slice from [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues).
+Slices 1–8 are complete. Pick the next slice from [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues).

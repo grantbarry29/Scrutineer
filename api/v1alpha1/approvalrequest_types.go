@@ -42,7 +42,7 @@ const (
 )
 
 // ApprovalTrigger distinguishes a pre-execution session gate from a
-// mid-execution per-tool-call hold. See docs/design/phase-5-runtime-tool-approval.md.
+// mid-execution per-tool-call hold. See docs/design/approval-workflows.md.
 //
 // +kubebuilder:validation:Enum=session;runtime
 type ApprovalTrigger string
@@ -168,7 +168,7 @@ type ApprovalRequestStatus struct {
 }
 
 // ApprovalRequest is a per-decision, controller-owned object a human grants or
-// denies to gate an AgentSession. See docs/design/phase-5-approval-workflows.md.
+// denies to gate an AgentSession. See docs/design/approval-workflows.md.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced,shortName=appreq;approvalreq

@@ -37,7 +37,7 @@ const podDeadlineExceededReason = "DeadlineExceeded"
 // kind differs. It is the second reference backend proving Scrutineer is orchestrator-agnostic.
 //
 // This slice covers the create/observe/stop happy path. Completion/timeout/drift edge
-// cases and watch wiring are handled in later Phase 6 slices.
+// cases and watch wiring are handled in later orchestrator-interface slices.
 type kubernetesPodBackend struct {
 	client    client.Client
 	apiReader client.Reader

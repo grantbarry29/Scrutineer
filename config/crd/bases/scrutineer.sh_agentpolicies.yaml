@@ -131,7 +131,7 @@ spec:
               observedGeneration:
                 description: |-
                   ObservedGeneration is the last spec generation observed by a controller.
-                  Reserved for a future AgentPolicy controller; unused in Phase 2 slice.
+                  Reserved for a future AgentPolicy controller; currently unused.
                 format: int64
                 type: integer
             type: object

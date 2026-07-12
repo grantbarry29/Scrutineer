@@ -34,7 +34,7 @@ Companion always-on rules: [`dev-agent-rules/task-management.md`](task-managemen
 When asked to implement a Scrutineer task, the agent must:
 
 1. Read `scrutineer-product-vision.md`, `task-management.md`, and this file when implementing. Pull **durable technical context** from the relevant [`docs/design/`](../docs/design/) doc, component READMEs, and code comments.
-2. Identify the **exact selected task** — a **GitHub Issue** (`status/ready` + `agent-ready`, per `task-management.md`) or the user prompt. If unclear, ask or propose a short list. Do not pick multiple roadmap phases automatically. Claim the issue (assign / `agent-in-progress`) before editing code.
+2. Identify the **exact selected task** — a **GitHub Issue** (`status/ready` + `agent-ready`, per `task-management.md`) or the user prompt. If unclear, ask or propose a short list. Do not pick multiple epics automatically. Claim the issue (assign / `agent-in-progress`) before editing code.
 3. Before editing code, provide a short plan: selected task, acceptance criterion, expected files, verification command, non-goals. **During planning, read the relevant design doc(s) in [`docs/design/`](../docs/design/)** — start with `architecture.md`, then the phase/area doc that matches the task (see `scrutineer-design-docs.md`). Follow their invariants and non-goals. Do not load all design docs at once; read the one(s) you need.
 4. Implement **only** that task. Do not add adjacent roadmap items unless explicitly requested.
 5. Keep changes reviewable. Prefer **1–4 non-generated files**; if more are needed, stop and explain.
@@ -63,7 +63,7 @@ Keep it to 2–4 options. If there is genuinely only one sensible next step, sti
 
 ## How To Work On Roadmap Items
 
-Roadmap phases (tracked as GitHub epics, e.g. Phase 6/7/8) are **capabilities**, not one PR or one prompt. Decompose into narrow **GitHub Issues**, each with one acceptance criterion and one verification command.
+Roadmap epics are **capabilities**, not one PR or one prompt. Decompose into narrow **GitHub Issues**, each with one acceptance criterion and one verification command.
 
 **Avoid prompts like:**
 
@@ -143,10 +143,10 @@ Or one bullet per item:
 |---------------------|---------|----------|
 | `status.podName` | Redesign Job retry/backoff | Create an issue if not tracked |
 | Cancellation | Add finalizers | Reference the finalizer issue |
-| Policy env vars | Add Envoy/Cilium/NetworkPolicy | Reference the Phase 3 / FQDN issue |
-| Events | Build audit backend / UI | Reference the Phase 4 / UI epic |
+| Policy env vars | Add Envoy/Cilium/NetworkPolicy | Reference the FQDN enforcement issue |
+| Events | Build audit backend / UI | Reference the observability / UI epics |
 | `promptConfigMapRef` | Cross-namespace refs | Create a reference-scoping issue |
-| ServiceAccount fields | Redesign identity | Reference Phase 8 / CredentialProfile issues |
+| ServiceAccount fields | Redesign identity | Reference the enterprise-platform / CredentialProfile issues |
 
 ---
 
@@ -174,7 +174,7 @@ Promote issues to `status/ready` (and `agent-ready`) when appropriate.
 - A good task usually touches **1–4 files** (plus generated CRD YAML when API markers change).
 - Every task needs a **clear, testable** acceptance criterion.
 - One **primary verification command** per task (`make test`, `make test-e2e`, etc.).
-- Avoid spanning multiple roadmap phases in one task.
+- Avoid spanning multiple epics in one task.
 - Avoid new architecture (CRDs, sidecars, enforcement) unless the user asks for design first.
 - Multi-subsystem work: propose a plan and wait for confirmation.
 - **Runtime-evidence slices** (anything that populates `status.policyDecisions`, `status.violations`, `status.usage`, or `status.events`): must include a test that drives the path with a **simulated/fake report** — do not require a real sidecar image to prove the behavior. Reporter input must be idempotent and capped.

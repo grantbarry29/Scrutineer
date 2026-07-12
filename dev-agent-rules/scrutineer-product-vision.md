@@ -68,7 +68,7 @@ This file describes **product direction**, not permission to implement the full 
 - Follow the **Implementation Contract** in `dev-agent-rules/task-management.md` and `dev-agent-rules/scrutineer-workflow.md` before coding.
 - Follow **Out-of-Scope Future Work Handling** in `dev-agent-rules/scrutineer-workflow.md`: do not silently implement adjacent future work; **every** out-of-scope item must become a **GitHub Issue** (label `agent-discovered`) in the **same session** — chat-only notes are not tracking.
 - End implementation summaries with **### Out-of-scope future work noticed**; each bullet must cite the tracking issue or confirm the issue was created (see `scrutineer-workflow.md`).
-- **Do not** implement multiple roadmap phases in a single change. Do not bundle unrelated capabilities.
+- **Do not** implement multiple epics in a single change. Do not bundle unrelated capabilities.
 - **Do not** add new CRDs, sidecars, webhooks, dashboards, policy engines, Envoy, Cilium, eBPF, gVisor/Kata, or tool-execution chokepoints unless the user explicitly requests them.
 - Preserve **control-plane / data-plane separation**: controllers declare and propagate governance; enforcement belongs in future data-plane components.
 - Prefer **small, reviewable, incremental** diffs. A good change usually touches a few files and has a clear acceptance criterion.

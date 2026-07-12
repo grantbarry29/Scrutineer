@@ -11,7 +11,7 @@ You may obtain a copy of the License at
 // Package networkpolicy renders Kubernetes NetworkPolicy objects for coarse CIDR egress
 // enforcement on AgentSession runtimes.
 //
-// Limitations (Phase 3 slice 3):
+// Limitations (NetworkPolicy baseline slice):
 //   - FQDN fields (allowedDomains/deniedDomains) are not enforced; use DNS/egress proxy (slice 7).
 //   - Restrictive policies are applied only when effective policy mode is enforced.
 //   - Requires a CNI that enforces NetworkPolicy.

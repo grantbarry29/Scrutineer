@@ -83,7 +83,7 @@ func (c *AgentSessionCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// Approval queue depth is the count of ApprovalRequests still awaiting a human
-	// decision — the true Phase 5 gate, not the prior runtime ApprovalRequired proxy.
+	// decision — the true controller approval gate, not the prior runtime ApprovalRequired proxy.
 	var reqs scrutineerv1alpha1.ApprovalRequestList
 	if err := c.Client.List(ctx, &reqs); err == nil {
 		approvalQueue := 0

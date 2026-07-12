@@ -30,7 +30,7 @@ type AgentPolicySpec struct {
 // AgentPolicyStatus defines the observed state of an AgentPolicy.
 type AgentPolicyStatus struct {
 	// ObservedGeneration is the last spec generation observed by a controller.
-	// Reserved for a future AgentPolicy controller; unused in Phase 2 slice.
+	// Reserved for a future AgentPolicy controller; currently unused.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }

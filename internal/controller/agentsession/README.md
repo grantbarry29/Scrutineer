@@ -69,7 +69,7 @@ against an unchanged cluster makes no API mutations.
   #62; reporter URL/audience passed from the job package). The pod exposes metrics (#55):
   Envoy stats on `:9902` `/stats/prometheus` (stats-only listener; admin stays loopback)
   and egress-reporter metrics on `:9903` `/metrics` — catalog in
-  [`docs/design/phase-4-observability-export.md`](../../../docs/design/phase-4-observability-export.md). `Reconcile` provisions it (and
+  [`docs/design/observability-export.md`](../../../docs/design/observability-export.md). `Reconcile` provisions it (and
   `resolveEgressProxyEndpoint` records the Envoy Service ClusterIP into
   `status.egressProxyEndpoint`) **before** the agent runtime is built, so the agent is
   pointed at Envoy by ClusterIP — no DNS needed under the routing lock. A future node
@@ -107,7 +107,7 @@ against an unchanged cluster makes no API mutations.
   ([`cmd/egress-reporter`](../../../cmd/egress-reporter)) in the per-session
   egress-proxy pod.
 - Design: [`docs/design/architecture.md`](../../../docs/design/architecture.md),
-  [`docs/design/phase-6-orchestrator-interface.md`](../../../docs/design/phase-6-orchestrator-interface.md).
+  [`docs/design/orchestrator-interface.md`](../../../docs/design/orchestrator-interface.md).
 
 ## Interfaces & artifacts
 

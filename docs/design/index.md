@@ -13,26 +13,26 @@ without reading its `superseded_by` target. Authoring conventions:
 
 # Enforcement & evidence
 
-* [Phase 3 Enforcement Architecture](phase-3-enforcement-architecture.md) - The `internal/enforcement` contract, NetworkPolicy baseline, runtime-evidence loop, and the out-of-pod Envoy egress path.
-* [Runtime Reporter Contract](phase-3-runtime-reporter-contract.md) - How a data-plane component reports runtime evidence into AgentSession status: wire contract, identity, assurance stamping.
+* [Enforcement Architecture](enforcement-architecture.md) - The `internal/enforcement` contract, NetworkPolicy baseline, runtime-evidence loop, and the out-of-pod Envoy egress path.
+* [Runtime Reporter Contract](runtime-reporter-contract.md) - How a data-plane component reports runtime evidence into AgentSession status: wire contract, identity, assurance stamping.
 * [Evidence Integrity — Per-Session Egress Chokepoint](evidence-integrity.md) - Moving egress evidence from cooperative to adversarial-grade via the per-session out-of-pod Envoy.
 * [Bypass-Attempt Evidence for the Egress Lock](bypass-attempt-evidence.md) - Why bypass attempts leave no evidence today; decided: defer wholly to the #64 node interceptor.
 * [Access-Log Rotation vs. Tamper Evidence](access-log-rotation.md) - The only-ingested-bytes-are-removed invariant and the rename→reopen→drain→delete protocol.
 
 # Observability & session evidence
 
-* [Structured Session Events API](phase-4-session-events.md) - `status.events[]`: the durable, ordered, capped runtime timeline stream.
-* [Session Timeline Projection Model](phase-4-session-timeline.md) - Normalizes `status.events[]` into stable, UI-ready timeline entries.
-* [Observability Export](phase-4-observability-export.md) - Canonical catalog of exported telemetry: Prometheus metrics, OTel spans, OTLP audit records, flags.
+* [Structured Session Events API](session-events.md) - `status.events[]`: the durable, ordered, capped runtime timeline stream.
+* [Session Timeline Projection Model](session-timeline.md) - Normalizes `status.events[]` into stable, UI-ready timeline entries.
+* [Observability Export](observability-export.md) - Canonical catalog of exported telemetry: Prometheus metrics, OTel spans, OTLP audit records, flags.
 
 # Governance surfaces
 
-* [Phase 5 — Human Approval Workflows](phase-5-approval-workflows.md) - Scoped, auditable approval gates: ApprovalPolicy/ApprovalRequest CRDs and the gate/resume state machine.
+* [Human Approval Workflows](approval-workflows.md) - Scoped, auditable approval gates: ApprovalPolicy/ApprovalRequest CRDs and the gate/resume state machine.
 * [Artifact Export](artifact-export.md) - Pluggable object-store export for collected session outputs; sliced into #117–#120 + demo #122.
 
 # Runtime backends
 
-* [Phase 6 — Orchestrator Backend Interface](phase-6-orchestrator-interface.md) - The `runtimeBackend` interface and registry; proven by the kubernetes-job and kubernetes-pod backends.
+* [Orchestrator Backend Interface](orchestrator-interface.md) - The `runtimeBackend` interface and registry; proven by the kubernetes-job and kubernetes-pod backends.
 
 # Deferred chokepoint designs (drafts)
 

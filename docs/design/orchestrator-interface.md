@@ -1,12 +1,12 @@
 ---
 type: Design Doc
-title: Phase 6 — Orchestrator Backend Interface
+title: Orchestrator Backend Interface
 description: "The runtimeBackend interface and registry keyed by spec.runtime.orchestrator; the reconciler owns all status/condition/event mapping. Proven by two in-tree backends (kubernetes-job, kubernetes-pod). Next: the external adapter design (Tekton first)."
 status: implemented
 read_when: "Decoupling from Kubernetes Jobs — RuntimeBackend, orchestrator selection, adding adapters."
 ---
 
-# Phase 6 — Orchestrator Backend Interface
+# Orchestrator Backend Interface
 
 > Slices 1–8 **shipped (2026-06-27)**. The AgentSession reconciler calls runtimes only through a `runtimeBackend` interface selected from a registry keyed by `spec.runtime.orchestrator` (`internal/controller/agentsession/runtime_backend.go`); backends return a normalized `observation` and the **reconciler** owns all status/condition/event/result mapping (`applyObservation`/`applyRuntimePhase`). The abstraction is now proven by **two** in-tree backends: `kubernetes-job` (default) and `kubernetes-pod` (a bare Pod, the reference adapter). Shipped generalizations: a shared pod-template builder (`job.BuildPodTemplateSpec`, slice 3), a backend-neutral `status.runtimeRef` (slice 4, resolves open question #1), the `kubernetes-pod` backend with lifecycle/drift correctness + GC parity (slices 5–7), and a live kind e2e (slice 8).
 >
@@ -127,7 +127,7 @@ Cancellation and `handleDeletion` call `backend.Stop`/`backend.Observe` instead 
 
 ## Where the data plane / evidence loop fits
 
-Enforcement sidecars and the reporter token are injected by `internal/controller/job` into the **Pod template** — this is Kubernetes-Pod-specific. The `kubernetes-job` backend keeps that wiring. Backends without a co-located pod (e.g. an external Temporal worker) cannot inject sidecars the same way, which directly affects **evidence assurance**: such backends start at best `self-reported` over a different channel, or have no runtime evidence at all until an `observed` source exists. The interface deliberately does **not** promise sidecar parity across backends; the reporter contract (`phase-3-runtime-reporter-contract.md`) and assurance levels (`controller`/`self-reported`/`observed`) already model this honestly. New backends must declare their evidence channel and assurance explicitly.
+Enforcement sidecars and the reporter token are injected by `internal/controller/job` into the **Pod template** — this is Kubernetes-Pod-specific. The `kubernetes-job` backend keeps that wiring. Backends without a co-located pod (e.g. an external Temporal worker) cannot inject sidecars the same way, which directly affects **evidence assurance**: such backends start at best `self-reported` over a different channel, or have no runtime evidence at all until an `observed` source exists. The interface deliberately does **not** promise sidecar parity across backends; the reporter contract (`runtime-reporter-contract.md`) and assurance levels (`controller`/`self-reported`/`observed`) already model this honestly. New backends must declare their evidence channel and assurance explicitly.
 
 ## Invariants
 
@@ -188,5 +188,5 @@ The **governance pipeline does not change**: validate → resolve → approval g
 ## Related
 
 - [`architecture.md`](architecture.md) — control/data-plane split, lifecycle, status merge.
-- [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) — reporter/evidence channel + assurance levels.
+- [`runtime-reporter-contract.md`](runtime-reporter-contract.md) — reporter/evidence channel + assurance levels.
 - Product vision *Core Direction* (orchestrator-agnostic) and *Design Guidance* (don't rebuild schedulers/workflow engines).

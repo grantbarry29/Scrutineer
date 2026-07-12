@@ -71,5 +71,5 @@ Per-report cap: **64** events (`MaxEventsPerReport`).
 
 ## Related
 
-- [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md)
+- [`runtime-reporter-contract.md`](runtime-reporter-contract.md)
 - [`architecture.md`](architecture.md) §6.3 status merge strategy

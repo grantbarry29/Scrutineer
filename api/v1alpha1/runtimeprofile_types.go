@@ -29,7 +29,7 @@ type RuntimeProfileRef struct {
 }
 
 // RuntimeProfileSpec defines reusable runtime hardening for AgentSessions.
-// Fields are declarative in Phase 2; enforcement backends (sidecars, sandboxes) arrive in Phase 3.
+// Declarative fields consumed by enforcement backends (the envoy egress proxy today; sandboxes later).
 type RuntimeProfileSpec struct {
 	// Container holds security settings applied to the agent container.
 	// +optional
@@ -81,7 +81,7 @@ type RuntimeProfileContainerSpec struct {
 // RuntimeProfilePodSpec holds pod-level runtime settings for sessions referencing this profile.
 type RuntimeProfilePodSpec struct {
 	// RuntimeClassName selects a RuntimeClass (e.g. gVisor/Kata) when the cluster provides one.
-	// Declarative only until sandbox runtimes are enforced in Phase 3.
+	// Declarative only until sandbox runtimes are enforced.
 	// +optional
 	RuntimeClassName string `json:"runtimeClassName,omitempty"`
 

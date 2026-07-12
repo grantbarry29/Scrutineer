@@ -66,7 +66,7 @@ type observation struct {
 
 // runtimeBackend abstracts orchestrator-specific runtime mechanics (create/observe/stop)
 // behind the backend-neutral governance pipeline. See
-// docs/design/phase-6-orchestrator-interface.md.
+// docs/design/orchestrator-interface.md.
 //
 // Backends own runtime mechanics only. They return a normalized observation; the
 // reconciler — not the backend — owns AgentSession status, conditions, events, and audit.

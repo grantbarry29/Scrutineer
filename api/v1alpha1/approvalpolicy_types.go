@@ -51,7 +51,7 @@ const (
 
 // ApprovalSubject identifies who may grant approvals under an ApprovalPolicy.
 // Advisory in this declarative slice; real enforcement (RBAC + webhook) lands
-// with the controller gate (Phase 5 slice 3).
+// with the controller gate.
 type ApprovalSubject struct {
 	// Kind of subject.
 	Kind ApprovalSubjectKind `json:"kind"`
@@ -63,7 +63,7 @@ type ApprovalSubject struct {
 
 // ApprovalPolicySpec defines reusable, scoped human-approval rules for AgentSessions.
 // Declarative only in this slice — no controller gate yet (see
-// docs/design/phase-5-approval-workflows.md).
+// docs/design/approval-workflows.md).
 type ApprovalPolicySpec struct {
 	// Actions lists the action types this policy gates. These match entries in a
 	// session's effective policy.requireHumanApproval (e.g. "deploy",
@@ -101,7 +101,7 @@ type ApprovalPolicyStatus struct {
 }
 
 // ApprovalPolicy is a reusable, scoped human-approval policy that AgentSessions
-// can be gated by. Declarative only until the Phase 5 controller gate ships.
+// can be gated by; enforced by the controller approval gate.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced,shortName=appol;approvalpol

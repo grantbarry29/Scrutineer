@@ -90,7 +90,7 @@ By default the agent pod's ServiceAccount token is **not** mounted, so a comprom
 | `SCRUTINEER_REPORTER_TOKEN_PATH` | `/var/run/secrets/scrutineer/reporter-token/token` |
 | Projected volume | ServiceAccount token with audience `scrutineer-reporter` (600s expiry, kubelet-refreshed) |
 
-The agent container does **not** receive the reporter URL or token — evidence comes only from outside its trust domain. Deploy the controller with `make deploy` (or `make dev-deploy`) so the `scrutineer-controller-reporter` Service exposes port `:8088`. Contract: [`docs/design/phase-3-runtime-reporter-contract.md`](../design/phase-3-runtime-reporter-contract.md).
+The agent container does **not** receive the reporter URL or token — evidence comes only from outside its trust domain. Deploy the controller with `make deploy` (or `make dev-deploy`) so the `scrutineer-controller-reporter` Service exposes port `:8088`. Contract: [`docs/design/runtime-reporter-contract.md`](../design/runtime-reporter-contract.md).
 
 **Profile change behavior:**
 

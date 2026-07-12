@@ -43,7 +43,7 @@ const (
 	EnvPolicyMode                 = "AGENT_POLICY_MODE"
 )
 
-// Runtime reporter wiring (Phase 3b). Audience must match internal/reporter.TokenAudience.
+// Runtime reporter wiring. Audience must match internal/reporter.TokenAudience.
 const (
 	ReporterTokenAudience = "scrutineer-reporter"
 )

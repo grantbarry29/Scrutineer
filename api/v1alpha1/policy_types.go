@@ -60,7 +60,7 @@ const (
 )
 
 // PolicyDecision records a structured policy evaluation for audit and future UI timelines.
-// Phase 2 populates merge-time decisions; Phase 3 enforcement backends append runtime entries.
+// The controller populates merge-time decisions; enforcement backends append runtime entries.
 type PolicyDecision struct {
 	// Time is when the decision was recorded.
 	Time metav1.Time `json:"time"`
@@ -110,7 +110,7 @@ type PolicyDecision struct {
 }
 
 // PolicyMode describes how policy should be interpreted at runtime.
-// Phase 2 records mode in status; Phase 3 enforcement backends act on it.
+// The controller records mode in status; enforcement backends act on it.
 //
 // +kubebuilder:validation:Enum=audit-only;dry-run;enforced
 type PolicyMode string

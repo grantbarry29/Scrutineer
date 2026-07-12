@@ -12,7 +12,7 @@ read_when: "UI timeline projection over status.events[]."
 
 ## Purpose
 
-`status.events[]` is the durable runtime stream ([`phase-4-session-events.md`](phase-4-session-events.md)). The **timeline model** normalizes that stream into stable, UI-ready entries so operational surfaces do not reimplement sorting, severity, titles, or filter semantics.
+`status.events[]` is the durable runtime stream ([`session-events.md`](session-events.md)). The **timeline model** normalizes that stream into stable, UI-ready entries so operational surfaces do not reimplement sorting, severity, titles, or filter semantics.
 
 ```
 status.events[]  →  observability.ProjectTimeline  →  []TimelineEntry
@@ -72,5 +72,5 @@ Events **without `type`** are skipped (invalid for stored status; reporters reje
 
 ## Related
 
-- [`phase-4-session-events.md`](phase-4-session-events.md) — event schema and ingestion
+- [`session-events.md`](session-events.md) — event schema and ingestion
 - [`architecture.md`](architecture.md) — observability as a product surface

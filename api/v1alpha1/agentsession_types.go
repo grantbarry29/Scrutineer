@@ -301,7 +301,7 @@ const (
 )
 
 // SessionEvent is a durable, timestamped runtime observation for UI timelines and audit.
-// Phase 3b reporters append via POST /v1/report; the reconciler preserves existing entries.
+// Runtime evidence reporters append via POST /v1/report; the reconciler preserves existing entries.
 type SessionEvent struct {
 	// Time when the event was observed at runtime.
 	Time metav1.Time `json:"time"`
@@ -331,7 +331,7 @@ type SessionEvent struct {
 }
 
 // PolicyViolation records a single policy violation observed during a session.
-// Phase 3 enforcement reporters populate this via runtime reports (deny and dry-run outcomes).
+// Enforcement reporters populate this via runtime reports (deny and dry-run outcomes).
 type PolicyViolation struct {
 	// Time when the violation was observed.
 	Time metav1.Time `json:"time"`
@@ -502,7 +502,7 @@ type AgentSessionStatus struct {
 	EffectivePolicy *EffectivePolicyStatus `json:"effectivePolicy,omitempty"`
 
 	// PolicyDecisions records merge-time and runtime policy evaluations (bounded list).
-	// Merge-time entries are replaced each reconcile; runtime entries are Phase 3+.
+	// Merge-time entries are replaced each reconcile; runtime entries come from data-plane reports.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=64
@@ -517,12 +517,12 @@ type AgentSessionStatus struct {
 	Result *SessionResult `json:"result,omitempty"`
 
 	// Usage captures resource/usage metrics for the session.
-	// Not populated in the MVP; reserved for Phase 4 observability backends.
+	// Not populated in the MVP; reserved for observability export backends.
 	// +optional
 	Usage *SessionUsage `json:"usage,omitempty"`
 
 	// Violations records policy violations observed during this session.
-	// Populated by Phase 3 enforcement reporters (deny and dry-run outcomes).
+	// Populated by enforcement reporters (deny and dry-run outcomes).
 	// +optional
 	Violations []PolicyViolation `json:"violations,omitempty"`
 

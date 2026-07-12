@@ -97,7 +97,7 @@ log-rotation cycles (#98). Dedicated registry in
 metrics bind failure is logged and never stops the evidence pipeline. The Envoy container
 beside it exposes `envoy_*` stats on `:9902` `/stats/prometheus` (stats-only listener;
 the admin API stays loopback). Catalog:
-[`docs/design/phase-4-observability-export.md`](../../docs/design/phase-4-observability-export.md).
+[`docs/design/observability-export.md`](../../docs/design/observability-export.md).
 
 ## Files that change together
 

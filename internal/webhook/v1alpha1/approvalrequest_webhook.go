@@ -9,7 +9,7 @@ You may obtain a copy of the License at
 */
 
 // Package v1alpha1 holds admission webhooks for scrutineer.sh/v1alpha1
-// objects. The ApprovalRequest webhook closes Phase 5 open questions #1/#3 by
+// objects. The ApprovalRequest webhook closes the approval-workflows design's open questions #1/#3 by
 // capturing the *authenticated* approver identity at admission time so a grant
 // cannot be attributed to someone who did not make it.
 package v1alpha1

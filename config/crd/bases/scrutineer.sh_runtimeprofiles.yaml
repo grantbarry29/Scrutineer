@@ -50,7 +50,7 @@ spec:
           spec:
             description: |-
               RuntimeProfileSpec defines reusable runtime hardening for AgentSessions.
-              Fields are declarative in Phase 2; enforcement backends (sidecars, sandboxes) arrive in Phase 3.
+              Declarative fields consumed by enforcement backends (the envoy egress proxy today; sandboxes later).
             properties:
               container:
                 description: Container holds security settings applied to the agent
@@ -152,7 +152,7 @@ spec:
                   runtimeClassName:
                     description: |-
                       RuntimeClassName selects a RuntimeClass (e.g. gVisor/Kata) when the cluster provides one.
-                      Declarative only until sandbox runtimes are enforced in Phase 3.
+                      Declarative only until sandbox runtimes are enforced.
                     type: string
                   seccompProfile:
                     description: SeccompProfile applies a seccomp profile at the pod

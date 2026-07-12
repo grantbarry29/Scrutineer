@@ -1,18 +1,18 @@
 ---
 type: Design Doc
-title: Phase 5 — Human Approval Workflows
+title: Human Approval Workflows
 description: "Scoped, auditable human approval gates: ApprovalPolicy/ApprovalRequest CRDs, the controller gate/resume state machine, requireHumanApproval enforcement; also records the dormant per-tool runtime-approval surface."
 status: implemented
 read_when: "Approval gates — ApprovalPolicy/ApprovalRequest, gate/resume state machine, requireHumanApproval."
 ---
 
-# Phase 5 — Human Approval Workflows
+# Human Approval Workflows
 
 > **Note:** Defines the CRD shapes, controller gate/resume state machine, and invariants for scoped, auditable approvals. The design has since shipped (`api/v1alpha1/approvalpolicy_types.go` / `approvalrequest_types.go`, `internal/controller/agentsession/approval*.go`); remaining refinements are tracked in [GitHub Issues](https://github.com/grantbarry29/scrutineer/issues).
 
 ## Purpose
 
-Today `policy.requireHumanApproval` is **declared and propagated but not enforced**: the controller only emits an `ApprovalNotEnforced` warning event and runs the session anyway. Phase 5 turns approval into a **real, scoped, auditable gate** — a session that requires approval does not execute until a human grants a matching, time-bounded approval, and every decision is recorded for audit.
+Today `policy.requireHumanApproval` is **declared and propagated but not enforced**: the controller only emits an `ApprovalNotEnforced` warning event and runs the session anyway. This design turns approval into a **real, scoped, auditable gate** — a session that requires approval does not execute until a human grants a matching, time-bounded approval, and every decision is recorded for audit.
 
 This aligns with the product vision (*Policy And Enforcement Model*): "Human approval should become scoped and auditable: approve one tool call, domain, file write, deployment, credential use, or bounded time window rather than a broad boolean."
 
@@ -27,13 +27,13 @@ This aligns with the product vision (*Policy And Enforcement Model*): "Human app
 
 - Mid-execution, per-tool-call runtime approval (agent pauses on a specific tool invocation). This design covers **pre-execution session gating** first; runtime per-action approval is a later slice that reuses `ApprovalRequest`.
 - External integrations (Slack/PagerDuty) — separate slice (notification hooks).
-- A UI approval inbox — Phase 7.
-- Credential issuance on approval — Phase 8 (`CredentialProfile`).
+- A UI approval inbox — the operational-UI epic (#11).
+- Credential issuance on approval — the enterprise-platform epic (`CredentialProfile`).
 - Changing the existing policy merge model; `ApprovalPolicy` is referenced like other policies.
 
 ## Relationship to existing model
 
-| Existing | Phase 5 change |
+| Existing | Change |
 |----------|----------------|
 | `policy.requireHumanApproval: []string` (action types) | Kept as the **trigger signal**. When non-empty (after merge), the session needs approval. `ApprovalPolicy` refines *how* it is gated (approvers, expiry, scope granularity). |
 | `EventReasonApprovalNotEnforced` warning | Replaced by real gating once an `ApprovalPolicy` applies; warning retained only when approval is declared but **no** `ApprovalPolicy`/gate is configured (explicit opt-out / audit-only). |
@@ -148,7 +148,7 @@ stateDiagram-v2
 
 ## Audit trail
 
-Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope** (`action` + `scope.target`/`window`), and **expiry** — on the `ApprovalRequest.status`, mirrored into `AgentSession.status.policyDecisions`, Kubernetes events, and (since 2026-06-21) the **OTLP audit sink** as `approval.granted`/`approval.denied` records (actor = approver or joined `allOf` set; target = gated action). This answers the vision's audit questions: who authorized the run and under what bounded scope. See [`phase-4-observability-export.md`](phase-4-observability-export.md) for the audit record catalog.
+Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope** (`action` + `scope.target`/`window`), and **expiry** — on the `ApprovalRequest.status`, mirrored into `AgentSession.status.policyDecisions`, Kubernetes events, and (since 2026-06-21) the **OTLP audit sink** as `approval.granted`/`approval.denied` records (actor = approver or joined `allOf` set; target = gated action). This answers the vision's audit questions: who authorized the run and under what bounded scope. See [`observability-export.md`](observability-export.md) for the audit record catalog.
 
 ## Open questions (resolve in slice 2/3)
 
@@ -159,7 +159,7 @@ Every transition records **who** (`decidedBy`), **when** (`decidedAt`), **scope*
 
 ## Implementation slices (tracking)
 
-Phase 5 shipped (slices 1–8); remaining loose ends are tracked as GitHub Issues
+Shipped (slices 1–8); remaining loose ends are tracked as GitHub Issues
 ([#6](https://github.com/grantbarry29/scrutineer/issues/6) webhook e2e,
 [#7](https://github.com/grantbarry29/scrutineer/issues/7) concurrent multi-grant):
 
@@ -169,11 +169,11 @@ Phase 5 shipped (slices 1–8); remaining loose ends are tracked as GitHub Issue
 4. Notification hooks (generic webhook → Slack/PagerDuty adapters). — **done (2026-06-21)** — `internal/approval` `Notifier` (noop + webhook); reconciler fires once on gate open (annotation-guarded, best-effort, retried); `--approval-webhook-url` flag. Slack/PagerDuty are future adapters over `Notifier`.
 5. Approver allowlist (best-effort `decidedBy`). — **done (2026-06-21)** — see open questions #1/#2.
 6. Multi-approver (`allOf`). — **done (2026-06-21)** — `status.approvedBy[]` accumulation; gate opens on full coverage; `ApprovalPartiallyApproved` event. See open question #3.
-7. Approval-decision audit records. — **done (2026-06-21)** — `approval.granted`/`approval.denied` OTLP records on the gate (see Audit trail above + `phase-4-observability-export.md`).
+7. Approval-decision audit records. — **done (2026-06-21)** — `approval.granted`/`approval.denied` OTLP records on the gate (see Audit trail above + `observability-export.md`).
 8. Authenticated approver identity (mutating admission webhook). — **done (2026-06-24)** — `internal/webhook/v1alpha1/approvalrequest_webhook.go` stamps `spec.decidedBy` from the authenticated `req.UserInfo` on decision writes (opt-in via `--enable-webhooks`; cert-manager overlay `config/webhooks`); resolves open questions #1 and #3. **Remaining:** committed opt-in webhook-mode e2e (needs cert-manager in kind) — GitHub Issue [#6](https://github.com/grantbarry29/scrutineer/issues/6).
 
 ## Related
 
 - [`architecture.md`](architecture.md) — control/data-plane split, lifecycle, status merge.
-- [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) §5 — evidence assurance levels.
+- [`runtime-reporter-contract.md`](runtime-reporter-contract.md) §5 — evidence assurance levels.
 - Product vision *Policy And Enforcement Model* and *Trust And Threat Model*.

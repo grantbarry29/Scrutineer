@@ -32,7 +32,7 @@ spec:
       openAPIV3Schema:
         description: |-
           ApprovalPolicy is a reusable, scoped human-approval policy that AgentSessions
-          can be gated by. Declarative only until the Phase 5 controller gate ships.
+          can be gated by; enforced by the controller approval gate.
         properties:
           apiVersion:
             description: |-
@@ -55,7 +55,7 @@ spec:
             description: |-
               ApprovalPolicySpec defines reusable, scoped human-approval rules for AgentSessions.
               Declarative only in this slice — no controller gate yet (see
-              docs/design/phase-5-approval-workflows.md).
+              docs/design/approval-workflows.md).
             properties:
               actions:
                 description: |-
@@ -73,7 +73,7 @@ spec:
                   description: |-
                     ApprovalSubject identifies who may grant approvals under an ApprovalPolicy.
                     Advisory in this declarative slice; real enforcement (RBAC + webhook) lands
-                    with the controller gate (Phase 5 slice 3).
+                    with the controller gate.
                   properties:
                     kind:
                       description: Kind of subject.

@@ -751,7 +751,7 @@ spec:
                 items:
                   description: |-
                     SessionEvent is a durable, timestamped runtime observation for UI timelines and audit.
-                    Phase 3b reporters append via POST /v1/report; the reconciler preserves existing entries.
+                    Runtime evidence reporters append via POST /v1/report; the reconciler preserves existing entries.
                   properties:
                     action:
                       description: 'Action is a short verb: allow, deny, call, block,
@@ -954,11 +954,11 @@ spec:
               policyDecisions:
                 description: |-
                   PolicyDecisions records merge-time and runtime policy evaluations (bounded list).
-                  Merge-time entries are replaced each reconcile; runtime entries are Phase 3+.
+                  Merge-time entries are replaced each reconcile; runtime entries come from data-plane reports.
                 items:
                   description: |-
                     PolicyDecision records a structured policy evaluation for audit and future UI timelines.
-                    Phase 2 populates merge-time decisions; Phase 3 enforcement backends append runtime entries.
+                    The controller populates merge-time decisions; enforcement backends append runtime entries.
                   properties:
                     action:
                       description: Action is allow, deny, audit, or dry-run (would-deny
@@ -1110,7 +1110,7 @@ spec:
               usage:
                 description: |-
                   Usage captures resource/usage metrics for the session.
-                  Not populated in the MVP; reserved for Phase 4 observability backends.
+                  Not populated in the MVP; reserved for observability export backends.
                 properties:
                   fileOperations:
                     description: |-
@@ -1143,11 +1143,11 @@ spec:
               violations:
                 description: |-
                   Violations records policy violations observed during this session.
-                  Populated by Phase 3 enforcement reporters (deny and dry-run outcomes).
+                  Populated by enforcement reporters (deny and dry-run outcomes).
                 items:
                   description: |-
                     PolicyViolation records a single policy violation observed during a session.
-                    Phase 3 enforcement reporters populate this via runtime reports (deny and dry-run outcomes).
+                    Enforcement reporters populate this via runtime reports (deny and dry-run outcomes).
                   properties:
                     assuranceLevel:
                       description: |-

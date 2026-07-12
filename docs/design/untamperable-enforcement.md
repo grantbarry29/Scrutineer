@@ -9,7 +9,7 @@ read_when: "Before any enforcement work — doctrine, sequencing, and which desi
 
 # Untamperable Enforcement — Only From Sources the Agent Cannot Alter
 
-**Shipped:** Phases 0–2 (#70 lock gate `cfdd9c0`, #71 removal `b9ceaa8`); Phase 3 hardening tracked under epic #69
+**Shipped:** the lock gate (#70, `cfdd9c0`) and the cooperative-tier removal (#71, `b9ceaa8`); remaining hardening tracked under epic #69
 **Scope:** the decision (a deliberate scope narrowing, 2026-06) to ship **adversarial-grade-only enforcement**: retire the cooperative in-pod enforcement tier entirely, make the untamperable L4/L7 egress path (per-session out-of-pod Envoy + default-deny routing lock) the sole enforcement plane, add the **verified-or-refused** lock gate, and defer tool/file governance to out-of-pod chokepoint designs ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)).
 **Non-goals:** implementing the tools pod or arena pod now (design-doc TODOs); node-level transparent interception (#64, unchanged); syscall/eBPF observation; node-compromise defense (same assumption as [`evidence-integrity.md`](evidence-integrity.md)); multi-arch UI/story changes.
 **Tracking:** epic #69 (children: #70 gate, #71 removal, #74 residue purge); builds on #8 (shipped) and #32 (shipped); absorbs #25/#33 as deferred designs; reshapes #55; #64/#66 unchanged.

@@ -94,7 +94,7 @@ kubectl get pods -l scrutineer.sh/session            # the per-session proxy pod
 
 The proxy pod also exposes Prometheus metrics (`:9902` Envoy stats, `:9903`
 `scrutineer_egress_reporter_*` — see
-[`design/phase-4-observability-export.md`](design/phase-4-observability-export.md)).
+[`design/observability-export.md`](design/observability-export.md)).
 
 ## 3. What this is not (honest boundaries)
 

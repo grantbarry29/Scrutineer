@@ -6,11 +6,11 @@ status: implemented
 read_when: "Implementing or altering the runtime reporter, or anything that writes runtime evidence into status."
 ---
 
-# Phase 3b Slice 1 — Runtime Reporter Contract (Design)
+# Runtime Reporter Contract
 
 > **Note:** Implemented (`internal/reporter/`, `agentsession.PatchRuntimePolicyReport`, `--reporter-bind-address`). Since #71 the live caller is the **egress-reporter** in the per-session out-of-pod egress-proxy pod; historical sections written for the removed cooperative sidecars still describe the wire contract accurately.
 > **Audience:** the engineer/agent implementing a data-plane reporter component.
-> **Read first:** [`architecture.md`](architecture.md) · [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) · [`untamperable-enforcement.md`](untamperable-enforcement.md)
+> **Read first:** [`architecture.md`](architecture.md) · [`enforcement-architecture.md`](enforcement-architecture.md) · [`untamperable-enforcement.md`](untamperable-enforcement.md)
 
 This document specifies **how a running data-plane component reports runtime evidence back to the Scrutineer controller**, so that `AgentSession.status.policyDecisions` and `AgentSession.status.violations` reflect what actually happened at runtime. It is the missing edge that turns *propagated* governance into *observed* governance.
 
@@ -140,7 +140,7 @@ Single endpoint for the MVP. Versioned path (`/v1/`) so the payload schema can e
 
 The `decisions[]` / `violations[]` element shapes map **1:1** onto the existing `scrutineerv1alpha1.PolicyDecision` / `scrutineerv1alpha1.PolicyViolation` API types. Optional `usage` maps to `scrutineerv1alpha1.SessionUsage` deltas. The wire payload deserializes into `enforcement.RuntimeReport`. **Do not invent a parallel schema** — reuse the API types.
 
-**Usage aggregation (Phase 4):** novel runtime `decisions[]` with `type: network` increment `status.usage.networkRequests`; `type: tool` increment `toolCalls`. Explicit `usage` deltas add token (or counter) fields. Re-delivered decision reports do not double-count bundled usage deltas when all decisions are duplicates.
+**Usage aggregation:** novel runtime `decisions[]` with `type: network` increment `status.usage.networkRequests`; `type: tool` increment `toolCalls`. Explicit `usage` deltas add token (or counter) fields. Re-delivered decision reports do not double-count bundled usage deltas when all decisions are duplicates.
 
 **Usage accuracy contract (#102):** the decision-derived counters are **approximate** activity indicators. Novelty is judged against the capped `status.policyDecisions` window (64 entries), so at-least-once re-delivery after a data-plane restart over-counts decisions already evicted from that window, and same-second identical requests to one target collapse into a single count (dedup-key granularity, deliberate for apiserver-precision timestamps). Exact accounting belongs to the decision records / audit stream; making the counters exact would require a durable per-backend ingest watermark, which is deliberately not built.
 
@@ -286,7 +286,7 @@ Rate limiting is per `(namespace, session)`. A noisy or hostile sidecar cannot d
 The reporter is itself an audited surface:
 
 - Emit a Kubernetes Event on the AgentSession for the **first** runtime violation observed (e.g. `Warning RuntimeViolation`), so `kubectl describe` surfaces it. Avoid per-decision event spam.
-- Controller metrics (Phase 4 wiring): reports received/accepted/rejected by reason, merge latency, status-conflict retries. Define names later; leave hooks.
+- Controller metrics: reports received/accepted/rejected by reason, merge latency, status-conflict retries. Define names later; leave hooks.
 
 ---
 
@@ -307,7 +307,7 @@ The reporter is itself an audited surface:
 - Projected-token injection + reporter `Service` wiring into the pod template (follow-up, shipped with the egress path).
 - Structured `status.events[]` schema (evidence-loop slice #3) — the reporter is forward-compatible: an `events[]` block can be added to the request body later.
 - mTLS, signed reports, replay protection (§5.3 hardening).
-- Prometheus metric names (Phase 4).
+- Prometheus metric names ([`observability-export.md`](observability-export.md)).
 
 Each out-of-scope item above must already be a GitHub Issue, or be filed as one before the impl slice closes.
 
@@ -327,4 +327,4 @@ Each out-of-scope item above must already be a GitHub Issue, or be filed as one 
 
 - Bound-token `BoundObjectRef` availability vs. requiring an explicit `X-Scrutineer-Pod` header — pick based on the cluster K8s version floor (≥1.31 in CI).
 - Whether to expose the reporter via a headless `Service` + DNS name injected as `SCRUTINEER_REPORTER_URL` (resolved: a ClusterIP `Service`, `scrutineer-controller-reporter`).
-- Whether a first runtime violation should also flip a `Ready`/new condition (likely a Phase 4 concern; keep status conditions stable for now).
+- Whether a first runtime violation should also flip a `Ready`/new condition (an observability concern; keep status conditions stable for now).

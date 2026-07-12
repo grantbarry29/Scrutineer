@@ -62,7 +62,7 @@ What a long-running session would actually hit today, from reading the runtime s
 ## Related
 
 - **Intent-in-audit tension:** a stub `task` means Scrutineer records observed *effects* but not declared *intent* — fine for effects-only governance, weaker for audit. This investigation and that tension are the same issue seen from two sides.
-- **`RuntimeBackend` interface** ([`phase-6-orchestrator-interface.md`](phase-6-orchestrator-interface.md)) is the seam any long-running backend would plug into.
+- **`RuntimeBackend` interface** ([`orchestrator-interface.md`](orchestrator-interface.md)) is the seam any long-running backend would plug into.
 
 ## What would trigger scheduling
 

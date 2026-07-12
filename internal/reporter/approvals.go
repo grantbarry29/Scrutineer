@@ -52,7 +52,7 @@ const (
 // ownership) so a sidecar can only ever act on its own session. The controller
 // remains the sole writer of ApprovalRequest.status; this handler only creates
 // the runtime request (idempotently) and reports the controller-observed state.
-// See docs/design/phase-5-runtime-tool-approval.md.
+// See docs/design/approval-workflows.md.
 type ApprovalHandler struct {
 	// Client is a full client used to create runtime ApprovalRequests.
 	Client client.Client

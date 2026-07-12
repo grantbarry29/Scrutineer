@@ -9,7 +9,7 @@ read_when: "Start here — orientation before any non-trivial work."
 # Scrutineer Architecture & Design
 
 > **Canonical architecture reference for Scrutineer.** Read this before implementing anything non-trivial.
-> **Companion docs:** product vision (`dev-agent-rules/scrutineer-product-vision.md`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)), workflow rules (`dev-agent-rules/scrutineer-workflow.md`), and the phase-specific design docs in this folder.
+> **Companion docs:** product vision (`dev-agent-rules/scrutineer-product-vision.md`), task state & roadmap ([GitHub Issues](https://github.com/grantbarry29/scrutineer/issues)), workflow rules (`dev-agent-rules/scrutineer-workflow.md`), and the area-specific design docs in this folder.
 >
 > **Enforcement doctrine (#69–#71):** enforcement is **adversarial-grade only**. The cooperative in-pod sidecar tier was removed; the sole enforcement plane is the per-session out-of-pod Envoy egress proxy + default-deny routing lock, empirically verified by the lock gate (#70) before enforced sessions run. Doctrine and rationale: [`untamperable-enforcement.md`](untamperable-enforcement.md).
 
@@ -218,7 +218,7 @@ sequenceDiagram
 - Job pod template is **immutable** while active; policy/profile changes on a *pending* Job replace it, on an *active* Job set a `*Drift` condition instead.
 - The reconciler uses an uncached `APIReader` where stale reads are dangerous (deletion detection, status pre-read).
 
-**Runtime backends (Phase 6).** Runtime mechanics (create/observe/stop) are not hard-wired to Jobs: the reconciler routes `ensure`/`stop`/`runtimeGone`/`ownedType` through a `runtimeBackend` interface chosen from a registry keyed by `spec.runtime.orchestrator` (`runtime_backend.go`). Two in-tree backends ship today — `kubernetes-job` (default, `batchv1.Job`) and `kubernetes-pod` (a bare `corev1.Pod`, `backend_pod.go`) — both built from the shared `job.BuildPodTemplateSpec` so the data-plane wiring is identical. Backends return a neutral `observation`; the reconciler owns all status mapping. `status.runtimeRef` (`apiVersion`/`kind`/`name`/`uid`) records the runtime object's identity for any backend; `status.jobName` is a deprecated alias of `runtimeRef.name` kept for the Job backend. The diagram above shows the Job path; the Pod path is identical with `Pod` substituted for `Job`.
+**Runtime backends.** Runtime mechanics (create/observe/stop) are not hard-wired to Jobs: the reconciler routes `ensure`/`stop`/`runtimeGone`/`ownedType` through a `runtimeBackend` interface chosen from a registry keyed by `spec.runtime.orchestrator` (`runtime_backend.go`). Two in-tree backends ship today — `kubernetes-job` (default, `batchv1.Job`) and `kubernetes-pod` (a bare `corev1.Pod`, `backend_pod.go`) — both built from the shared `job.BuildPodTemplateSpec` so the data-plane wiring is identical. Backends return a neutral `observation`; the reconciler owns all status mapping. `status.runtimeRef` (`apiVersion`/`kind`/`name`/`uid`) records the runtime object's identity for any backend; `status.jobName` is a deprecated alias of `runtimeRef.name` kept for the Job backend. The diagram above shows the Job path; the Pod path is identical with `Pod` substituted for `Job`.
 
 ---
 
@@ -252,7 +252,7 @@ CRD status subresources do **not** support strategic merge patch. A naive `Merge
 1. Unions conditions, runtime decisions, and violations from the reconcile-start snapshot **and** a fresh live read, then
 2. `Status().Update`s with optimistic concurrency.
 
-> **Invariant:** any new status list field that can be written by more than one path must have an in-place merge helper and be merged in `patchStatus`, exactly like `conditions`, `policyDecisions`, and `violations`. The runtime reporter (Phase 3b) is a second writer and must obey the same rule.
+> **Invariant:** any new status list field that can be written by more than one path must have an in-place merge helper and be merged in `patchStatus`, exactly like `conditions`, `policyDecisions`, and `violations`. The runtime reporter is a second writer and must obey the same rule.
 
 ### 6.4 Decisions vs. violations
 
@@ -261,7 +261,7 @@ CRD status subresources do **not** support strategic merge patch. A naive `Merge
 
 ---
 
-## 7. Enforcement architecture (Phase 3) & the runtime evidence loop (Phase 3b)
+## 7. Enforcement architecture & the runtime evidence loop
 
 The `internal/enforcement` package is the **backend-neutral contract** between control plane and data plane.
 
@@ -288,9 +288,9 @@ flowchart TB
 
 - **Today (#71):** the sole enforcement plane is the per-session **out-of-pod Envoy egress proxy** + the default-deny **routing lock**, whose enforcement is empirically verified before enforced sessions run (the lock gate, #70). Agent egress is forced through Envoy via `HTTP_PROXY`/`HTTPS_PROXY`; Envoy's access log is tailed by a co-located **egress-reporter** that submits **`observed`** evidence to the **reporter** (`cmd/main.go` → `mgr.Add(reporter.NewRunnable(...))`), which merges it into `status.policyDecisions`(runtime), `status.violations`, `status.usage`, and `status.events`. The cooperative in-pod sidecar tier was **removed** — a control the agent could bypass or starve is advisory, not enforcement.
 - **Trust model:** enforcement lives in a trust domain the agent cannot alter (separate pod/identity/netns) and is made mandatory by the CNI-enforced NetworkPolicy lock, so evidence is `observed`. Tool- and file-domain governance await their own out-of-pod chokepoints ([`tools-pod-chokepoint.md`](tools-pod-chokepoint.md), [`arena-workspace.md`](arena-workspace.md)); until then those domains have no policy surface (no unenforced fields).
-- **The direction:** isolate the data plane from the agent so integrity no longer depends on its cooperation — per-session identity / scoped ServiceAccount, out-of-pod or kernel/eBPF observation the agent cannot bypass, FQDN egress (Cilium/Envoy), and sandboxed runtimes (gVisor/Kata). See [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) for the evidence loop, and the *Runtime evidence integrity* track for the adversarial roadmap.
+- **The direction:** isolate the data plane from the agent so integrity no longer depends on its cooperation — per-session identity / scoped ServiceAccount, out-of-pod or kernel/eBPF observation the agent cannot bypass, FQDN egress (Cilium/Envoy), and sandboxed runtimes (gVisor/Kata). See [`runtime-reporter-contract.md`](runtime-reporter-contract.md) for the evidence loop, and the *Runtime evidence integrity* track for the adversarial roadmap.
 
-Detailed designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-architecture.md) (contract + history), [`evidence-integrity.md`](evidence-integrity.md) (egress chokepoint + trust boundary), [`untamperable-enforcement.md`](untamperable-enforcement.md) (doctrine + lock gate), [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md) (deferred successors).
+Detailed designs: [`enforcement-architecture.md`](enforcement-architecture.md) (contract + history), [`evidence-integrity.md`](evidence-integrity.md) (egress chokepoint + trust boundary), [`untamperable-enforcement.md`](untamperable-enforcement.md) (doctrine + lock gate), [`tools-pod-chokepoint.md`](tools-pod-chokepoint.md) / [`arena-workspace.md`](arena-workspace.md) (deferred successors).
 
 ---
 
@@ -316,7 +316,7 @@ Detailed designs: [`phase-3-enforcement-architecture.md`](phase-3-enforcement-ar
 ## 9. Design principles & invariants (checklist for any change)
 
 1. **Control/data-plane separation** — controllers declare/propagate/aggregate; never enforce inline.
-2. **Orchestrator-agnostic** — do not overfit APIs/reconciler to Kubernetes Jobs; keep room for Tekton/Argo/Temporal adapters (Phase 6).
+2. **Orchestrator-agnostic** — do not overfit APIs/reconciler to Kubernetes Jobs; keep room for Tekton/Argo/Temporal adapters.
 3. **Kubernetes-native discipline** — idempotent reconcile, owner references, status subresource, conditions, events, least-privilege RBAC.
 4. **Status is canonical** — runtime evidence lives in `AgentSession.status`; multi-writer fields use the union-merge patch strategy.
 5. **Same-namespace refs** — no cross-namespace references in MVP.
@@ -335,7 +335,7 @@ Phases (tracked as GitHub Issues / epics — see <https://github.com/grantbarry2
 - **0–2 (done):** MVP foundation, MVP hardening, reusable policy model + RuntimeProfile.
 - **3 (done, reshaped by the scope narrowing):** enforcement contracts + NetworkPolicy baseline survive; the cooperative in-pod slices were removed (#71).
 - **3b (done):** runtime evidence loop — reporter endpoint, `status.events[]`, and the egress-reporter as the live `observed` producer.
-- **Adversarial-grade-only enforcement (#69, Phases 0–2 done):** adversarial-grade-only doctrine, verified-or-refused lock gate (#70), cooperative-tier removal (#71); Phase 3 hardening + deferred tools/arena chokepoints remain.
+- **Adversarial-grade-only enforcement (#69):** adversarial-grade-only doctrine, verified-or-refused lock gate (#70), cooperative-tier removal (#71); remaining hardening + deferred tools/arena chokepoints tracked under the epic.
 - **4:** observability & audit (usage metrics, timeline model, Prometheus, OTel, audit sink, log/artifact collection) — consumes the evidence loop.
 - **5:** scoped human approval workflows.
 - **6 (in progress):** orchestrator-agnostic runtime backends. `runtimeBackend` interface + `status.runtimeRef` shipped; two in-tree backends (`kubernetes-job`, `kubernetes-pod`) done. Next: external adapter design (Tekton/Argo/Temporal) + SessionTemplate.

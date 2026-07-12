@@ -45,10 +45,10 @@ bucket that still has an open card**. Ship value cheaply → make it visible →
 
 1. **Smaller functional gaps** — cheap, adopter-facing wins.
 2. **Test-only loose ends** — tighten confidence.
-3. **Operational UI (Phase 7)** — surface the governance value; API-first read-only MVP first (epic).
+3. **Operational UI** — surface the governance value; API-first read-only MVP first (epic #11).
 4. **Runtime evidence integrity** — cooperative → adversarial trust (core thesis).
-5. **Enterprise platform (Phase 8)** — multi-tenant identity/credentials/HA/sandboxes (epic).
-6. **Orchestrator adapters (Phase 6 remainder)** — pure breadth; abstraction already proven (epic).
+5. **Enterprise platform** — multi-tenant identity/credentials/HA/sandboxes (epic #13).
+6. **External orchestrator adapters** — pure breadth; abstraction already proven (epic #10).
 
 Within a bucket, order by `priority/*`. This ordering lives here (not in any markdown queue); revisit it
 with the user when priorities shift.

@@ -36,7 +36,7 @@ const reportPath = "/v1/report"
 
 // StatusError is a non-202 reporter response. It exposes the HTTP status so callers can
 // classify per the contract's §4.4 response table (docs/design/
-// phase-3-runtime-reporter-contract.md): permanent rejections (400/403/404/413) must not
+// runtime-reporter-contract.md): permanent rejections (400/403/404/413) must not
 // be retried verbatim, transient ones (5xx, 429, 401, 409) keep at-least-once retry (#96).
 type StatusError struct {
 	StatusCode int

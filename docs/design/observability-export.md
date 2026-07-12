@@ -83,7 +83,7 @@ Records are emitted as OTLP log records: body = human message, severity `INFO`, 
 
 **Attribute namespace:** all keys are `scrutineer.audit.*` / `scrutineer.session.*` / `scrutineer.report.*` for stable SIEM routing. Record builders live in `internal/audit/record.go` (`PolicyViolation`, `SessionPhaseChange`, `RuntimeReport`, `ApprovalDecision`).
 
-**Assurance:** `policy.violation`, `runtime.report`, and `approval.granted`/`approval.denied` carry `scrutineer.audit.assurance` (`controller` | `self-reported` | `observed`, mirroring `api/v1alpha1.EvidenceAssurance`) so audit consumers know how much to trust each record. Cooperative sidecar evidence is `self-reported` (empty violation assurance is normalized to `self-reported`); control-plane approval decisions are `controller`. See [`phase-3-runtime-reporter-contract.md`](phase-3-runtime-reporter-contract.md) §5.
+**Assurance:** `policy.violation`, `runtime.report`, and `approval.granted`/`approval.denied` carry `scrutineer.audit.assurance` (`controller` | `self-reported` | `observed`, mirroring `api/v1alpha1.EvidenceAssurance`) so audit consumers know how much to trust each record. Cooperative sidecar evidence is `self-reported` (empty violation assurance is normalized to `self-reported`); control-plane approval decisions are `controller`. See [`runtime-reporter-contract.md`](runtime-reporter-contract.md) §5.
 
 ## Enable flags (`cmd/main.go`)
 
