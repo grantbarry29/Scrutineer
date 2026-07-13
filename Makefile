@@ -281,8 +281,34 @@ KIND_CLUSTER_NAME_QUICKSTART ?= scrutineer-quickstart
 # the default flavor's gate verdict comes back Refused on your kind/node versions).
 QUICKSTART_CNI ?= kindnet
 
+# Front-door prerequisite check (#140): a missing tool fails with install
+# instructions (macOS/Ubuntu) instead of a cascade of raw shell errors. CI never
+# exercises the failure path (workflows install kind before make runs), so verify
+# changes to this target manually: PATH-sandbox a tool away and run it.
+.PHONY: quickstart-preflight
+quickstart-preflight:
+	@missing=0; \
+	command -v docker >/dev/null 2>&1 || { missing=1; \
+	  echo ">> docker is not installed."; \
+	  echo ">>   macOS:  brew install --cask docker   # then start Docker.app once"; \
+	  echo ">>   Ubuntu: sudo apt-get install -y docker.io && sudo usermod -aG docker \$$USER   # then log out and back in"; }; \
+	command -v kind >/dev/null 2>&1 || { missing=1; \
+	  echo ">> kind is not installed."; \
+	  echo ">>   macOS:  brew install kind"; \
+	  echo ">>   Ubuntu: curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/   # arm64: swap amd64 for arm64"; }; \
+	command -v kubectl >/dev/null 2>&1 || { missing=1; \
+	  echo ">> kubectl is not installed."; \
+	  echo ">>   macOS:  brew install kubectl"; \
+	  echo ">>   Ubuntu: sudo snap install kubectl --classic"; }; \
+	[ "$$missing" = 0 ] || exit 1; \
+	docker info >/dev/null 2>&1 || { \
+	  echo ">> docker is installed but the daemon isn't reachable."; \
+	  echo ">>   macOS:  start Docker Desktop (open -a Docker)"; \
+	  echo ">>   Ubuntu: sudo systemctl start docker"; \
+	  exit 1; }
+
 .PHONY: quickstart
-quickstart: ## One command: kind cluster + Scrutineer controller, lock-gate verdict printed.
+quickstart: quickstart-preflight ## One command: kind cluster + Scrutineer controller, lock-gate verdict printed.
 	@echo ">> quickstart: first run takes ~5 minutes (builds the images from this checkout); repeats are faster."
 ifeq ($(QUICKSTART_CNI),calico)
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) KIND_CONFIG=$(KIND_CONFIG_NETPOL) KIND_CNI=calico .devcontainer/kind-up.sh
@@ -301,7 +327,7 @@ endif
 	@echo "Tear down:              make quickstart-down"
 
 .PHONY: quickstart-images
-quickstart-images: ## Build controller + egress-reporter images from this checkout and load them (plus pinned Envoy) into the quickstart cluster.
+quickstart-images: quickstart-preflight ## Build controller + egress-reporter images from this checkout and load them (plus pinned Envoy) into the quickstart cluster.
 	@# Always build from source — never pull the released tag (#109). The quickstart
 	@# deploys THIS checkout's manifests/CRDs/demo, which assume this checkout's
 	@# controller behavior; a released image can silently predate it (v0.1.0 predates
@@ -361,7 +387,7 @@ demo-context-guard:
 	fi
 
 .PHONY: demo
-demo: demo-context-guard ## Guided egress-governance demo against the quickstart cluster (run 'make quickstart' first; see docs/demo.md).
+demo: quickstart-preflight demo-context-guard ## Guided egress-governance demo against the quickstart cluster (run 'make quickstart' first; see docs/demo.md).
 	$(DEMO_KUBECTL) apply -f config/samples/demo/
 	@echo ""
 	@echo ">> two sessions are starting: demo-enforced and demo-audit — same busybox agent,"
