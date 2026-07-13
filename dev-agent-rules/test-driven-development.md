@@ -42,6 +42,11 @@ and controller) work, where "it compiles" and "it unit-passes" are weak signals.
   skip verification.
 - Keep tests deterministic and hermetic; prefer failure-injection and boundary cases over
   happy-path-only.
+- **A flaky test is a P1 bug, never noise.** Agents cannot tell flaky red from real red,
+  so one intermittent test poisons every session that trusts CI as the arbiter. In the
+  session where the flake is noticed: fix it, or quarantine it with a `t.Skip` that
+  references a filed `type/bug` issue. Re-running until green is not an accepted
+  resolution (precedent: #111, parallel tests racing on a package global).
 
 ## Why
 
