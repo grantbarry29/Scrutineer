@@ -31,6 +31,11 @@ failures on the host; reproduce in the container first.**
   `setup-envtest`, the kind cluster, or CRD/RBAC regeneration **must** use the container.
 - Never commit host-built generated artifacts. Regenerate in the container and verify
   an empty `git diff` against the checked-in output.
+- **Mechanically enforced** (#134): a PreToolUse hook
+  (`.claude/hooks/devcontainer-guard.sh`) denies host-side `make` and
+  `go test|run|install|mod|generate` in agent sessions; `docker exec`-wrapped runs
+  pass. The hook is the enforcement, this rule is the rationale — host `go build` /
+  `go vet` sanity checks stay allowed, per above.
 
 ## How to use it (from the host shell)
 
