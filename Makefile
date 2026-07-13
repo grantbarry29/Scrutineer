@@ -2,7 +2,7 @@
 # push produces and pins the committed overlay newTags (config/manager,
 # config/reporter-standalone). The release workflow's verify-version guard checks it
 # against the pushed tag. It is deliberately NOT what local builds are tagged with.
-VERSION ?= v0.1.0
+VERSION ?= v0.2.0
 
 # Everything built by this Makefile is a DEV build (#112): tagged dev-<git describe>
 # so it can never shadow (or be shadowed by) a published release tag — release

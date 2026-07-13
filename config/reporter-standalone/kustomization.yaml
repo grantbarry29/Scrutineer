@@ -18,7 +18,7 @@ resources:
 images:
 - name: controller
   newName: ghcr.io/grantbarry29/scrutineer
-  newTag: v0.1.0
+  newTag: v0.2.0
 
 patches:
 # Disable the in-process reporter in the manager.
