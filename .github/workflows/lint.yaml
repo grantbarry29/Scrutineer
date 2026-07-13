@@ -27,5 +27,17 @@ jobs:
       - name: Vet
         run: make vet
 
+      # Derived artifacts must be committed in sync: regenerating them is a no-op
+      # (same round-trip invariant lint-docs enforces for index bullets).
+      - name: Check generated code is current (controller-gen)
+        run: |
+          make manifests generate
+          git diff --exit-code
+
+      - name: Check go.mod tidiness
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
       - name: OKF docs lint
         run: make lint-docs

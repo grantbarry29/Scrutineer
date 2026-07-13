@@ -8,7 +8,11 @@ read_when: "Changing workflows, path filters, or debugging CI behavior."
 
 # CI Tiers
 
-Per push/PR: **Lint** and **Test** (unit + envtest) always run; the cluster-heavy
+Per push/PR: **Lint** and **Test** (unit + envtest) always run. Lint gates every
+derived artifact as "regeneration is a no-op": `make fmt`, controller-gen output
+(`make manifests generate` must produce no diff — CRDs, RBAC, deepcopy),
+`go mod tidy`, and the OKF docs/index sync (`make lint-docs`) all fail on drift
+(#128, #133). The cluster-heavy
 workflows — **E2E** (standard + kindnet networking enforcement suite) and
 **Quickstart Smoke** (`make quickstart && make demo` end-to-end) — skip docs-only
 changes (#86). Nightly (+ manual dispatch): **Nightly Networking** cross-checks the
