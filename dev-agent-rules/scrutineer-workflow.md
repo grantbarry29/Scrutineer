@@ -44,20 +44,13 @@ When asked to implement a Scrutineer task, the agent must:
 9. If follow-up work is discovered, follow **Out-of-Scope Future Work Handling**; create a **GitHub Issue**; do not implement unless asked.
 10. If architecture is ambiguous, stop, offer 2–3 options, recommend one, wait for confirmation.
 11. Preserve Kubernetes controller discipline: idempotent reconciliation, owner references, status subresources, conditions, events, least-privilege RBAC.
-12. When the task is finished, run the **End-of-Task Handoff Protocol** below (commit, then offer selectable next-task options).
+12. When the task is finished, run the **End-of-Task Handoff Protocol** below (the `handoff` skill: board sync, commit, then selectable next-task options).
 
 ---
 
 ## End-of-Task Handoff Protocol
 
-Whenever you finish a task (work is complete, verification passed), do all four of the following, in order:
-
-1. **Sync the board first.** Update the GitHub Issue per `task-management.md` → *Before marking an issue complete*: comment the summary/files/tests, set `status/done`, and **close** it (`state_reason: completed`). Make sure any work discovered this session is already filed as its own issue. The board must reflect reality before you move on.
-2. **Commit it.** Create a git commit with a short but aptly descriptive message summarizing the change (imperative mood, focused on the "what/why"). Only commit when the work is complete and verified (tests pass or the user accepted incomplete work); follow the git safety rules. **Do not push** unless the user explicitly asks.
-3. **Offer next-task options.** Directly present the user with **2–4** candidate next tasks, drawn from open **GitHub Issues** (`status/ready` + `agent-ready`, ordered by `task-management.md` → *Work precedence* + `priority/*`). **Include a clear recommendation** (mark it and say why in one line).
-4. **Make them selectable.** Put those options in the harness's selectable option card (e.g. the `AskUserQuestion` tool), not just inline prose, so the user can pick one in one click. Put the recommended option first and label it `(Recommended)`.
-
-Keep it to 2–4 options. If there is genuinely only one sensible next step, still offer it plus an "other / you decide" choice. This protocol does not replace the **### Out-of-scope future work noticed** summary requirement — do both.
+**Constraint:** every finished task (work complete, verification passed) ends with the handoff — board synced (done + close, with evidence), work committed, and 2–4 selectable next-task options offered with a recommendation. The step-by-step procedure is the **`handoff` skill** ([`.claude/skills/handoff/SKILL.md`](../.claude/skills/handoff/SKILL.md)) — invoke it rather than reciting from memory; the skill is the single source of the steps, so do not duplicate them here (#137). It does not replace the **### Out-of-scope future work noticed** summary requirement — do both.
 
 ---
 

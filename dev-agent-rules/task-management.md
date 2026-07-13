@@ -111,12 +111,11 @@ When you discover any out-of-scope work, bug, gap, doc debt, test hole, or "we s
 
 ## At the start of a work session
 
-1. Query the board (`search_issues` / `list_issues`) for the highest-priority issue with `status/ready`
-   **and** `agent-ready` (or take the issue the user named).
-2. **Claim exactly one issue before modifying code** (`issue_write update`): swap `status/ready`→
-   `status/in-progress`, add `agent-in-progress`, assign yourself if possible.
-3. Read the issue's acceptance criteria and all linked repo markdown specs / design docs.
-4. Search the repo for relevant implementation context before editing files.
+**Constraint:** claim **exactly one** issue before modifying code, and read its acceptance
+criteria and linked docs before editing. The procedure (pick by *Work precedence*, swap
+labels to `status/in-progress` + `agent-in-progress`, assign, load scope) is the
+**`claim-issue` skill** ([`.claude/skills/claim-issue/SKILL.md`](../.claude/skills/claim-issue/SKILL.md)) —
+invoke it rather than improvising; the skill is the single source of the steps (#137).
 
 ## During work — keep the board live
 
@@ -156,8 +155,8 @@ Full detail: [`dev-agent-rules/scrutineer-workflow.md`](scrutineer-workflow.md).
 6. End the user-facing summary with **### Out-of-scope future work noticed**.
 7. **No lost work:** every out-of-scope item becomes a **GitHub Issue** (`agent-discovered`, linked
    from the current issue) in the same session — not chat-only.
-8. **End-of-Task Handoff Protocol** (see `scrutineer-workflow.md`): sync the board (done + close) →
-   commit (don't push unless asked) → offer 2–4 selectable next-task options with a recommendation.
+8. **End-of-Task Handoff** (the `handoff` skill; constraint in `scrutineer-workflow.md`): sync the
+   board (done + close) → commit → offer 2–4 selectable next-task options with a recommendation.
 
 Unless explicitly selected by the user, do **not** add new CRDs, webhooks, sidecars, policy engines,
 UI, Envoy, Cilium/eBPF, gVisor/Kata, tool-execution chokepoints, real policy enforcement, approval workflows,
