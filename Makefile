@@ -26,6 +26,15 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Force the pinned Go toolchain for every go invocation this Makefile makes
+# (#141): go.mod's `go 1.23` is only a MINIMUM under GOTOOLCHAIN=auto, so a
+# newer host Go gets used — and controller-gen's pinned x/tools does not
+# compile under current Go, breaking `make quickstart` on exactly the fresh
+# host machines it targets (CI is immune; setup-go pins 1.23). Go ≥1.21
+# auto-downloads this exact toolchain. Verified on macOS/arm64 with host
+# go1.26.3: quickstart fails without this, completes VERIFIED with it.
+export GOTOOLCHAIN := go1.23.12
+
 .PHONY: all
 all: build
 
