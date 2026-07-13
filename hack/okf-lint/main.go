@@ -33,8 +33,14 @@ You may obtain a copy of the License at
 //     get only the existence check.
 //   - The repo-root index.md knowledge map gets the same bullet checks.
 //
-// Root README.md and CLAUDE.md are deliberately out of scope: they are the
-// human landing page and the harness entry point, not bundle concepts.
+// The always-on context is budgeted (#135): the combined word count of
+// CLAUDE.md plus every doc with `always_load: true` must stay under
+// alwaysOnWordBudget — that set is paid in every agent session, every turn.
+//
+// Root README.md and CLAUDE.md are deliberately out of scope for the
+// frontmatter/bullet rules: they are the human landing page and the harness
+// entry point, not bundle concepts (CLAUDE.md does count toward the
+// always-on budget).
 package main
 
 import (
@@ -63,6 +69,16 @@ var statusVocab = map[string]bool{
 
 // bundle-root index.md may carry only these keys (OKF §11).
 var indexRootKeys = map[string]bool{"okf_version": true, "okf_spec_rev": true}
+
+// alwaysOnWordBudget caps the combined word count of the always-on agent
+// context: CLAUDE.md + every `always_load: true` doc (#135). Set ~12% above
+// the 2026-07 total (4,474) — headroom for edits, not for new always-on
+// docs. Shrink or route a rule (always_load: false + read_when) before
+// raising this; the budget exists so growth is a decision, not a drift.
+const alwaysOnWordBudget = 5000
+
+// alwaysOnExtras are non-bundle files injected into every session.
+var alwaysOnExtras = []string{"CLAUDE.md"}
 
 type problem struct {
 	file string
@@ -128,6 +144,8 @@ func main() {
 		}
 	}
 
+	lintAlwaysOnBudget(collectAlwaysOn(bundles, alwaysOnExtras), alwaysOnWordBudget, fail)
+
 	if len(problems) > 0 {
 		for _, p := range problems {
 			fmt.Fprintf(os.Stderr, "okf-lint: %s: %s\n", p.file, p.msg)
@@ -136,6 +154,56 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("okf-lint: OK")
+}
+
+// collectAlwaysOn returns the files that enter every agent session: the
+// extras (CLAUDE.md) that exist, plus every bundle doc whose frontmatter
+// declares `always_load: true`.
+func collectAlwaysOn(bundleRoots, extras []string) []string {
+	var files []string
+	for _, extra := range extras {
+		if _, err := os.Stat(extra); err == nil {
+			files = append(files, extra)
+		}
+	}
+	for _, root := range bundleRoots {
+		_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
+				return nil
+			}
+			if fm := targetFrontmatter(path); fm != nil {
+				if al, ok := fm["always_load"].(bool); ok && al {
+					files = append(files, path)
+				}
+			}
+			return nil
+		})
+	}
+	return files
+}
+
+// lintAlwaysOnBudget fails when the combined word count of the always-on
+// files exceeds the budget, printing the per-file breakdown so the offender
+// is obvious. Whole files are counted (frontmatter included) — that is what
+// a session actually loads.
+func lintAlwaysOnBudget(files []string, budget int, fail func(string, string, ...any)) {
+	total := 0
+	breakdown := make([]string, 0, len(files))
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			fail(f, "read: %v", err)
+			continue
+		}
+		n := len(strings.Fields(string(raw)))
+		total += n
+		breakdown = append(breakdown, fmt.Sprintf("  %5d %s", n, f))
+	}
+	if total > budget {
+		fail("always-on context",
+			"%d words exceeds the %d-word budget (#135) — shrink or route a rule (always_load: false + read_when) rather than raising the budget:\n%s",
+			total, budget, strings.Join(breakdown, "\n"))
+	}
 }
 
 // frontmatter returns the parsed YAML block and whether one exists at all.

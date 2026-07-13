@@ -20,8 +20,9 @@ Navigate via the repo-root [`index.md`](index.md) knowledge map (bundle indexes:
 [`docs/index.md`](docs/index.md), [`docs/design/index.md`](docs/design/index.md),
 [`dev-agent-rules/index.md`](dev-agent-rules/index.md)). Never trust a design doc with
 `status: historical` without reading its `superseded_by` target. `make lint-docs`
-enforces the frontmatter contract and keeps index bullets synced to each target's
-frontmatter — after editing a `title`/`description`/`applies_to`, run `make gen-index`.
+enforces the frontmatter contract, keeps index bullets synced to each target's
+frontmatter, and caps the combined word count of the always-on context (#135) —
+after editing a `title`/`description`/`applies_to`, run `make gen-index`.
 
 ## Always read at the start of any task
 

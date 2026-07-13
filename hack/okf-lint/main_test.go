@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,6 +150,46 @@ func TestLintIndexBullets(t *testing.T) {
 
 	if len(problems) != 2 {
 		t.Fatalf("want 2 problems (drift + dangling), got %d: %v", len(problems), problems)
+	}
+}
+
+func TestAlwaysOnBudget(t *testing.T) {
+	// 12 words of body after 8 words of frontmatter markers/values; the
+	// exact counts don't matter — only that they're stable and summed.
+	alwaysOn := "---\ntype: Agent Rule\ntitle: A\ndescription: \"x\"\nstatus: live\nalways_load: true\n---\n\nbody " + strings.Repeat("w ", 11)
+	routed := "---\ntype: Agent Rule\ntitle: B\ndescription: \"x\"\nstatus: live\nalways_load: false\n---\n\nnever counted"
+	dir := writeTree(t, map[string]string{
+		"rules/on.md":  alwaysOn,
+		"rules/off.md": routed,
+		"CLAUDE.md":    "entry point words here",
+	})
+
+	files := collectAlwaysOn(
+		[]string{filepath.Join(dir, "rules")},
+		[]string{filepath.Join(dir, "CLAUDE.md"), filepath.Join(dir, "missing.md")},
+	)
+	if len(files) != 2 {
+		t.Fatalf("collectAlwaysOn: want the always_load rule + CLAUDE.md, got %v", files)
+	}
+
+	var problems []string
+	fail := func(file, format string, a ...any) {
+		problems = append(problems, fmt.Sprintf(format, a...))
+	}
+
+	lintAlwaysOnBudget(files, 10_000, fail)
+	if len(problems) != 0 {
+		t.Fatalf("under budget must pass, got %v", problems)
+	}
+
+	lintAlwaysOnBudget(files, 3, fail)
+	if len(problems) != 1 {
+		t.Fatalf("over budget must fail once, got %v", problems)
+	}
+	for _, f := range files {
+		if !strings.Contains(problems[0], filepath.Base(f)) {
+			t.Errorf("breakdown should name %s:\n%s", filepath.Base(f), problems[0])
+		}
 	}
 }
 
