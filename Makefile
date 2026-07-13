@@ -309,6 +309,14 @@ quickstart-preflight:
 	  echo ">> kubectl is not installed."; \
 	  echo ">>   macOS:  brew install kubectl"; \
 	  echo ">>   Ubuntu: sudo snap install kubectl --classic"; }; \
+	if ! command -v go >/dev/null 2>&1; then missing=1; \
+	  echo ">> go is not installed (used once to bootstrap build tools; any Go >=1.21 works — the build pins its own exact toolchain)."; \
+	  echo ">>   macOS:  brew install go"; \
+	  echo ">>   Ubuntu: sudo snap install go --classic"; \
+	elif gv=$$(go env GOVERSION 2>/dev/null | sed 's/^go//'); \
+	  [ "$$(printf '%s\n' 1.21 "$$gv" | sort -V | head -1)" != "1.21" ]; then missing=1; \
+	  echo ">> go $$gv is too old to auto-select the pinned toolchain (need >=1.21) — upgrade go."; \
+	fi; \
 	[ "$$missing" = 0 ] || exit 1; \
 	docker info >/dev/null 2>&1 || { \
 	  echo ">> docker is installed but the daemon isn't reachable."; \
