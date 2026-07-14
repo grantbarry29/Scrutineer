@@ -209,6 +209,12 @@ func netpolNameForSession(session *scrutineerv1alpha1.AgentSession) string {
 	return networkpolicy.NameFor(session.Namespace, session.Name)
 }
 
+// backstopNetpolNameForSession returns the deterministic name of the Envoy-pod egress
+// backstop NetworkPolicy (rendered alongside the routing lock while the proxy is enabled).
+func backstopNetpolNameForSession(session *scrutineerv1alpha1.AgentSession) string {
+	return networkpolicy.BackstopNameFor(session.Namespace, session.Name)
+}
+
 // withRequireHumanApproval declares inline action types that need human approval.
 func withRequireHumanApproval(actions ...string) agentSessionOption {
 	return func(s *scrutineerv1alpha1.AgentSession) {
