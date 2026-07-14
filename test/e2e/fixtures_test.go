@@ -209,6 +209,50 @@ func netpolNameForSession(session *scrutineerv1alpha1.AgentSession) string {
 	return networkpolicy.NameFor(session.Namespace, session.Name)
 }
 
+// withRequireHumanApproval declares inline action types that need human approval.
+func withRequireHumanApproval(actions ...string) agentSessionOption {
+	return func(s *scrutineerv1alpha1.AgentSession) {
+		s.Spec.Policy.RequireHumanApproval = actions
+	}
+}
+
+type approvalPolicyOption func(*scrutineerv1alpha1.ApprovalPolicy)
+
+// withApprovers lists the subjects allowed to grant under the policy.
+func withApprovers(names ...string) approvalPolicyOption {
+	return func(p *scrutineerv1alpha1.ApprovalPolicy) {
+		for _, n := range names {
+			p.Spec.Approvers = append(p.Spec.Approvers, scrutineerv1alpha1.ApprovalSubject{
+				Kind: scrutineerv1alpha1.ApprovalSubjectUser,
+				Name: n,
+			})
+		}
+	}
+}
+
+// withDecisionDeadline sets the decision deadline (expiresAfter) and timeout outcome.
+func withDecisionDeadline(d time.Duration, onTimeout scrutineerv1alpha1.ApprovalTimeoutAction) approvalPolicyOption {
+	return func(p *scrutineerv1alpha1.ApprovalPolicy) {
+		p.Spec.ExpiresAfter = &metav1.Duration{Duration: d}
+		p.Spec.OnTimeout = onTimeout
+	}
+}
+
+// createApprovalPolicy creates an ApprovalPolicy gating the given action types.
+func createApprovalPolicy(ctx context.Context, namespace, name string, actions []string, opts ...approvalPolicyOption) {
+	GinkgoHelper()
+	p := &scrutineerv1alpha1.ApprovalPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: scrutineerv1alpha1.ApprovalPolicySpec{
+			Actions: actions,
+		},
+	}
+	for _, o := range opts {
+		o(p)
+	}
+	Expect(k8sClient.Create(ctx, p)).To(Succeed())
+}
+
 // createEnforcedCIDRPolicy creates an AgentPolicy with enforced mode and an allowed CIDR.
 func createEnforcedCIDRPolicy(ctx context.Context, namespace, name, cidr string) {
 	GinkgoHelper()
