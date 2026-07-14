@@ -52,3 +52,66 @@ func TestApplyStatus_writesEffectivePolicy(t *testing.T) {
 		t.Fatal("ApplyStatus should delegate to ApplyStatusAt")
 	}
 }
+
+func TestApplyStatusAt_keepsFirstDecisionTimesWhenPolicyUnchanged(t *testing.T) {
+	session := &scrutineerv1alpha1.AgentSession{}
+	resolved := Resolved{
+		Mode: scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{
+			AllowedDomains: []string{"example.com"},
+			DeniedDomains:  []string{"evil.example"},
+		},
+		Matched: []scrutineerv1alpha1.MatchedPolicyRef{{
+			Kind: "AgentPolicy",
+			Name: "baseline",
+		}},
+	}
+	first := time.Unix(100, 0)
+	ApplyStatusAt(session, resolved, first)
+
+	ApplyStatusAt(session, resolved, time.Unix(200, 0))
+
+	want := metav1.NewTime(first)
+	if len(session.Status.PolicyDecisions) == 0 {
+		t.Fatal("expected merge decisions")
+	}
+	for i, d := range session.Status.PolicyDecisions {
+		if d.Time != want {
+			t.Fatalf("decision %d (%s %q) re-stamped: time = %v, want %v", i, d.Reason, d.Target, d.Time, want)
+		}
+	}
+}
+
+func TestApplyStatusAt_restampsOnlyChangedDecisions(t *testing.T) {
+	session := &scrutineerv1alpha1.AgentSession{}
+	resolved := Resolved{
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{AllowedDomains: []string{"example.com"}},
+	}
+	first := time.Unix(100, 0)
+	ApplyStatusAt(session, resolved, first)
+
+	changed := resolved
+	changed.Rules.DeniedDomains = []string{"evil.example"}
+	later := time.Unix(200, 0)
+	ApplyStatusAt(session, changed, later)
+
+	var sawKept, sawNew bool
+	for _, d := range session.Status.PolicyDecisions {
+		switch d.Target {
+		case "example.com":
+			sawKept = true
+			if d.Time != metav1.NewTime(first) {
+				t.Fatalf("unchanged decision re-stamped: time = %v, want %v", d.Time, metav1.NewTime(first))
+			}
+		case "evil.example":
+			sawNew = true
+			if d.Time != metav1.NewTime(later) {
+				t.Fatalf("new decision time = %v, want %v", d.Time, metav1.NewTime(later))
+			}
+		}
+	}
+	if !sawKept || !sawNew {
+		t.Fatalf("kept=%v new=%v, want both targets present", sawKept, sawNew)
+	}
+}

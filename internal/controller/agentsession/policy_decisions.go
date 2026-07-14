@@ -12,6 +12,7 @@ package agentsession
 
 import (
 	"context"
+	"time"
 
 	scrutineerv1alpha1 "github.com/grantbarry29/scrutineer/api/v1alpha1"
 	"github.com/grantbarry29/scrutineer/internal/enforcement"
@@ -21,7 +22,12 @@ import (
 // ApplyPolicyStatus writes merged policy fields and merge-time decisions, then re-appends
 // runtime-phase decisions from priorDecisions so reconcile does not wipe enforcement evidence.
 func ApplyPolicyStatus(session *scrutineerv1alpha1.AgentSession, resolved policy.Resolved, priorDecisions []scrutineerv1alpha1.PolicyDecision) {
-	policy.ApplyStatus(session, resolved)
+	ApplyPolicyStatusAt(session, resolved, priorDecisions, time.Now())
+}
+
+// ApplyPolicyStatusAt is ApplyPolicyStatus with an explicit clock for merge decisions.
+func ApplyPolicyStatusAt(session *scrutineerv1alpha1.AgentSession, resolved policy.Resolved, priorDecisions []scrutineerv1alpha1.PolicyDecision, now time.Time) {
+	policy.ApplyStatusAt(session, resolved, now)
 	runtime := RuntimePolicyDecisions(priorDecisions)
 	if len(runtime) == 0 {
 		return

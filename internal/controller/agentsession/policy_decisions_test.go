@@ -124,16 +124,46 @@ func TestMergeRuntimePolicyDecisionsInPlace_doesNotDuplicate(t *testing.T) {
 	}
 }
 
-// ApplyPolicyStatusAt is a test helper with a fixed clock for merge decisions.
-func ApplyPolicyStatusAt(session *scrutineerv1alpha1.AgentSession, resolved policy.Resolved, prior []scrutineerv1alpha1.PolicyDecision, now time.Time) {
-	policy.ApplyStatusAt(session, resolved, now)
-	runtime := RuntimePolicyDecisions(prior)
-	if len(runtime) == 0 {
-		return
+func TestApplyPolicyStatus_mergeTimestampsStableAcrossReconciles(t *testing.T) {
+	resolved := policy.Resolved{
+		Mode:  scrutineerv1alpha1.PolicyModeEnforced,
+		Rules: scrutineerv1alpha1.PolicyRules{AllowedDomains: []string{"example.com"}},
 	}
-	session.Status.PolicyDecisions = enforcement.AppendRuntimeDecisions(
-		session.Status.PolicyDecisions,
-		runtime,
-		enforcement.MaxPolicyDecisions,
-	)
+	session := &scrutineerv1alpha1.AgentSession{}
+	first := time.Unix(100, 0)
+	ApplyPolicyStatusAt(session, resolved, nil, first)
+
+	// Second reconcile: same resolved policy, later clock. prior is the persisted
+	// status, now also carrying a runtime decision that must survive untouched.
+	runtimeTS := metav1.NewTime(time.Unix(150, 0))
+	prior := append([]scrutineerv1alpha1.PolicyDecision(nil), session.Status.PolicyDecisions...)
+	prior = append(prior, scrutineerv1alpha1.PolicyDecision{
+		Time:   runtimeTS,
+		Phase:  scrutineerv1alpha1.PolicyDecisionPhaseRuntime,
+		Type:   "network",
+		Action: scrutineerv1alpha1.PolicyDecisionDeny,
+		Reason: "DeniedDomains",
+		Target: "evil.example",
+	})
+	session.Status.PolicyDecisions = prior
+	ApplyPolicyStatusAt(session, resolved, prior, time.Unix(200, 0))
+
+	want := metav1.NewTime(first)
+	var runtimeSeen bool
+	for i, d := range session.Status.PolicyDecisions {
+		switch d.Phase {
+		case scrutineerv1alpha1.PolicyDecisionPhaseMerge:
+			if d.Time != want {
+				t.Fatalf("merge decision %d (%s %q) re-stamped: time = %v, want %v", i, d.Reason, d.Target, d.Time, want)
+			}
+		case scrutineerv1alpha1.PolicyDecisionPhaseRuntime:
+			runtimeSeen = true
+			if d.Time != runtimeTS {
+				t.Fatalf("runtime decision time = %v, want %v", d.Time, runtimeTS)
+			}
+		}
+	}
+	if !runtimeSeen {
+		t.Fatal("runtime decision dropped")
+	}
 }
