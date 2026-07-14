@@ -150,6 +150,27 @@ sleep 120`, host)
 	}
 }
 
+// withContinuousEgressProbe is withNetpolEgressProbe without the iteration bound, for
+// specs that mutate policy mid-run (#148) and need proxy-routed traffic plus the
+// direct-egress negatives to span the change: the PROBE_* markers must cover the whole
+// run — including the proxy-churn window — so "nothing escaped" is asserted, not
+// assumed. The session runs until cancelled.
+func withContinuousEgressProbe(host string) agentSessionOption {
+	return func(s *scrutineerv1alpha1.AgentSession) {
+		script := fmt.Sprintf(`sleep 12
+ENVOY_IP=$(printf '%%s' "${http_proxy:-$HTTP_PROXY}" | sed 's|^http://||; s|:.*$||')
+while true; do
+  wget -q -O /dev/null "http://%[1]s/" 2>/dev/null || true
+  printf 'CONNECT %[1]s:443 HTTP/1.1\r\nHost: %[1]s:443\r\n\r\n' | nc -w 3 "$ENVOY_IP" 15001 2>/dev/null || true
+  if timeout 5 nc -w 3 "$ENVOY_IP" 15001 </dev/null >/dev/null 2>&1; then echo "PROBE_ENVOY_TCP=OK"; else echo "PROBE_ENVOY_TCP=FAIL"; fi
+  if timeout 5 nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1; then echo "PROBE_DNS=OK"; else echo "PROBE_DNS=BLOCKED"; fi
+  if timeout 5 nc -w 3 "$PROBE_TARGET_IP" 53 </dev/null >/dev/null 2>&1; then echo "PROBE_DIRECT=OK"; else echo "PROBE_DIRECT=BLOCKED"; fi
+  sleep 2
+done`, host)
+		s.Spec.Runtime.Command = []string{"sh", "-c", script}
+	}
+}
+
 // newTestNamespace creates a uniquely-named namespace for one It block.
 func newTestNamespace(prefix string) string {
 	name := fmt.Sprintf("%s-%s", prefix, rand.String(5))
@@ -257,6 +278,19 @@ func createApprovalPolicy(ctx context.Context, namespace, name string, actions [
 		o(p)
 	}
 	Expect(k8sClient.Create(ctx, p)).To(Succeed())
+}
+
+// updateAgentPolicy mutates an existing AgentPolicy, conflict-safe against concurrent
+// writers (mirrors requestCancellation). This is the mid-run policy-change entry point
+// for #148-style specs.
+func updateAgentPolicy(ctx context.Context, key client.ObjectKey, mutate func(*scrutineerv1alpha1.AgentPolicy)) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		var pol scrutineerv1alpha1.AgentPolicy
+		g.Expect(k8sClient.Get(ctx, key, &pol)).To(Succeed())
+		mutate(&pol)
+		g.Expect(k8sClient.Update(ctx, &pol)).To(Succeed())
+	}, 15*time.Second, 200*time.Millisecond).Should(Succeed())
 }
 
 // createEnforcedCIDRPolicy creates an AgentPolicy with enforced mode and an allowed CIDR.
