@@ -102,7 +102,9 @@ test-e2e-net: manifests ## Run the CNI-generic networking e2e suite against the 
 	@# SCRUTINEER_E2E_LOCK_VERIFY wires the verified-or-refused lock gate (#70) into the
 	@# in-process manager; the gate spec asserts opposite outcomes per CNI.
 	@# VERSION_LDFLAGS: see test-e2e (#112).
-	SCRUTINEER_E2E_LOCK_VERIFY=1 go test $(VERSION_LDFLAGS) -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='networking'
+	@# 30m: the tamper-repair specs (#147) run three full live sessions on top of the
+	@# rest of the suite; CI job timeouts (40-50m) still bound a genuine hang.
+	SCRUTINEER_E2E_LOCK_VERIFY=1 go test $(VERSION_LDFLAGS) -tags=e2e -v ./test/e2e/... -timeout 30m -ginkgo.v --ginkgo.label-filter='networking'
 
 .PHONY: test-e2e-net-kindnet
 test-e2e-net-kindnet: ## Run the networking e2e suite on the kindnet cluster.
