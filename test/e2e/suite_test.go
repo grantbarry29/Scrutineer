@@ -55,6 +55,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -130,13 +131,7 @@ var _ = BeforeSuite(func() {
 	// running enforced specs before the first probe settles would (correctly) see them
 	// held. Wait for the settled verdict once, up front, so every spec runs against a
 	// stable gate — mirroring a controller that has completed its startup probe.
-	if lockVerifyEnabled() {
-		By("waiting for the first conclusive lock-verification verdict")
-		Eventually(func() lockverify.Verdict {
-			return lockVerifier.Current().Verdict
-		}, 4*time.Minute, 3*time.Second).ShouldNot(Equal(lockverify.VerdictUnknown),
-			"lock verifier produced no conclusive verdict — probe pods may be unschedulable")
-	}
+	waitForLockVerdictIfEnabled()
 })
 
 var _ = AfterSuite(func() {
@@ -154,6 +149,49 @@ var _ = AfterSuite(func() {
 		}
 	}
 })
+
+// waitForLockVerdictIfEnabled blocks until the wired lock verifier reaches a conclusive
+// verdict (lock-verify mode only) — the gate fails closed until then.
+func waitForLockVerdictIfEnabled() {
+	if !lockVerifyEnabled() {
+		return
+	}
+	By("waiting for a conclusive lock-verification verdict")
+	Eventually(func() lockverify.Verdict {
+		return lockVerifier.Current().Verdict
+	}, 4*time.Minute, 3*time.Second).ShouldNot(Equal(lockverify.VerdictUnknown),
+		"lock verifier produced no conclusive verdict — probe pods may be unschedulable")
+}
+
+// stopControllerManager stops the in-process manager and waits for it to exit — the
+// "controller down" half of a restart/downtime spec (#150). Callers MUST bring it back
+// with restartControllerManager before their spec ends (guard it with DeferCleanup so a
+// failing assertion cannot leave the rest of the suite running against a dead
+// controller). Restart specs are Serial for the same reason.
+func stopControllerManager() {
+	By("stopping the in-process controller manager")
+	Expect(managerCancel).NotTo(BeNil(), "controller manager is not running")
+	managerCancel()
+	select {
+	case <-managerDone:
+	case <-time.After(10 * time.Second):
+		Fail("controller manager did not stop within 10s after cancel")
+	}
+	managerCancel = nil
+}
+
+// controllerManagerRunning reports whether the in-process manager is currently up.
+func controllerManagerRunning() bool { return managerCancel != nil }
+
+// restartControllerManager brings the manager back after stopControllerManager: a true
+// cold start (fresh manager, fresh caches, and in lock-verify mode a fresh verifier
+// whose conclusive verdict is awaited), so the calling spec resumes against a settled
+// controller exactly as BeforeSuite provides one.
+func restartControllerManager() {
+	By("restarting the in-process controller manager")
+	startControllerManager()
+	waitForLockVerdictIfEnabled()
+}
 
 // verifyAgentSessionCRDInstalled fails the suite fast with a clear message if
 // the CRD is missing, since otherwise every It block would fail with a confusing
@@ -184,6 +222,11 @@ func startControllerManager() {
 		Metrics:                metricsserver.Options{BindAddress: "0"},
 		HealthProbeBindAddress: "0",
 		LeaderElection:         false,
+		// Restart specs (#150) start a second manager in this same test process;
+		// controller-runtime's global name-uniqueness check (metrics hygiene) would
+		// reject re-registering "agentsession". Test-process concern only — the
+		// production manager never restarts in-process.
+		Controller: ctrlconfig.Controller{SkipNameValidation: boolPtr(true)},
 	})
 	Expect(err).NotTo(HaveOccurred())
 
