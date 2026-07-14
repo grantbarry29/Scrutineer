@@ -1,0 +1,115 @@
+# Released-artifact smoke (#155): prove the install-guide flow — checkout at the
+# release tag, `kubectl apply -k config/default`, pinned PUBLISHED ghcr images —
+# actually works. Every other cluster job deliberately builds images from source
+# (#109), so this is the only coverage the public install path has; v0.1.0 shipped
+# broken (published images predated the lock gate) and no CI could have caught it.
+#
+# Posture is the inverse of Quickstart Smoke: nothing is built or kind-loaded here.
+# The kind node pulls the controller and egress-reporter images anonymously from
+# ghcr (the packages are public), so a bad multi-arch manifest, wrong baked
+# version, or image/overlay skew fails THIS job instead of a user's first install.
+#
+# Triggers:
+#   - workflow_run on Release: fires after the publish jobs complete. The natural
+#     trigger would be `release: [published]`, but no GitHub Release object is
+#     created on tags yet (#139) — switch over when that lands. For tag-push runs,
+#     workflow_run.head_branch carries the tag name.
+#   - workflow_dispatch with a tag input: manual re-verification of any release.
+#     Dispatching against v0.1.0 must FAIL (known-broken release, #109) — the
+#     standing negative control for this workflow itself.
+#
+# Steps that exercise release UX (`make quickstart-verdict`, `make demo`) run the
+# TAG's Makefile, so each release is tested exactly as its checkout documents.
+# amd64-only by design: a linux/amd64 kind pull catches the manifest/skew class;
+# arm64 runners are a non-goal for now (#155).
+name: Release Smoke
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to smoke-test (e.g. v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  install-guide-flow:
+    # workflow_run also fires on failed/skipped Release runs — only smoke a
+    # successful publish of a v* tag.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+      KIND_CLUSTER: scrutineer-release-smoke
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Install kind
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: v0.31.0
+          install_only: true
+
+      - name: Create kind cluster
+        # The tag's pinned node image; --name overrides the config's name field.
+        run: kind create cluster --name "$KIND_CLUSTER" --config .devcontainer/kind-config.yaml --wait 90s
+
+      - name: Install Scrutineer the documented way (published images, no builds)
+        run: kubectl apply -k config/default
+
+      - name: Wait for the controller rollout (node pulls from ghcr)
+        run: kubectl -n scrutineer-system rollout status deployment/scrutineer-controller-manager --timeout=5m
+
+      - name: Assert the manager is the published image, genuinely pulled
+        # Two claims: the deployed reference is the pinned release tag (overlay
+        # skew), and the running container's imageID is a ghcr digest — a
+        # kind-loaded or locally built image would show an import/sha256-only ID,
+        # which would silently invalidate everything this workflow exists to prove.
+        run: |
+          img=$(kubectl -n scrutineer-system get deployment scrutineer-controller-manager \
+            -o jsonpath='{.spec.template.spec.containers[?(@.name=="manager")].image}')
+          echo "deployed image:  $img"
+          [ "$img" = "ghcr.io/grantbarry29/scrutineer:${TAG}" ] \
+            || { echo "!! deployed image does not match the release tag ${TAG}"; exit 1; }
+          imageID=$(kubectl -n scrutineer-system get pods \
+            -o jsonpath='{range .items[*]}{range .status.containerStatuses[?(@.name=="manager")]}{.imageID}{"\n"}{end}{end}' \
+            | head -1)
+          echo "running imageID: $imageID"
+          case "$imageID" in
+            ghcr.io/grantbarry29/scrutineer@sha256:*) ;;
+            *) echo "!! manager was not pulled from ghcr — this run proves nothing"; exit 1 ;;
+          esac
+
+      - name: Lock-gate verdict (verified-or-refused must function)
+        run: make quickstart-verdict
+
+      - name: Demo (sessions succeed with evidence on the published images)
+        run: make demo DEMO_KUBE_CONTEXT="kind-${KIND_CLUSTER}"
+
+      # Post-mortem before the cluster vanishes with the runner (#110). Guarded:
+      # very old tags may predate the script.
+      - name: Dump cluster diagnostics
+        if: failure()
+        run: |
+          if [ -x hack/ci-dump-diagnostics.sh ]; then
+            hack/ci-dump-diagnostics.sh
+          else
+            kubectl -n scrutineer-system get pods -o wide || true
+            kubectl -n scrutineer-system logs deployment/scrutineer-controller-manager --tail=200 || true
+          fi
+
+      - name: Tear down
+        if: always()
+        run: kind delete cluster --name "$KIND_CLUSTER" || true

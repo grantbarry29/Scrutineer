@@ -18,7 +18,7 @@ markdown: frontmatter declares each doc's `type`, `status`, `description`, and
 * [AgentSession Controller Reference](docs/reference/controller-reference.md) - The full controller behavior catalog: reconcile triggers and flow, validation, task/policy/profile resolution, Job lifecycle, phase mapping, conditions, Kubernetes events, inspection commands, and the shipped-capability quick reference.
 * [Egress Enforcement — Guarantees & Assumptions](docs/reference/egress-guarantees.md) - Exactly what the envoy enforcement backend guarantees (proxy-only egress, untamperable chokepoint, FQDN + CIDR policy, independent observed evidence) and the assumptions those guarantees rest on.
 * [Development Environment & Local Runs](docs/reference/dev-environment.md) - The devcontainer (recommended), dev-cluster Makefile targets, pinned tool versions, the step-by-step host-side MVP walkthrough with samples, in-cluster controller deployment, and the sample-verified acceptance checklist.
-* [CI Tiers](docs/reference/ci.md) - Which workflows run when: Lint/Test always, cluster-heavy E2E + Quickstart Smoke skip docs-only pushes, Nightly Networking cross-checks Calico/dual-stack; all cluster jobs build first-party images from the checkout and dump diagnostics on failure.
+* [CI Tiers](docs/reference/ci.md) - Which workflows run when: Lint/Test always, cluster-heavy E2E + Quickstart Smoke skip docs-only pushes, Nightly Networking cross-checks Calico/dual-stack, Release Smoke is the post-publish gate on the published ghcr images; pre-release cluster jobs build first-party images from the checkout and all dump diagnostics on failure.
 
 # Component READMEs
 
