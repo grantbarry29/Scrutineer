@@ -228,12 +228,14 @@ var _ = Describe("AgentSession e2e against kind", func() {
 
 			expectJobForSession(ctx, ns, session)
 
-			By("the controller renders a NetworkPolicy owned by the session")
+			By("the routing lock already existing the moment the Job is first observable (#143)")
+			// Deliberately NOT Eventually: the reconciler creates the lock before the
+			// runtime Job, so at the Job's first sighting the lock must already be
+			// committed. An Eventually here would mask a lock-after-runtime regression.
 			var np networkingv1.NetworkPolicy
 			npKey := client.ObjectKey{Namespace: ns, Name: netpolNameForSession(session)}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, npKey, &np)
-			}, 30*time.Second, 500*time.Millisecond).Should(Succeed(), "NetworkPolicy never appeared")
+			Expect(k8sClient.Get(ctx, npKey, &np)).To(Succeed(),
+				"NetworkPolicy absent when the Job appeared — lock must precede runtime")
 
 			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
 			Expect(np.Spec.PodSelector.MatchLabels[scrutineerjob.LabelSessionRef]).To(Equal(session.Name))

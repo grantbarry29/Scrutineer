@@ -162,6 +162,11 @@ against an unchanged cluster makes no API mutations.
 - Adding/changing a backend touches `runtime_backend.go` ↔ its impl (e.g. `pod.go`) ↔
   `SetupWithManager`'s `Owns(backend.ownedType())`. Changing `+kubebuilder:rbac` markers
   requires re-running `make manifests`.
+- **Lock before runtime** (#143): `Reconcile` creates the per-session NetworkPolicies
+  (routing lock + backstop) **before** `backend.ensure` creates the runtime object, so no
+  agent pod is ever admitted ahead of its egress lock and a mid-reconcile crash leaves
+  lock-without-runtime, never the reverse. `ordering_test.go` asserts the Create order
+  with an interceptor-recording client; keep it in sync when touching the reconcile flow.
 - The egress proxy is provisioned **before the agent runtime** in `Reconcile` (so its Service
   ClusterIP is known and injected as the agent's proxy) and again idempotently in
   `patchStatusWithEnforcement`; it is **torn down on terminal**, same as the NetworkPolicies.

@@ -331,6 +331,15 @@ func (r *AgentSessionReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("resolve egress proxy endpoint: %w", err)
 	}
 
+	// Lock before runtime (#143): the per-session NetworkPolicies must exist before the
+	// runtime object does, so no agent pod is ever admitted ahead of its egress lock —
+	// and a reconcile that dies between the two steps leaves the safe state (lock
+	// without runtime), never the reverse. patchStatusWithEnforcement re-runs this
+	// idempotently below.
+	if err := r.ensureNetworkPolicy(ctx, session, resolvedProfile); err != nil {
+		return ctrl.Result{}, fmt.Errorf("ensure NetworkPolicy: %w", err)
+	}
+
 	backend, err := r.runtimeBackendFor(session)
 	if err != nil {
 		return ctrl.Result{}, err
