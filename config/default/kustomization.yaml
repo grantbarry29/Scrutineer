@@ -2,8 +2,13 @@ namespace: scrutineer-system
 
 namePrefix: ""
 
-commonLabels:
-  app.kubernetes.io/name: scrutineer
+# `labels` with includeSelectors:true is the non-deprecated equivalent of the old
+# `commonLabels` — it stamps the label on metadata, selectors, AND pod templates, so the
+# `kustomize build` output is byte-identical (verified). Plain `labels` would omit selectors.
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/name: scrutineer
 
 # Base install: CRDs + RBAC + manager only. Webhook and cert-manager overlays are opt-in,
 # kept out of the default to avoid a hard cert-manager dependency. A production Helm chart /
