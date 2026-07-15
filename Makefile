@@ -363,9 +363,15 @@ quickstart-verdict: ## Wait for and print the routing-lock verification verdict 
 	@echo ">> waiting for the lock-verification probe (differential canary; see docs/design/untamperable-enforcement.md §4)..."
 	@# The || true keeps the empty-grep iterations alive under this Makefile's
 	@# bash -e -o pipefail shell (no verdict line yet is the expected first state).
+	@# Read the verdict from the CURRENT manager pod (newest by creationTimestamp), not
+	@# `logs deployment/...`: during a rolling update that can read the OLD pod and return
+	@# a stale Verified from the previous process while the new pod is still probing (#160).
 	@verdict=""; \
 	for i in $$(seq 1 60); do \
-	  verdict=$$(kubectl -n scrutineer-system logs deployment/scrutineer-controller-manager 2>/dev/null \
+	  pod=$$(kubectl -n scrutineer-system get pods \
+	    -l app.kubernetes.io/name=scrutineer,app.kubernetes.io/component=controller-manager \
+	    --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null || true); \
+	  verdict=$$(kubectl -n scrutineer-system logs "$$pod" 2>/dev/null \
 	    | grep 'lock probe verdict' | tail -1 | sed -n 's/.*"verdict"[": ]*\([A-Za-z]*\).*/\1/p' || true); \
 	  if [ -n "$$verdict" ]; then break; fi; \
 	  sleep 2; \
@@ -412,19 +418,23 @@ demo: quickstart-preflight demo-context-guard ## Guided egress-governance demo a
 	@echo ">> two sessions are starting: demo-enforced and demo-audit — same busybox agent,"
 	@echo ">> same allowlist (example.com), different policy mode. Waiting for both (~2 min)..."
 	@# Fail fast instead of a blind 6-minute wait (#88). The loop watches, in order:
-	@# the lock-gate condition (not Verified => demo-enforced is held by design and
-	@# demo-audit would run WITHOUT an effective routing lock, so running the demo
-	@# would demonstrate a falsehood — clean up and refuse); terminal phases
-	@# (Denied/Failed => print the diagnosis); pods stuck in a waiting state the Job
-	@# never fails on (the #82 CreateContainerConfigError class — session phase stays
-	@# Running forever); then the 6m overall backstop.
+	@# the lock-gate condition — a CONCLUSIVE negative (False with any reason other than
+	@# ProbeInconclusive, e.g. CNIDoesNotEnforceNetworkPolicy) means demo-enforced is held
+	@# by design and demo-audit would run WITHOUT an effective routing lock, so the demo
+	@# would demonstrate a falsehood (clean up and refuse). A False/ProbeInconclusive is
+	@# just "the probe hasn't finished yet" right after a (re)deploy (#160) — keep waiting
+	@# within the backstop, don't abort. Then terminal phases (Denied/Failed => print the
+	@# diagnosis); pods stuck in a waiting state the Job never fails on (the #82
+	@# CreateContainerConfigError class — session phase stays Running forever); then the
+	@# 6m overall backstop.
 	@deadline=$$(( $$(date +%s) + 360 )); stuck=0; \
 	while :; do \
 	  pe=$$($(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{.status.phase}' 2>/dev/null || true); \
 	  pa=$$($(DEMO_KUBECTL) get agentsession demo-audit -o jsonpath='{.status.phase}' 2>/dev/null || true); \
 	  if [ "$$pe" = "Succeeded" ] && [ "$$pa" = "Succeeded" ]; then break; fi; \
 	  gate=$$($(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{.status.conditions[?(@.type=="EgressLockVerified")].status}' 2>/dev/null || true); \
-	  if [ "$$gate" = "False" ]; then \
+	  greason=$$($(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{.status.conditions[?(@.type=="EgressLockVerified")].reason}' 2>/dev/null || true); \
+	  if [ "$$gate" = "False" ] && [ "$$greason" != "ProbeInconclusive" ]; then \
 	    echo ""; \
 	    echo ">> the routing-lock gate is not Verified on this cluster:"; \
 	    $(DEMO_KUBECTL) get agentsession demo-enforced -o jsonpath='{.status.conditions[?(@.type=="EgressLockVerified")].reason}{": "}{.status.conditions[?(@.type=="EgressLockVerified")].message}{"\n"}' 2>/dev/null || true; \
