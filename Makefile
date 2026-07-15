@@ -283,10 +283,10 @@ dev-down: kind-down ## Tear down the local kind cluster.
 ##@ Quickstart
 
 # The front-door experience (#78/#79): one command from a fresh clone to a running,
-# lock-verified Scrutineer on a dedicated kind cluster. Uses the released images when
-# pullable, falls back to local builds — either way images are kind-loaded, so the
-# cluster never pulls from a registry (probe pods use the controller image with
-# PullIfNotPresent; see internal/enforcement/lockverify).
+# lock-verified Scrutineer on a dedicated kind cluster. The controller + egress-reporter
+# images are always built from this checkout and kind-loaded (#109); Envoy is the pinned
+# upstream exception, also preloaded. Either way the cluster never pulls from a registry
+# (probe pods use the controller image with PullIfNotPresent; see internal/enforcement/lockverify).
 KIND_CLUSTER_NAME_QUICKSTART ?= scrutineer-quickstart
 # QUICKSTART_CNI=kindnet (default, fast) or calico (production-representative; use if
 # the default flavor's gate verdict comes back Refused on your kind/node versions).
