@@ -150,16 +150,11 @@ func deployInClusterReporter(ctx SpecContext) {
 	}
 	Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, sa))).To(Succeed())
 
+	// Grant the generated reporter-role rules verbatim (single source, #151) rather than a
+	// hand-maintained copy, so a marker change the reporter needs surfaces here.
 	cr := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: e2eReporterClusterRole, Labels: labels},
-		Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{"authentication.k8s.io"}, Resources: []string{"tokenreviews"}, Verbs: []string{"create"}},
-			{APIGroups: []string{"scrutineer.sh"}, Resources: []string{"agentsessions"}, Verbs: []string{"get"}},
-			{APIGroups: []string{"scrutineer.sh"}, Resources: []string{"agentsessions/status"}, Verbs: []string{"get", "update", "patch"}},
-			{APIGroups: []string{"scrutineer.sh"}, Resources: []string{"approvalrequests"}, Verbs: []string{"get", "list", "create"}},
-			{APIGroups: []string{"batch"}, Resources: []string{"jobs"}, Verbs: []string{"get"}},
-			{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get"}},
-		},
+		Rules:      reporterRoleRules(),
 	}
 	Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, cr))).To(Succeed())
 

@@ -173,6 +173,7 @@ var _ = Describe("standalone reporter overlay", func() {
 
 		var managerDeploy, reporterDeploy *appsv1.Deployment
 		var reporterSvc *corev1.Service
+		var reporterBinding *rbacv1.ClusterRoleBinding
 		for _, doc := range strings.Split(stdout.String(), "\n---") {
 			if strings.TrimSpace(doc) == "" {
 				continue
@@ -195,6 +196,14 @@ var _ = Describe("standalone reporter overlay", func() {
 				if s.Name == shippedReporterDeploy {
 					reporterSvc = s
 				}
+			case "ClusterRoleBinding":
+				b := &rbacv1.ClusterRoleBinding{}
+				Expect(yaml.Unmarshal([]byte(doc), b)).To(Succeed())
+				// Identify the reporter binding by what it grants, not its name, so the
+				// assertion survives a rename but pins the role→subject retargeting.
+				if b.RoleRef.Name == "reporter-role" {
+					reporterBinding = b
+				}
 			}
 		}
 
@@ -215,6 +224,21 @@ var _ = Describe("standalone reporter overlay", func() {
 		Expect(reporterDeploy.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--reporter-only"))
 		Expect(reporterDeploy.Spec.Template.Spec.Containers[0].Image).To(HavePrefix("ghcr.io/grantbarry29/scrutineer:"),
 			"images transform must replace the controller:latest placeholder")
+
+		By("asserting the reporter-role binding is retargeted to the dedicated reporter ServiceAccount")
+		// The security-relevant half of the overlay (#34, #151): reporter-role moves off
+		// the manager SA and onto the dedicated scrutineer-reporter SA, so the manager SA
+		// keeps only manager-role. roleRef must still point at the shipped reporter-role
+		// (not a copy), and the single subject must be the reporter SA.
+		Expect(reporterBinding).NotTo(BeNil(), "overlay must render the reporter-role ClusterRoleBinding")
+		Expect(reporterBinding.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(reporterBinding.RoleRef.Name).To(Equal("reporter-role"),
+			"binding must reference the shipped reporter-role, not a hand-rolled copy")
+		Expect(reporterBinding.Subjects).To(Equal([]rbacv1.Subject{{
+			Kind:      "ServiceAccount",
+			Name:      shippedReporterSA,
+			Namespace: scrutineerSystemNamespace,
+		}}), "overlay must retarget reporter-role to the dedicated reporter SA")
 	})
 })
 
@@ -295,21 +319,16 @@ func pointReporterServiceAtShippedPods(ctx context.Context) {
 }
 
 // deployStandaloneReporterRBAC grants the shipped scrutineer-reporter ServiceAccount the
-// reporter-role permissions it needs (the overlay retargets reporter-role to this SA; here
-// we bind an equivalent ClusterRole so the standalone reporter can read sessions and merge
-// status). Mirrors the rules in deployInClusterReporter.
+// reporter-role permissions it needs so the standalone reporter can read sessions and
+// merge status. The rules come from the generated reporter-role verbatim
+// (reporterRoleRules, #151) — the same source deployInClusterReporter uses — so if the
+// markers drop a verb the reporter needs, this grant drops it too and the live evidence
+// spec below 403s instead of passing on a stale hand-rolled copy.
 func deployStandaloneReporterRBAC(ctx context.Context) {
 	GinkgoHelper()
 	cr := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: standaloneReporterRoleName},
-		Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{"authentication.k8s.io"}, Resources: []string{"tokenreviews"}, Verbs: []string{"create"}},
-			{APIGroups: []string{"scrutineer.sh"}, Resources: []string{"agentsessions"}, Verbs: []string{"get"}},
-			{APIGroups: []string{"scrutineer.sh"}, Resources: []string{"agentsessions/status"}, Verbs: []string{"get", "update", "patch"}},
-			{APIGroups: []string{"scrutineer.sh"}, Resources: []string{"approvalrequests"}, Verbs: []string{"get", "list", "create"}},
-			{APIGroups: []string{"batch"}, Resources: []string{"jobs"}, Verbs: []string{"get"}},
-			{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get"}},
-		},
+		Rules:      reporterRoleRules(),
 	}
 	Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, cr))).To(Succeed())
 
