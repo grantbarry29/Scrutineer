@@ -22,8 +22,9 @@ wraps it in a `batch/v1` Job. Naming is deterministic (`scrutineer-session-<sess
   enforcement. Enforcement lives out-of-pod (per-session Envoy + routing lock — see
   [`docs/design/untamperable-enforcement.md`](../../../docs/design/untamperable-enforcement.md)).
 - When the profile enables the `envoy` backend, `applyAgentSidecarEnv` points the agent
-  at its per-session proxy via standard `HTTP(S)_PROXY` env — a routing convenience;
-  the NetworkPolicy lock is what makes the proxy mandatory.
+  at its per-session proxy via standard `HTTP(S)_PROXY`/`ALL_PROXY` env (`ALL_PROXY` lets
+  the libcurl family tunnel non-HTTP TCP through the same proxy, #124) — a routing
+  convenience; the NetworkPolicy lock is what makes the proxy mandatory.
 - **Security baseline**: drop-ALL capabilities + no privilege escalation always; the
   `RuntimeProfile` merges on top — container (`runAsNonRoot`/`runAsUser`/`runAsGroup`
   — pair the first with a UID for root-default images, #82 — `readOnlyRootFilesystem`,

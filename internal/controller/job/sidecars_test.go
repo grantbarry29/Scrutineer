@@ -54,7 +54,7 @@ func TestBuild_agentEnvoyProxyEnv(t *testing.T) {
 
 	agentEnv := agentEnvOf(job)
 	wantURL := envoy.ProxyURL(session.Name, session.Namespace)
-	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
 		if agentEnv[k] != wantURL {
 			t.Fatalf("%s = %q, want per-session Envoy %q", k, agentEnv[k], wantURL)
 		}
@@ -73,7 +73,7 @@ func TestBuild_agentEnvoyProxyEnv_prefersClusterIPEndpoint(t *testing.T) {
 	job := Build(session, &Task{}, &policy.Resolved{Mode: scrutineerv1alpha1.PolicyModeEnforced}, envoyProfile())
 
 	agentEnv := agentEnvOf(job)
-	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
 		if agentEnv[k] != "http://10.96.7.7:15001" {
 			t.Fatalf("%s = %q, want the resolved ClusterIP endpoint", k, agentEnv[k])
 		}

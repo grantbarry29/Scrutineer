@@ -83,6 +83,12 @@ func ProxyURL(sessionName, namespace string) string {
 // either) — omitting a variant would let that tooling bypass the proxy. NO_PROXY keeps
 // loopback direct so in-pod health/localhost traffic is unaffected.
 //
+// ALL_PROXY is set alongside HTTP_PROXY/HTTPS_PROXY because the libcurl family (curl,
+// git-lfs, …) honors it for *all* schemes, so setting it widens automatic proxy
+// cooperation to non-HTTP TCP at zero cost — the http:// scheme keeps proxy semantics
+// HTTP-proxy (CONNECT), which is exactly the documented CONNECT-tunnel escape hatch for
+// reaching databases/SSH/custom TCP through the chokepoint (#123, docs/egress-non-http.md).
+//
 // Security note: these env vars only *route well-behaved traffic*. The mandatory,
 // non-bypassable enforcement is the default-deny egress NetworkPolicy (Slice B, #61);
 // rewriting or ignoring these vars only self-sabotages, since Envoy is the sole
@@ -92,9 +98,11 @@ func ExplicitProxyEnv(proxyURL string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: "HTTP_PROXY", Value: proxyURL},
 		{Name: "HTTPS_PROXY", Value: proxyURL},
+		{Name: "ALL_PROXY", Value: proxyURL},
 		{Name: "NO_PROXY", Value: noProxy},
 		{Name: "http_proxy", Value: proxyURL},
 		{Name: "https_proxy", Value: proxyURL},
+		{Name: "all_proxy", Value: proxyURL},
 		{Name: "no_proxy", Value: noProxy},
 	}
 }

@@ -47,8 +47,9 @@ func TestExplicitProxyEnv(t *testing.T) {
 		byName[e.Name] = e.Value
 	}
 
-	// Both upper- and lower-case proxy vars must point at the Envoy proxy.
-	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+	// Both upper- and lower-case proxy vars must point at the Envoy proxy. ALL_PROXY is
+	// included so the libcurl family tunnels non-HTTP TCP through the same proxy (#124).
+	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
 		if byName[k] != url {
 			t.Fatalf("%s = %q, want %q", k, byName[k], url)
 		}
