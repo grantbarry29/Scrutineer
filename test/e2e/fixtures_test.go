@@ -326,6 +326,23 @@ func createEnforcedDeniedDomainPolicy(ctx context.Context, namespace, name, doma
 	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
 }
 
+// createEnforcedAllowedDomainPolicy allows exactly one domain; under an allow-list every other
+// authority is default-denied (union semantics), so this doubles as the deny driver for any
+// unlisted host.
+func createEnforcedAllowedDomainPolicy(ctx context.Context, namespace, name, domain string) {
+	GinkgoHelper()
+	ap := &scrutineerv1alpha1.AgentPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: scrutineerv1alpha1.AgentPolicySpec{
+			Mode: scrutineerv1alpha1.PolicyModeEnforced,
+			PolicyRules: scrutineerv1alpha1.PolicyRules{
+				AllowedDomains: []string{domain},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, ap)).To(Succeed())
+}
+
 // createRuntimeProfileWithEnvoy enables the out-of-pod per-session Envoy egress proxy.
 func createRuntimeProfileWithEnvoy(ctx context.Context, namespace, name string) {
 	GinkgoHelper()

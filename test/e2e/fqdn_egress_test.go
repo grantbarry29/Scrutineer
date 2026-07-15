@@ -14,6 +14,7 @@ package e2e
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -127,7 +128,10 @@ func expectObservedDecision(ctx context.Context, key client.ObjectKey, host stri
 			if d.Type != "network" || d.Actor != envoy.AccessLogActor {
 				continue
 			}
-			if d.Target == host || d.Target == host+":443" {
+			// Port-agnostic: the proxy logs the authority as the bare host or host:<port>.
+			// Matching any :<port> (not only :443) is what lets non-443 CONNECT-tunnel
+			// authorities (#123/#162) be asserted the same way as HTTPS on :443.
+			if d.Target == host || strings.HasPrefix(d.Target, host+":") {
 				match = d
 			}
 		}
