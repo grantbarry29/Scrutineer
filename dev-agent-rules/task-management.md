@@ -39,7 +39,7 @@ Useful queries:
 
 ## Work precedence (choosing the next issue)
 
-When picking the next thing to do (and when offering next-task options), prefer the **lowest-numbered
+When picking the next thing to do, prefer the **lowest-numbered
 bucket that still has an open card**. Ship value cheaply → tighten confidence → deepen trust →
 enterprise → breadth → nice-to-haves last:
 
@@ -156,7 +156,7 @@ Full detail: [`dev-agent-rules/scrutineer-workflow.md`](scrutineer-workflow.md).
 7. **No lost work:** every out-of-scope item becomes a **GitHub Issue** (`agent-discovered`, linked
    from the current issue) in the same session — not chat-only.
 8. **End-of-Task Handoff** (the `handoff` skill; constraint in `scrutineer-workflow.md`): sync the
-   board (done + close) → commit → offer 2–4 selectable next-task options with a recommendation.
+   board (done + close) → commit. Do not end by prompting the user with suggested next tasks.
 
 Unless explicitly selected by the user, do **not** add new CRDs, webhooks, sidecars, policy engines,
 UI, Envoy, Cilium/eBPF, gVisor/Kata, tool-execution chokepoints, real policy enforcement, approval workflows,

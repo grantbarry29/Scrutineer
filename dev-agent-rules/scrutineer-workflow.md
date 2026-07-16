@@ -44,13 +44,13 @@ When asked to implement a Scrutineer task, the agent must:
 9. If follow-up work is discovered, follow **Out-of-Scope Future Work Handling**; create a **GitHub Issue**; do not implement unless asked.
 10. If architecture is ambiguous, stop, offer 2–3 options, recommend one, wait for confirmation.
 11. Preserve Kubernetes controller discipline: idempotent reconciliation, owner references, status subresources, conditions, events, least-privilege RBAC.
-12. When the task is finished, run the **End-of-Task Handoff Protocol** below (the `handoff` skill: board sync, commit, then selectable next-task options).
+12. When the task is finished, run the **End-of-Task Handoff Protocol** below (the `handoff` skill: board sync, commit).
 
 ---
 
 ## End-of-Task Handoff Protocol
 
-**Constraint:** every finished task (work complete, verification passed) ends with the handoff — board synced (done + close, with evidence), work committed, and 2–4 selectable next-task options offered with a recommendation. The step-by-step procedure is the **`handoff` skill** ([`.claude/skills/handoff/SKILL.md`](../.claude/skills/handoff/SKILL.md)) — invoke it rather than reciting from memory; the skill is the single source of the steps, so do not duplicate them here (#137). It does not replace the **### Out-of-scope future work noticed** summary requirement — do both.
+**Constraint:** every finished task (work complete, verification passed) ends with the handoff — board synced (done + close, with evidence) and work committed. Do not close with a menu of suggested next tasks; the user drives what comes next. The step-by-step procedure is the **`handoff` skill** ([`.claude/skills/handoff/SKILL.md`](../.claude/skills/handoff/SKILL.md)) — invoke it rather than reciting from memory; the skill is the single source of the steps, so do not duplicate them here (#137). It does not replace the **### Out-of-scope future work noticed** summary requirement — do both.
 
 ---
 
