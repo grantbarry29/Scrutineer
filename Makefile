@@ -17,7 +17,10 @@ VERSION_LDFLAGS := -ldflags "-X $(VERSION_PKG).Version=$(DEV_TAG)"
 
 # Image URL for all build/load/deploy targets — a dev image by default. Override IMG
 # explicitly only if you know the referenced image's baked-in version matches its tag.
-IMG ?= ghcr.io/grantbarry29/scrutineer:$(DEV_TAG)
+# IMG_BASE is also the image name `deploy` retargets in its overlay: it must equal the
+# newName the committed config/manager kustomization pins.
+IMG_BASE := ghcr.io/grantbarry29/scrutineer
+IMG ?= $(IMG_BASE):$(DEV_TAG)
 
 # CONTAINER_TOOL defines the container tool to be used for building images.
 CONTAINER_TOOL ?= docker
@@ -165,10 +168,19 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
 
+# deploy renders through an ephemeral overlay under bin/ instead of `kustomize edit`-ing
+# the tracked config/manager kustomization (#144): mutating a tracked file leaves the
+# checkout permanently dirty, so every later dev build on a pristine clone gets a
+# misleading -dirty image tag. The overlay retargets the committed release pin
+# ($(IMG_BASE)) to $(IMG); the tracked tree is never touched.
+DEPLOY_OVERLAY = $(LOCALBIN)/deploy-overlay
+
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
+	@rm -rf $(DEPLOY_OVERLAY) && mkdir -p $(DEPLOY_OVERLAY)
+	@printf '%s\n' 'apiVersion: kustomize.config.k8s.io/v1beta1' 'kind: Kustomization' 'resources:' '- ../../config/default' > $(DEPLOY_OVERLAY)/kustomization.yaml
+	cd $(DEPLOY_OVERLAY) && $(KUSTOMIZE) edit set image $(IMG_BASE)=$(IMG)
+	$(KUSTOMIZE) build $(DEPLOY_OVERLAY) | kubectl apply -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
