@@ -100,6 +100,36 @@ CI behavior: [CI tiers](docs/reference/ci.md).
   — the board is the only tracker; product direction lives in
   [`dev-agent-rules/scrutineer-product-vision.md`](dev-agent-rules/scrutineer-product-vision.md).
 
+## Knowledge base (OKF)
+
+All agent-facing knowledge in this repo — design docs, engineering rules, guides, and
+component READMEs — is written in the
+[Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
+plain Markdown with a YAML frontmatter header that makes each document machine-routable, so
+an agent can decide what to read without opening every file.
+
+Every knowledge doc declares:
+
+```yaml
+---
+type: Guide                     # Guide | Reference | Design | Rule | …
+title: Example — Egress Allowlist
+description: "One-line summary used in index bullets and for relevance triage."
+status: live                    # live | draft | historical | …
+read_when: "When to pull this doc into context."
+---
+```
+
+Rules (under [`dev-agent-rules/`](dev-agent-rules/)) add two keys: `applies_to` (path globs
+that bind the rule to the files it governs) and `always_load` (whether it enters every agent
+session). Navigation is via `index.md` **knowledge maps** at the repo root and in each bundle
+([`docs/`](docs/index.md), [`docs/design/`](docs/design/index.md),
+[`dev-agent-rules/`](dev-agent-rules/index.md)), whose bullets are generated from each target's
+frontmatter. `make lint-docs` enforces the frontmatter contract, keeps the index bullets in
+sync, and caps the size of the always-on context. Start at the root
+[knowledge map](index.md); never trust a doc marked `status: historical` without following its
+`superseded_by` target.
+
 ## License
 
 Apache 2.0. See [LICENSE](./LICENSE).
