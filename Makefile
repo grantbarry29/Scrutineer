@@ -89,25 +89,33 @@ test-e2e-images: kind-load kind-load-envoy kind-load-egress-reporter ## Build an
 #   - standard: controller logic, CRDs, evidence — everything NOT labeled "networking".
 #   - networking: CNI-generic Envoy egress / routing-lock / DNS enforcement specs, run
 #     across CNIs (see test/e2e/networking_suite_test.go).
+#
+# Both suites run specs in parallel across $(E2E_PROCS) Ginkgo processes (#156): specs
+# are namespace-isolated, the single in-process manager runs on proc 1
+# (SynchronizedBeforeSuite in test/e2e/suite_test.go), and genuinely-global specs are
+# marked Serial. The ginkgo CLI is required — bare `go test` cannot orchestrate
+# parallel procs.
+E2E_PROCS ?= 4
+
 .PHONY: test-e2e
-test-e2e: manifests install ## Run the standard e2e suite (excludes networking) against the current cluster.
+test-e2e: manifests install ginkgo ## Run the standard e2e suite (excludes networking) against the current cluster.
 	@echo ">> running standard e2e suite against $$(kubectl config current-context)"
 	@echo ">> ensure no other scrutineer controller is running (no concurrent 'make run')"
 	@echo ">> live evidence specs need images in kind: run 'make test-e2e-images' once"
 	@# VERSION_LDFLAGS bakes DEV_TAG into the test binary's in-process manager so the
 	@# images it injects (lock probe, egress-reporter) are the ones test-e2e-images
 	@# built and loaded (#112).
-	go test $(VERSION_LDFLAGS) -tags=e2e -v ./test/e2e/... -timeout 20m -ginkgo.v --ginkgo.label-filter='!networking'
+	$(GINKGO) -v --tags=e2e --procs=$(E2E_PROCS) --label-filter='!networking' --timeout=15m $(VERSION_LDFLAGS) ./test/e2e
 
 .PHONY: test-e2e-net
-test-e2e-net: manifests ## Run the CNI-generic networking e2e suite against the CURRENT cluster (assumes it is prepped).
+test-e2e-net: manifests ginkgo ## Run the CNI-generic networking e2e suite against the CURRENT cluster (assumes it is prepped).
 	@echo ">> running networking e2e suite against $$(kubectl config current-context)"
 	@# SCRUTINEER_E2E_LOCK_VERIFY wires the verified-or-refused lock gate (#70) into the
 	@# in-process manager; the gate spec asserts opposite outcomes per CNI.
 	@# VERSION_LDFLAGS: see test-e2e (#112).
-	@# 30m: the tamper-repair specs (#147) run three full live sessions on top of the
-	@# rest of the suite; CI job timeouts (40-50m) still bound a genuine hang.
-	SCRUTINEER_E2E_LOCK_VERIFY=1 go test $(VERSION_LDFLAGS) -tags=e2e -v ./test/e2e/... -timeout 30m -ginkgo.v --ginkgo.label-filter='networking'
+	@# 25m: parallel across procs, but the Serial restart/downtime specs (#150) still
+	@# run one after another at the end; CI job timeouts (40-50m) bound a genuine hang.
+	SCRUTINEER_E2E_LOCK_VERIFY=1 $(GINKGO) -v --tags=e2e --procs=$(E2E_PROCS) --label-filter='networking' --timeout=25m $(VERSION_LDFLAGS) ./test/e2e
 
 .PHONY: test-e2e-net-kindnet
 test-e2e-net-kindnet: ## Run the networking e2e suite on the kindnet cluster.
@@ -527,10 +535,14 @@ $(LOCALBIN):
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
+GINKGO ?= $(LOCALBIN)/ginkgo
 
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.16.1
 ENVTEST_K8S_VERSION = 1.31.0
+# Keep in lockstep with go.mod's github.com/onsi/ginkgo/v2 — the CLI refuses to run
+# suites built against a different library version.
+GINKGO_VERSION ?= v2.20.2
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE)
@@ -546,6 +558,11 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST)
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19
+
+.PHONY: ginkgo
+ginkgo: $(GINKGO)
+$(GINKGO): $(LOCALBIN)
+	test -s $(LOCALBIN)/ginkgo || GOBIN=$(LOCALBIN) go install github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
 
 .PHONY: lint-docs
 lint-docs: ## Validate OKF frontmatter and index-bullet sync across docs/, dev-agent-rules/, and component READMEs (#127, #128).

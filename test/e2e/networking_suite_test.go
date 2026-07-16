@@ -43,14 +43,25 @@ var (
 	cniEnforces    bool
 )
 
-// requireEgressEnforcingCNI skips the spec unless the target cluster's CNI actually enforces
-// egress NetworkPolicy. Probed once per suite so the networking tests stay portable: pointed
-// at a non-enforcing CNI they skip with a clear message instead of emitting confusing
-// enforcement-assertion failures.
-func requireEgressEnforcingCNI(ctx SpecContext) {
+// egressEnforcingCNI returns whether the target cluster's CNI actually enforces egress
+// NetworkPolicy — a static cluster property, so it is probed at most once per process.
+// Under make test-e2e-net proc 1 probes once up front and ships the verdict to every
+// parallel process via SynchronizedBeforeSuite (#156); the lazy probe here only fires
+// for runs that never received a verdict (standard-suite specs that need one, focused
+// runs).
+func egressEnforcingCNI(ctx context.Context) bool {
 	GinkgoHelper()
 	cniEnforceOnce.Do(func() { cniEnforces = probeEgressEnforced(ctx) })
-	if !cniEnforces {
+	return cniEnforces
+}
+
+// requireEgressEnforcingCNI skips the spec unless the target cluster's CNI actually enforces
+// egress NetworkPolicy, so the networking tests stay portable: pointed at a non-enforcing
+// CNI they skip with a clear message instead of emitting confusing enforcement-assertion
+// failures.
+func requireEgressEnforcingCNI(ctx SpecContext) {
+	GinkgoHelper()
+	if !egressEnforcingCNI(ctx) {
 		Skip("target CNI does not enforce egress NetworkPolicy — the networking suite needs one that does (kindnet, Calico, …)")
 	}
 }

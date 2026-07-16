@@ -15,7 +15,7 @@ You may obtain a copy of the License at
 // AgentSession CRD, its admission validation, and the controller's reconciliation.
 //
 // Test layout (same package, build tag `e2e`):
-//   - suite_test.go     — cluster preflight, in-process manager
+//   - suite_test.go     — cluster preflight, in-process manager (proc 1 only, #156)
 //   - fixtures_test.go  — namespaces, session builders, options
 //   - assertions_test.go — phase/job/condition wait helpers
 //   - agentsession_test.go — Ginkgo specs only
@@ -24,7 +24,7 @@ You may obtain a copy of the License at
 //   - fqdn_egress_test.go / observed_evidence_test.go — Envoy observed-evidence path
 //   - lock_gate_e2e_test.go — verified-or-refused NetworkPolicy lock gate (#70)
 //
-// Run with:   make test-e2e
+// Run with:   make test-e2e (parallel via the ginkgo CLI, #156)
 // Skipped by: `go test ./...` (build tag `e2e`).
 //
 // Preconditions enforced by the suite:
@@ -36,6 +36,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -101,7 +102,85 @@ func TestE2E(t *testing.T) {
 	RunSpecs(t, "Scrutineer e2e Suite")
 }
 
-var _ = BeforeSuite(func() {
+// suiteSetupData is the payload proc 1's SynchronizedBeforeSuite half hands every
+// parallel process: cluster-wide facts probed once so N processes don't re-probe them.
+type suiteSetupData struct {
+	// CNIProbed reports whether proc 1 ran the egress-enforcement probe (it does when
+	// the lock gate is enabled, i.e. under make test-e2e-net). When false, a process
+	// that needs the verdict probes lazily (see egressEnforcingCNI).
+	CNIProbed   bool
+	CNIEnforces bool
+}
+
+// The suites run specs in parallel across Ginkgo processes (#156). Exactly one
+// in-process controller manager may reconcile the shared cluster, so proc 1 starts it
+// in the first half; every process — including proc 1 — builds its own client
+// scaffolding in the second half. Specs that need the manager handle itself
+// (restart/downtime, #150) are Serial, which Ginkgo guarantees to run on proc 1 after
+// all parallel specs have finished.
+var _ = SynchronizedBeforeSuite(func(ctx SpecContext) []byte {
+	initSuiteScaffolding()
+
+	By("starting the controller manager in-process (proc 1 only)")
+	startControllerManager()
+
+	// The lock gate fails closed until the verifier reaches a conclusive verdict:
+	// running enforced specs before the first probe settles would (correctly) see them
+	// held. Wait for the settled verdict once, up front, so every spec runs against a
+	// stable gate — mirroring a controller that has completed its startup probe.
+	waitForLockVerdictIfEnabled()
+
+	// One-time cluster setup for the networking suite, consolidated here so parallel
+	// processes don't each deploy the reporter or launch a duplicate probe namespace.
+	// Per-spec deployInClusterReporter calls remain as idempotent fast no-ops, and the
+	// image-missing case still skips at spec level rather than failing the suite here.
+	data := suiteSetupData{}
+	if lockVerifyEnabled() {
+		if clusterImageRunnable(ctx, scrutineerE2EImage()) {
+			deployInClusterReporter(ctx)
+		}
+		data.CNIProbed = true
+		data.CNIEnforces = probeEgressEnforced(ctx)
+	}
+	payload, err := json.Marshal(data)
+	Expect(err).NotTo(HaveOccurred())
+	return payload
+}, func(ctx SpecContext, payload []byte) {
+	initSuiteScaffolding()
+
+	var data suiteSetupData
+	Expect(json.Unmarshal(payload, &data)).To(Succeed())
+	if data.CNIProbed {
+		cniEnforceOnce.Do(func() { cniEnforces = data.CNIEnforces })
+	}
+})
+
+var _ = SynchronizedAfterSuite(func() {
+	// Per-process teardown: nothing — every spec-owned resource is DeferCleanup'd.
+}, func() {
+	// Proc 1 tears down the shared reporter and the manager it started.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cleanupInClusterReporter(ctx)
+
+	if managerCancel != nil {
+		By("stopping the controller manager")
+		managerCancel()
+		select {
+		case <-managerDone:
+		case <-time.After(10 * time.Second):
+			Fail("controller manager did not stop within 10s after cancel")
+		}
+	}
+})
+
+// initSuiteScaffolding builds the per-process suite handles (logger, scheme,
+// kubeconfig, direct client) and fails fast if the cluster is unusable. Idempotent:
+// proc 1 runs it in both SynchronizedBeforeSuite halves.
+func initSuiteScaffolding() {
+	if k8sClient != nil {
+		return
+	}
 	ctrl.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("registering core + scrutineer types on the scheme")
@@ -123,32 +202,7 @@ var _ = BeforeSuite(func() {
 
 	By("verifying the AgentSession CRD is installed")
 	verifyAgentSessionCRDInstalled()
-
-	By("starting the controller manager in-process")
-	startControllerManager()
-
-	// The lock gate fails closed until the verifier reaches a conclusive verdict:
-	// running enforced specs before the first probe settles would (correctly) see them
-	// held. Wait for the settled verdict once, up front, so every spec runs against a
-	// stable gate — mirroring a controller that has completed its startup probe.
-	waitForLockVerdictIfEnabled()
-})
-
-var _ = AfterSuite(func() {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	cleanupInClusterReporter(ctx)
-
-	if managerCancel != nil {
-		By("stopping the controller manager")
-		managerCancel()
-		select {
-		case <-managerDone:
-		case <-time.After(10 * time.Second):
-			Fail("controller manager did not stop within 10s after cancel")
-		}
-	}
-})
+}
 
 // waitForLockVerdictIfEnabled blocks until the wired lock verifier reaches a conclusive
 // verdict (lock-verify mode only) — the gate fails closed until then.

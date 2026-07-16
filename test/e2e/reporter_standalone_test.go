@@ -89,7 +89,11 @@ func loadShippedReporterObjects() (*corev1.ServiceAccount, *appsv1.Deployment) {
 	return sa, deploy
 }
 
-var _ = Describe("standalone reporter overlay", func() {
+// Serial (#156): both live specs deploy fixed-name artifacts into scrutineer-system,
+// and the evidence spec retargets the shared scrutineer-controller-reporter Service
+// away from the suite's e2e reporter — a concurrently running spec would observe the
+// swap mid-flight.
+var _ = Describe("standalone reporter overlay", Serial, func() {
 	// These specs exercise the committed config/reporter-standalone artifacts end to
 	// end. The full overlay layers on config/default (manager included), which would
 	// collide with the suite's in-process manager, so the live specs deploy the shipped

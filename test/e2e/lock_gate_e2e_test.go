@@ -40,7 +40,9 @@ var _ = Describe("egress lock verification gate", Label(labelNetworking), func()
 	})
 
 	It("holds enforced sessions unless NetworkPolicy enforcement is proven", func(ctx SpecContext) {
-		enforcing := probeEgressEnforced(ctx)
+		// The suite-wide verdict (probed once, #156) decides which branch this cluster
+		// must take; the spec then asserts the verifier reached the same conclusion.
+		enforcing := egressEnforcingCNI(ctx)
 
 		ns := newTestNamespace("scrutineer-e2e-lockgate")
 		createRuntimeProfileWithEnvoy(ctx, ns, "envoy-lockgate")
