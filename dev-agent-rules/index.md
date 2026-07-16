@@ -24,6 +24,7 @@ Every rule's frontmatter declares `read_when`, `always_load`, and — for scoped
 * [Distributed Systems & Networking](distributed-systems-networking.md) - Strict distributed-systems and networking standards — partial failure, timeouts, idempotency, fail-closed policy, deterministic rules. Applies to: `internal/**/*.go`, `cmd/**/*.go`.
 * [Component Binaries](component-binaries.md) - Build/deploy conventions for Scrutineer's independently built binaries (manager + egress-reporter) and what their component READMEs must cover. Applies to: `cmd/**`, `internal/enforcement/**`, `Dockerfile*`.
 * [Scrutineer Design Docs — When To Read](scrutineer-design-docs.md) - Routes non-trivial work to the matching design doc in docs/design/ — read the specific doc during planning, do not paste whole docs into context. Applies to: `api/v1alpha1/**`, `internal/controller/**`, `internal/enforcement/**`, `internal/policy/**`, `internal/reporter/**`.
+* [Release Process](release-process.md) - Tags are the release identity; every minor release also gets a release-X.Y branch pushed at the tagged commit — the serviceable line for backports and patch releases. Applies to: `.github/workflows/release*.yaml`, `config/manager/kustomization.yaml`.
 
 # Workflow
 
