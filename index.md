@@ -26,7 +26,15 @@ markdown: frontmatter declares each doc's `type`, `status`, `description`, and
 * [job builder](internal/controller/job/README.md) - Builds and compares runtime objects for AgentSessions; BuildPodTemplateSpec is the single source of the agent pod shape consumed by both runtime backends.
 * [reporter](internal/reporter/README.md) - Runtime-evidence and approval HTTP service: ingests data-plane evidence (self-reported and observed) and serves the per-tool approval channel.
 * [egress-reporter](cmd/egress-reporter/README.md) - Tails the per-session Envoy JSON access log and submits each entry as observed egress evidence to the controller-owned reporter; runs beside Envoy in the egress-proxy pod, outside the agent's trust domain.
-* [Demo Manifests](config/samples/demo/README.md) - Self-contained manifests for the guided egress-governance demo, applied together by make demo.
+
+# Examples
+
+Use-case scenario folders, each runnable with one `kubectl apply -f examples/<name>/` and
+validated in CI (`hack/validate-examples.sh`). Distinct from `config/samples/` (Kubebuilder
+per-type API coverage, developer-facing).
+
+* [Example — Audit vs Enforce](examples/audit-vs-enforce/README.md) - Self-contained scenario contrasting enforced and audit-only egress policy over the same allowlist; the manifests behind make demo.
+* [Example — Egress Allowlist](examples/egress-allowlist/README.md) - Self-contained scenario locking one agent session to a named set of FQDNs, enforced at the per-session Envoy chokepoint.
 
 # Task state
 

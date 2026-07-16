@@ -47,6 +47,12 @@ jobs:
       - name: Install CRDs
         run: make install
 
+      # #157: every examples/<scenario>/ folder must pass server-side schema validation
+      # against the freshly installed CRDs — fail fast, before the long suite, so a rotted
+      # user-facing example breaks the build.
+      - name: Validate examples (server-side dry-run)
+        run: hack/validate-examples.sh
+
       - name: Run e2e tests
         run: make test-e2e
 

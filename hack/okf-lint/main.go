@@ -56,7 +56,7 @@ import (
 
 var bundles = []string{"docs", "dev-agent-rules"}
 
-var componentReadmeRoots = []string{"cmd", "internal", "config"}
+var componentReadmeRoots = []string{"cmd", "internal", "config", "examples"}
 
 // rootIndexes are indexes outside any bundle that still get the bullet
 // checks (the repo-root knowledge map), but none of the reserved-file rules.

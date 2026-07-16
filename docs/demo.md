@@ -40,7 +40,7 @@ real cluster — running it elsewhere is a deliberate act:
 lock would contradict the table below), and a session that cannot succeed fails fast
 with its diagnosis instead of sitting out the full wait.
 
-This applies [`config/samples/demo/`](../config/samples/demo/): one hardened
+This applies [`examples/audit-vs-enforce/`](../examples/audit-vs-enforce/): one hardened
 `RuntimeProfile` enabling the `envoy` backend, two `AgentPolicy` objects that differ only
 in `mode`, and two `AgentSession`s running the **same plain-busybox agent**
 (bring-your-own-agent: nothing in the image cooperates with enforcement). Each session

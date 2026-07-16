@@ -1,0 +1,41 @@
+# A session locked to the named-FQDN allowlist above (enforced). The "agent" is plain
+# busybox — Scrutineer is bring-your-own-agent and governs the workload from outside;
+# nothing here cooperates with enforcement. Expected probe results (see the folder README):
+#   ALLOW  example.com  -> SUCCEEDED  (allowlisted, proxied via the session Envoy)
+#   DENY   example.net  -> BLOCKED    (not allowlisted; Envoy RBAC rejects it)
+#   BYPASS direct DNS    -> BLOCKED    (routing lock: no egress except the proxy)
+apiVersion: scrutineer.sh/v1alpha1
+kind: AgentSession
+metadata:
+  name: allowlist-session
+  namespace: default
+spec:
+  task:
+    description: Egress allowlist example (session locked to named FQDNs)
+    prompt: noop
+  model:
+    provider: openai
+    name: gpt-4.1
+  policyRefs:
+  - name: allowlist-policy
+  runtimeProfileRef:
+    name: allowlist-egress-proxy
+  runtime:
+    orchestrator: kubernetes-job
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - |
+      sleep 12
+      echo "allowlist agent: probing through my governed egress path..."
+      ok=""
+      for i in 1 2 3 4 5 6 7 8; do
+        if wget -q -O /dev/null "http://example.com/" 2>/dev/null; then ok=yes; break; fi
+        sleep 3
+      done
+      if [ "$ok" = yes ]; then echo "ALLOW example.com -> SUCCEEDED"; else echo "ALLOW example.com -> FAILED (no internet from the cluster?)"; fi
+      if wget -q -O /dev/null "http://example.net/" 2>/dev/null; then echo "DENY example.net -> SUCCEEDED"; else echo "DENY example.net -> BLOCKED"; fi
+      if timeout 5 nslookup example.com >/dev/null 2>&1; then echo "BYPASS direct DNS -> RESOLVED"; else echo "BYPASS direct DNS -> BLOCKED"; fi
+      echo "allowlist agent done; letting the evidence pipeline flush"
+      sleep 15

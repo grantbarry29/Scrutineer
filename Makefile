@@ -413,7 +413,7 @@ demo-context-guard:
 
 .PHONY: demo
 demo: quickstart-preflight demo-context-guard ## Guided egress-governance demo against the quickstart cluster (run 'make quickstart' first; see docs/demo.md).
-	$(DEMO_KUBECTL) apply -f config/samples/demo/
+	$(DEMO_KUBECTL) apply -f examples/audit-vs-enforce/
 	@echo ""
 	@echo ">> two sessions are starting: demo-enforced and demo-audit — same busybox agent,"
 	@echo ">> same allowlist (example.com), different policy mode. Waiting for both (~2 min)..."
@@ -441,7 +441,7 @@ demo: quickstart-preflight demo-context-guard ## Guided egress-governance demo a
 	    echo ">> demo-enforced is held (verified-or-refused) and demo-audit would run without an"; \
 	    echo ">> effective routing lock — its bypass row would contradict docs/demo.md."; \
 	    echo ">> Cleaning up. Retry on Calico: make quickstart-down && make quickstart QUICKSTART_CNI=calico && make demo"; \
-	    $(DEMO_KUBECTL) delete -f config/samples/demo/ --ignore-not-found >/dev/null 2>&1 || true; \
+	    $(DEMO_KUBECTL) delete -f examples/audit-vs-enforce/ --ignore-not-found >/dev/null 2>&1 || true; \
 	    exit 1; \
 	  fi; \
 	  for s in demo-enforced demo-audit; do \
@@ -504,7 +504,7 @@ demo: quickstart-preflight demo-context-guard ## Guided egress-governance demo a
 
 .PHONY: demo-down
 demo-down: demo-context-guard ## Delete the demo sessions, policies, and profile (quickstart cluster only; see demo-context-guard).
-	$(DEMO_KUBECTL) delete -f config/samples/demo/ --ignore-not-found
+	$(DEMO_KUBECTL) delete -f examples/audit-vs-enforce/ --ignore-not-found
 
 ##@ Dependencies
 

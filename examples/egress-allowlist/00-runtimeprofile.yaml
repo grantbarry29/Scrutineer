@@ -1,0 +1,28 @@
+# Hardened RuntimeProfile enabling the `envoy` enforcement backend. Enabling `envoy`
+# provisions a per-session out-of-pod Envoy egress proxy (own pod, own ServiceAccount,
+# own network namespace) and locks the agent pod's egress to it with a default-deny
+# NetworkPolicy, so the allowlist below is the agent's only way out. See the folder README.
+apiVersion: scrutineer.sh/v1alpha1
+kind: RuntimeProfile
+metadata:
+  name: allowlist-egress-proxy
+  namespace: default
+spec:
+  container:
+    # busybox defaults to root, so runAsNonRoot needs runAsUser to remap the UID (#82) —
+    # without it the kubelet rejects the container (CreateContainerConfigError).
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+  pod:
+    seccompProfile:
+      type: RuntimeDefault
+  enforcement:
+  - name: envoy
+    type: envoy
+    enabled: true

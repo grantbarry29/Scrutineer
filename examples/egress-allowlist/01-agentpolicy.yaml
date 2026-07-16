@@ -1,0 +1,15 @@
+# A single enforced AgentPolicy that locks the session to a named set of FQDNs. Only these
+# hosts are reachable at the chokepoint; everything else is implicitly denied (Envoy RBAC
+# 403). Matching is host-level (exact + a single leading `*.` wildcard, port-insensitive) —
+# so `*.github.io` covers `pages.github.io` but not the apex `github.io`.
+apiVersion: scrutineer.sh/v1alpha1
+kind: AgentPolicy
+metadata:
+  name: allowlist-policy
+  namespace: default
+spec:
+  mode: enforced
+  allowedDomains:
+  - example.com
+  - example.org
+  - "*.github.io"
