@@ -7,16 +7,16 @@ Scrutineer is **not** a workflow engine. It is not trying to replace
 [Tekton](https://tekton.dev/), [Argo Workflows](https://argoproj.github.io/argo-workflows/),
 or [Temporal](https://temporal.io/) — those systems already run work.
 
-Scrutineer's job is different: it is the control plane that **governs** autonomous AI
+Scrutineer's job is different. It is an control plane that governs autonomous AI
 agents while they run inside enterprise environments. It wraps execution with
 policy, untamperable egress enforcement, audit, observability, and human approval,
-then delegates the actual *running* of the agent to one of the orchestrators above.
+then delegates the actual running of the agent to an orchestrator.
 
 This repository is a Kubebuilder-based Kubernetes operator built around the
 `AgentSession` CRD. It is **bring-your-own-agent**: your image holds the reasoning
 loop, model calls, and tool use; Scrutineer schedules that workload (Job or bare Pod),
 resolves and propagates reusable policy, and **enforces network egress from outside
-the agent's trust domain** — a per-session, out-of-pod Envoy chokepoint plus a
+the agent's trust domain** -- a per-session, out-of-pod Envoy chokepoint plus a
 default-deny routing lock the agent cannot alter. Runtime evidence is recorded back
 into status stamped `observed`, observability and audit signals are exported, and
 sensitive actions gate behind human approval. Enforcement ships **untamperable or
