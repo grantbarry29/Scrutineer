@@ -15,7 +15,11 @@ always_load: false
 1. **The tag is the release.** `vX.Y.Z` pins the exact commit; the Release workflow
    triggers on it and `verify-version` enforces that the
    `config/manager/kustomization.yaml` pin matches it. Nothing else — not a branch,
-   not a GitHub Release object — defines what code a release is.
+   not a GitHub Release object — defines what code a release is. (The workflow's
+   `release-notes` job does publish a GitHub Release object with generated notes
+   once both images are pullable, but that object is presentation for the Releases
+   tab — never treat it as the identity, and never create it by hand; after a tag
+   push, verify it appeared.)
 2. **Every minor release also gets a release branch.** When publishing `vX.Y.0`,
    create `release-X.Y` at the tagged commit and push it together with the tag:
 

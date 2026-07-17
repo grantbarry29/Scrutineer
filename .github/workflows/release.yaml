@@ -77,3 +77,28 @@ jobs:
           provenance: false
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  # The GitHub Release object is the tag's human-readable face on the Releases
+  # tab; the tag itself stays the release identity (dev-agent-rules/release-process.md).
+  # Gated on the full publish matrix so notes never appear for a release whose
+  # images aren't pullable.
+  release-notes:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Create GitHub Release with generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists — skipping (workflow re-run)"
+            exit 0
+          fi
+          pre=""
+          case "$tag" in *-*) pre="--prerelease" ;; esac
+          gh release create "$tag" --verify-tag --generate-notes --title "$tag" $pre
