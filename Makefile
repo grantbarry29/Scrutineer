@@ -32,10 +32,11 @@ SHELL = /usr/bin/env bash -o pipefail
 # Force the pinned Go toolchain for every go invocation this Makefile makes
 # (#141): go.mod's `go 1.23` is only a MINIMUM under GOTOOLCHAIN=auto, so a
 # newer host Go gets used — and controller-gen's pinned x/tools does not
-# compile under current Go, breaking `make quickstart` on exactly the fresh
-# host machines it targets (CI is immune; setup-go pins 1.23). Go ≥1.21
-# auto-downloads this exact toolchain. Verified on macOS/arm64 with host
-# go1.26.3: quickstart fails without this, completes VERIFIED with it.
+# compile under current Go. The quickstart path no longer invokes host Go at
+# all (#142); this pin protects the host DEV flows (make test / manifests /
+# install / deploy) against the same skew (CI is immune; setup-go pins 1.23).
+# Go ≥1.21 auto-downloads this exact toolchain. Verified on macOS/arm64 with
+# host go1.26.3 (pre-#142): quickstart failed without it, VERIFIED with it.
 export GOTOOLCHAIN := go1.23.12
 
 .PHONY: all
@@ -183,11 +184,28 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 # ($(IMG_BASE)) to $(IMG); the tracked tree is never touched.
 DEPLOY_OVERLAY = $(LOCALBIN)/deploy-overlay
 
-.PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+# The overlay is written whole, image retarget included — no `kustomize edit` — so
+# producing it needs no kustomize binary. Both `deploy` (pinned kustomize) and the
+# go-free `quickstart-deploy` (kubectl's built-in kustomize) render this same
+# overlay, which keeps the two paths structurally unable to drift (#142).
+.PHONY: deploy-overlay
+deploy-overlay:
 	@rm -rf $(DEPLOY_OVERLAY) && mkdir -p $(DEPLOY_OVERLAY)
-	@printf '%s\n' 'apiVersion: kustomize.config.k8s.io/v1beta1' 'kind: Kustomization' 'resources:' '- ../../config/default' > $(DEPLOY_OVERLAY)/kustomization.yaml
-	cd $(DEPLOY_OVERLAY) && $(KUSTOMIZE) edit set image $(IMG_BASE)=$(IMG)
+	@img='$(IMG)'; tag="$${img##*:}"; name="$${img%:*}"; \
+	if [ "$${tag#*/}" != "$$tag" ]; then name="$$img"; tag=""; fi; \
+	{ printf '%s\n' \
+	    'apiVersion: kustomize.config.k8s.io/v1beta1' \
+	    'kind: Kustomization' \
+	    'resources:' \
+	    '- ../../config/default' \
+	    'images:' \
+	    "- name: $(IMG_BASE)" \
+	    "  newName: $$name"; \
+	  if [ -n "$$tag" ]; then printf '  newTag: "%s"\n' "$$tag"; fi; \
+	} > $(DEPLOY_OVERLAY)/kustomization.yaml
+
+.PHONY: deploy
+deploy: manifests kustomize deploy-overlay ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build $(DEPLOY_OVERLAY) | kubectl apply -f -
 
 .PHONY: undeploy
@@ -331,14 +349,6 @@ quickstart-preflight:
 	  echo ">> kubectl is not installed."; \
 	  echo ">>   macOS:  brew install kubectl"; \
 	  echo ">>   Ubuntu: sudo snap install kubectl --classic"; }; \
-	if ! command -v go >/dev/null 2>&1; then missing=1; \
-	  echo ">> go is not installed (used once to bootstrap build tools; any Go >=1.21 works — the build pins its own exact toolchain)."; \
-	  echo ">>   macOS:  brew install go"; \
-	  echo ">>   Ubuntu: sudo snap install go --classic"; \
-	elif gv=$$(go env GOVERSION 2>/dev/null | sed 's/^go//'); \
-	  [ "$$(printf '%s\n' 1.21 "$$gv" | sort -V | head -1)" != "1.21" ]; then missing=1; \
-	  echo ">> go $$gv is too old to auto-select the pinned toolchain (need >=1.21) — upgrade go."; \
-	fi; \
 	[ "$$missing" = 0 ] || exit 1; \
 	docker info >/dev/null 2>&1 || { \
 	  echo ">> docker is installed but the daemon isn't reachable."; \
@@ -355,7 +365,7 @@ else
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) $(MAKE) kind-up
 endif
 	$(MAKE) quickstart-images
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) $(MAKE) install deploy
+	$(MAKE) quickstart-install quickstart-deploy
 	kubectl -n scrutineer-system rollout status deployment/scrutineer-controller-manager --timeout=3m
 	$(MAKE) quickstart-verdict
 	@echo ""
@@ -377,6 +387,19 @@ quickstart-images: quickstart-preflight ## Build controller + egress-reporter im
 	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME_QUICKSTART)
 	kind load docker-image $(EGRESS_REPORTER_IMG) --name $(KIND_CLUSTER_NAME_QUICKSTART)
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME_QUICKSTART) $(MAKE) kind-load-envoy
+
+# Go-free install/deploy for the front door (#142): quickstart applies the
+# COMMITTED CRDs/manifests with kubectl's built-in kustomize, so its only host
+# prerequisites are docker + kind + kubectl — no Go, no tool bootstraps into
+# bin/. Dev flows keep `install`/`deploy`, which regenerate manifests first
+# (controller-gen) and render with the pinned kustomize.
+.PHONY: quickstart-install
+quickstart-install:
+	kubectl apply -k config/crd
+
+.PHONY: quickstart-deploy
+quickstart-deploy: deploy-overlay
+	kubectl apply -k $(DEPLOY_OVERLAY)
 
 .PHONY: quickstart-verdict
 quickstart-verdict: ## Wait for and print the routing-lock verification verdict (verified-or-refused gate).
